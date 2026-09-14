@@ -1,0 +1,19 @@
+// Preview: GameCard. Shot via slint-viewer --screenshot.
+import { GameCard, StatusChip } from "ui-shared.slint";
+
+export component PreviewGameCard inherits Window {
+    title: "preview-game-card";
+    width: 320px;
+    height: 300px;
+
+    VerticalLayout {
+        padding: 16px;
+
+        GameCard {
+            title: "PUBG Mobile";
+            sub: "com.tencent.ig";
+            StatusChip { text: "Battle Royale"; }
+            StatusChip { text: "ready"; checked: true; }
+        }
+    }
+}

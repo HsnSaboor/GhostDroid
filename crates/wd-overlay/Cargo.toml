@@ -1,0 +1,20 @@
+[package]
+name = "wd-overlay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wd-core = { workspace = true }
+wd-input = { path = "../wd-input" }
+wd-shell = { path = "../wd-shell" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wd-overlay"
+path = "src/bin/wd-overlay.rs"

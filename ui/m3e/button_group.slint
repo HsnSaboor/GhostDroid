@@ -1,0 +1,37 @@
+// M3E ButtonGroup: connected single-select filter row.
+// Wraps official M3 FilledButton/OutlineButton (NOT fork).
+// Ref: `.devdocs/react-material-expressive/src/components/index.ts:25-28` (ButtonGroupConnected).
+import { FilledButton, OutlineButton } from "@material";
+import { M3EMotion } from "m3e_motion.slint";
+
+export component ButtonGroup {
+    in property <[string]> options;
+    in-out property <int> current-index: 0;
+
+    callback picked(index: int);
+
+    function pick(index: int) {
+        if index < 0 || index >= root.options.length {
+            return;
+        }
+        root.current-index = index;
+        root.picked(index);
+    }
+
+    HorizontalLayout {
+        spacing: 2px;
+
+        for opt[i] in root.options : Rectangle {
+            animate border-radius { duration: M3EMotion.default-spatial; easing: ease-out-back; }
+
+            if i == root.current-index : FilledButton {
+                text: opt;
+                clicked => { root.pick(i); }
+            }
+            if i != root.current-index : OutlineButton {
+                text: opt;
+                clicked => { root.pick(i); }
+            }
+        }
+    }
+}

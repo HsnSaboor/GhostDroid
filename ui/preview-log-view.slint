@@ -1,0 +1,21 @@
+// Preview: LogView.
+import { LogView } from "ui-shared.slint";
+
+export component PreviewLogView inherits Window {
+    title: "preview-log-view";
+    width: 480px;
+    height: 240px;
+
+    VerticalLayout {
+        padding: 16px;
+
+        LogView {
+            lines: [
+                "[daemon] session start",
+                "[daemon] container up",
+                "[spoof] profile cheetah applied",
+                "[input] keymap pubg loaded",
+            ];
+        }
+    }
+}

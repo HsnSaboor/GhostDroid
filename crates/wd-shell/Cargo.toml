@@ -1,0 +1,18 @@
+[package]
+name = "wd-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wd-core = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wd-shell"
+path = "src/bin/wd-shell.rs"

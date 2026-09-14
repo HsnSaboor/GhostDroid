@@ -1,0 +1,31 @@
+// M3E LoadingIndicator: wavy-arc stand-in over official M3 progress.
+// Extends CircularProgressIndicator (indeterminate) + LinearProgressIndicator.
+// Ref: `.devdocs/react-material-expressive/src/components/index.ts:135-139`.
+import { CircularProgressIndicator, LinearProgressIndicator } from "@material";
+
+export component LoadingIndicator {
+    in property <string> label;
+    in property <float> progress: -1;
+
+    property <bool> is-busy: root.progress < 0;
+
+    HorizontalLayout {
+        spacing: 12px;
+
+        CircularProgressIndicator {
+            progress: root.is-busy ? 0.5 : root.progress;
+            indeterminate: root.is-busy;
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            if root.label != "" : Text {
+                text: root.label;
+            }
+            if !root.is-busy : LinearProgressIndicator {
+                progress: root.progress;
+            }
+        }
+    }
+}

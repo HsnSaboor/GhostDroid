@@ -1,0 +1,38 @@
+// M3E FabMenu: FAB + expanding action list (replaces speed dial).
+// Extends official M3 FloatingActionButton/FABStyle.
+// Ref: `.devdocs/react-material-expressive/src/components/index.ts` (FABMenu).
+import { FloatingActionButton, FABStyle, TonalButton } from "@material";
+import { M3EMotion } from "m3e_motion.slint";
+
+export component FabMenu {
+    in property <[string]> items;
+    in-out property <bool> open: false;
+
+    callback picked(index: int);
+    callback toggled(open: bool);
+
+    function toggle() {
+        root.open = !root.open;
+        root.toggled(root.open);
+    }
+
+    VerticalLayout {
+        spacing: 8px;
+        alignment: end;
+
+        for item[i] in root.items : TonalButton {
+            visible: root.open;
+            text: item;
+            clicked => { root.picked(i); }
+
+            animate opacity { duration: M3EMotion.fast-effects; easing: ease-in-out; }
+        }
+
+        FloatingActionButton {
+            style: FABStyle.standard;
+            text: root.open ? "✕" : "+";
+            tooltip: root.open ? "Close" : "Actions";
+            clicked => { root.toggle(); }
+        }
+    }
+}

@@ -1,0 +1,7 @@
+# Seed spoof profile: cheetah canonical, runtime-editable copy of example.
+# Refs: `.devdocs/DeviceSpoofLab-Hooks/device_profile.conf:260`.
+# Policy (PIF/Tricky/keybox): plan 05 owns it, never ship secrets here.
+fingerprint = "google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys"
+fake_touch = ["com.example.game*"]
+fake_wifi = ["com.example.game*"]
+denylist = ["com.example.game"]

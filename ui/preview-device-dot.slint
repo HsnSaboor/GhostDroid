@@ -1,0 +1,18 @@
+// Preview: DeviceDot (ready / frozen / offline).
+import { DeviceDot } from "ui-shared.slint";
+
+export component PreviewDeviceDot inherits Window {
+    title: "preview-device-dot";
+    width: 320px;
+    height: 120px;
+
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 16px;
+        alignment: center;
+
+        DeviceDot { ready: true; frozen: false; }
+        DeviceDot { ready: true; frozen: true; }
+        DeviceDot { ready: false; frozen: false; }
+    }
+}

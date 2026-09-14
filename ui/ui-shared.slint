@@ -1,0 +1,165 @@
+// Shared components: single source. All pages import from here.
+// Ref: `.research/01-slint-ui.md:54` (ListView + for + Rust VecModel, async covers).
+import { FilterChip, ListView } from "@material";
+import { M3EColor } from "m3e/m3e_color.slint";
+import { M3EShape } from "m3e/m3e_shape.slint";
+import { M3EMotion } from "m3e/m3e_motion.slint";
+import { M3EType } from "m3e/m3e_type.slint";
+
+export struct GameRow {
+    title: string,
+    pkg: string,
+    genre: string,
+    state: string,
+}
+
+export component GameCard inherits Rectangle {
+    in property <string> title;
+    in property <string> sub;
+    in property <image> art;
+
+    callback pressed();
+
+    background: M3EColor.surface-container-high;
+    border-radius: M3EShape.m;
+    min-height: 76px;
+    horizontal-stretch: 1;
+    clip: true;
+
+    animate background { duration: M3EMotion.fast-effects; easing: ease-in-out; }
+    animate border-radius { duration: M3EMotion.default-spatial; easing: ease-out-back; }
+
+    touch := TouchArea {
+        clicked => { root.pressed(); }
+    }
+
+    states [
+        hover when touch.has-hover : {
+            root.background: M3EColor.surface-container-highest;
+        }
+    ]
+
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+
+        if root.art.width > 0 && root.art.height > 0 : Image {
+            source: root.art;
+            width: 52px;
+            height: 52px;
+        }
+        if root.art.width == 0 || root.art.height == 0 : Rectangle {
+            width: 52px;
+            height: 52px;
+            border-radius: M3EShape.s;
+            background: M3EColor.surface-container-highest;
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.title;
+                font-size: M3EType.title-medium;
+            }
+            if root.sub != "" : Text {
+                text: root.sub;
+                font-size: M3EType.body-small;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            HorizontalLayout {
+                spacing: 6px;
+                @children
+            }
+        }
+    }
+}
+
+export component StatusChip {
+    in property <string> text;
+    in-out property <bool> checked: false;
+
+    callback toggled(checked: bool);
+
+    FilterChip {
+        text: root.text;
+        checked <=> root.checked;
+
+        changed checked => {
+            root.toggled(self.checked);
+        }
+    }
+}
+
+export component SettingRow inherits HorizontalLayout {
+    in property <string> label;
+
+    spacing: 8px;
+
+    Text {
+        text: root.label;
+        font-size: M3EType.body-medium;
+        horizontal-stretch: 1;
+        vertical-alignment: center;
+    }
+
+    @children
+}
+
+export component PropRow inherits HorizontalLayout {
+    in property <string> key;
+    in property <string> value;
+
+    callback copied(value: string);
+
+    spacing: 8px;
+
+    Text {
+        text: root.key;
+        font-size: M3EType.body-medium;
+        horizontal-stretch: 1;
+    }
+    Text {
+        text: root.value;
+        font-size: M3EType.body-medium;
+    }
+    copy-area := TouchArea {
+        clicked => { root.copied(root.value); }
+        Text { text: "⧉"; font-size: M3EType.body-medium; }
+    }
+}
+
+export component LogView {
+    in property <[string]> lines;
+
+    Rectangle {
+        background: M3EColor.surface-container-lowest;
+        border-radius: M3EShape.xs;
+        min-height: 120px;
+
+        ListView {
+            for line in root.lines : Text {
+                text: line;
+                font-size: M3EType.label-small;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component DeviceDot inherits Rectangle {
+    in property <bool> ready: false;
+    in property <bool> frozen: false;
+
+    width: 12px;
+    height: 12px;
+    border-radius: M3EShape.full;
+    background: root.ready ? (root.frozen ? M3EColor.tertiary : M3EColor.primary) : M3EColor.outline;
+
+    animate background { duration: M3EMotion.fast-effects; easing: ease-in-out; }
+}

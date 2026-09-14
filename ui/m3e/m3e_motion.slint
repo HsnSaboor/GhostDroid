@@ -1,0 +1,39 @@
+// M3E motion + state + z. Slint has no springs: spatial -> ease-out-back,
+// effects -> ease-in-out. Shape morph animates border-radius.
+// Ref: `.devdocs/react-material-expressive/src/styles.css:111-202`.
+// Ref: `.devdocs/slint/ui-libraries/material/src/ui/styling/material_animations.slint:5-16`.
+export global M3EMotion {
+    out property <duration> short1: 50ms;
+    out property <duration> short2: 100ms;
+    out property <duration> short3: 150ms;
+    out property <duration> short4: 200ms;
+    out property <duration> medium1: 250ms;
+    out property <duration> medium2: 300ms;
+    out property <duration> medium3: 350ms;
+    out property <duration> medium4: 400ms;
+    out property <duration> long1: 450ms;
+    out property <duration> long2: 500ms;
+    out property <duration> long4: 600ms;
+    out property <duration> fast-spatial: 200ms;
+    out property <duration> default-spatial: 350ms;
+    out property <duration> slow-spatial: 600ms;
+    out property <duration> fast-effects: 150ms;
+    out property <duration> default-effects: 250ms;
+    out property <duration> slow-effects: 400ms;
+}
+
+export global M3EState {
+    out property <float> hover-opacity: 0.08;
+    out property <float> focus-opacity: 0.12;
+    out property <float> pressed-opacity: 0.12;
+    out property <float> dragged-opacity: 0.16;
+    out property <float> scrim-opacity: 0.32;
+    out property <int> z-base: 0;
+    out property <int> z-raised: 10;
+    out property <int> z-sticky: 20;
+    out property <int> z-dropdown: 30;
+    out property <int> z-menu: 50;
+    out property <int> z-tooltip: 55;
+    out property <int> z-modal: 60;
+    out property <int> z-snackbar: 70;
+}

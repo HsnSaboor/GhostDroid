@@ -1,0 +1,17 @@
+// Preview: StatusChip.
+import { StatusChip } from "ui-shared.slint";
+
+export component PreviewStatusChip inherits Window {
+    title: "preview-status-chip";
+    width: 320px;
+    height: 120px;
+
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 8px;
+        alignment: center;
+
+        StatusChip { text: "PS2"; }
+        StatusChip { text: "ready"; checked: true; }
+    }
+}

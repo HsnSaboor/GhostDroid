@@ -1,0 +1,185 @@
+// wd-shell root: dark gaming shell. Slint 1.17 winit-skia, material-dark.
+// Wiring: `-L material=<official M3 lib>` (vendored 1.17-compatible copy at
+// `.devdocs/material-rust-template/material-1.0/material.slint`; upstream
+// `.devdocs/slint/...` copy needs Slint 1.18 `content_*` Flickable API).
+// Ref: `.devdocs/material-rust-template/{build.rs:5-12,ui/main.slint:1-2}`.
+// Ref: `.research/01-slint-ui.md:54` (ListView + for + Rust VecModel grid).
+import { MaterialWindow, NavigationRail } from "@material";
+import { ListView } from "@material";
+import { Switch, Slider, TextField, DropDownMenu, MenuItem } from "@material";
+import { Dialog, SnackBar, LinearProgressIndicator, TextButton } from "@material";
+import { GameCard, GameRow, StatusChip, PropRow, LogView, DeviceDot, SettingRow } from "ui-shared.slint";
+import { ButtonGroup } from "m3e/button_group.slint";
+import { M3EMotion } from "m3e/m3e_motion.slint";
+
+export component Main inherits MaterialWindow {
+    title: "wd-shell";
+    min-width: 1280px;
+    min-height: 800px;
+
+    // Viewmodel mirrors (wd-shell lib; Slint reads these, daemon feeds via IPC).
+    in-out property <int> page: 0;
+    in-out property <string> query: "";
+    in property <[GameRow]> games;
+    in property <[string]> log-lines;
+    in property <[MenuItem]> profiles;
+    in-out property <int> profile-index: 0;
+    in property <bool> device-ready: false;
+    in property <bool> device-frozen: false;
+    in property <bool> busy: false;
+    in property <float> scan-progress: -1;
+
+    callback play(title: string);
+    callback emu-action(index: int);
+    callback save-slot(index: int);
+    callback filter-picked(index: int);
+    callback fab-action(index: int);
+    callback copied(value: string);
+    callback clear-logs();
+    callback profile-picked(index: int);
+
+    // Single nav: rail only (TabBar removed — was double-nav bug in audit shot).
+    HorizontalLayout {
+        nav := NavigationRail {
+            items: [
+                { text: "Library", icon: @image-url("icons/library.svg") },
+                { text: "Devices", icon: @image-url("icons/devices.svg") },
+                { text: "Spoof", icon: @image-url("icons/spoof.svg") },
+                { text: "Keys", icon: @image-url("icons/keys.svg") },
+                { text: "Logs", icon: @image-url("icons/logs.svg") },
+            ];
+            current-index <=> root.page;
+        }
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+            alignment: start;
+
+            // Library: search + filters + game list + emu actions.
+            if root.page == 0 : VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+                spacing: 12px;
+                HorizontalLayout { TextField { label: "Search games"; text <=> root.query; horizontal-stretch: 1; } }
+                filters := ButtonGroup {
+                    options: ["All", "PS2", "Switch", "Android"];
+                    picked(index) => { root.filter-picked(index); }
+                }
+                // Games from Rust VecModel; ListView packs top, soaks rest.
+                if root.games.length > 0 : ListView {
+                    vertical-stretch: 1;
+                    for g in root.games : GameCard {
+                        title: g.title;
+                        sub: g.pkg;
+                        StatusChip { text: g.genre; }
+                        StatusChip { text: g.state; }
+                        pressed => { root.play(g.title); }
+                    }
+                }
+                // Empty state only — no stretch, so actions stay glued under.
+                if root.games.length == 0 : Text {
+                    text: "No ROMs yet — Scan to add games.";
+                    horizontal-alignment: center;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    TextButton {
+                        text: "⏸ Pause";
+                        clicked => { root.emu-action(0); }
+                    }
+                    TextButton {
+                        text: "💾 Save";
+                        clicked => { root.emu-action(1); }
+                    }
+                    TextButton {
+                        text: "📂 Load";
+                        clicked => { root.emu-action(2); }
+                    }
+                    TextButton {
+                        text: "＋ Add";
+                        clicked => { root.fab-action(0); }
+                    }
+                }
+            }
+
+            // Devices: state dots + props + scan progress. Spacer packs rows top.
+            if root.page == 1 : VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    DeviceDot { ready: root.device-ready; frozen: root.device-frozen; }
+                    Text { text: root.device-frozen ? "frozen" : (root.device-ready ? "ready" : "offline"); }
+                }
+                PropRow { key: "serial"; value: "emulator-5554"; copied(v) => { root.copied(v); } }
+                PropRow { key: "state"; value: "device"; copied(v) => { root.copied(v); } }
+                if root.busy : Text { text: "Scanning…"; }
+                if !root.busy : LinearProgressIndicator { progress: 1.0; }
+                TextButton { text: "Scan"; clicked => { root.fab-action(1); } }
+                Rectangle { vertical-stretch: 1; }
+            }
+
+            // Spoof: profile picker + toggles. SettingRow pins Switch/Slider
+            // to natural size (bare switch in VLayout stretches full-width).
+            if root.page == 2 : VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+                spacing: 8px;
+                DropDownMenu {
+                    items: root.profiles;
+                    current-index <=> root.profile-index;
+                    selected(index) => { root.profile-picked(index); }
+                }
+                PropRow { key: "model"; value: "cheetah"; copied(v) => { root.copied(v); } }
+                SettingRow {
+                    label: "Hide root";
+                    Switch { checked: true; width: 52px; }
+                }
+                SettingRow {
+                    label: "Sensor noise";
+                    Slider { value: 50; height: 24px; }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+
+            // Keys: keymap editor stubs (canvas lives in overlay, plan 07).
+            if root.page == 3 : VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+                spacing: 8px;
+                HorizontalLayout { TextField { label: "Profile"; text: "pubg"; horizontal-stretch: 1; } }
+                HorizontalLayout { TextField { label: "Fire key"; text: "MouseLeft"; horizontal-stretch: 1; } }
+                ButtonGroup {
+                    options: ["Map", "Aim", "DPad"];
+                    picked(index) => { root.filter-picked(index); }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+
+            // Logs: daemon stream soaks space, actions glued bottom.
+            if root.page == 4 : VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+                LogView { lines: root.log-lines; vertical-stretch: 1; }
+                HorizontalLayout {
+                    TextButton { text: "Clear"; clicked => { root.clear-logs(); } }
+                    TextButton { text: "Saved ✓"; clicked => { snack.show(); } }
+                }
+            }
+        }
+    }
+
+    info := Dialog {
+        title: "ROM details";
+        actions: ["Play", "Close"];
+        action-clicked(index) => {
+            if index == 0 {
+                root.play("");
+            }
+        }
+    }
+    snack := SnackBar { text: "Savestate written"; action-text: "Undo"; }
+}

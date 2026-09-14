@@ -1,0 +1,9 @@
+# Gaming full: minimal + TrickyStore 1.4.1/Addon v4.4 (user-keybox-only,
+# empty slot) + Vector 2.x/NeoZygisk + HMA 3.8.3 on applist kick + shims.
+# Refs: `.plans/05-root-hide-spoof.md:14-16`, `.research/04-root-hide-spoof-2026.md:27`.
+# Escalate: ZygiskNext 1.5.0 zip / ReZygisk 1.0.0 only on zygisk hit.
+fingerprint = "google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys"
+fake_touch = ["com.example.game*"]
+fake_wifi = ["com.example.game*"]
+denylist = ["com.example.game"]
+stack = "full"

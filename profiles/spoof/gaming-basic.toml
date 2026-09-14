@@ -1,0 +1,8 @@
+# Gaming minimal: built-in Zygisk + Shamiko 1.2.5 + PIFork v18 only.
+# Refs: `.plans/05-root-hide-spoof.md:13`, `.research/04-root-hide-spoof-2026.md:27`.
+# Secrets: never bundle prints/keybox (runtime fetch only).
+fingerprint = "google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys"
+fake_touch = ["com.example.game*"]
+fake_wifi = ["com.example.game*"]
+denylist = ["com.example.game"]
+stack = "basic"

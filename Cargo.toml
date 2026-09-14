@@ -1,0 +1,45 @@
+[workspace]
+members = [
+  "crates/wd-core",
+  "crates/wd-waydroid",
+  "crates/wd-daemon",
+  "crates/wd-input",
+  "crates/wd-inject",
+  "crates/wd-spoof",
+  "crates/wd-shell",
+  "crates/wd-overlay",
+  "crates/wd-mcp",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.92"
+
+[workspace.dependencies]
+wd-core = { path = "crates/wd-core" }
+wd-waydroid = { path = "crates/wd-waydroid" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+anyhow = "1.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "deny"
+pedantic = "deny"
+nursery = "deny"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

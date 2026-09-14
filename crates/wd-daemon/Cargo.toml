@@ -1,0 +1,19 @@
+[package]
+name = "wd-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wd-core = { workspace = true }
+wd-waydroid = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wd-daemon"
+path = "src/bin/wd-daemon.rs"

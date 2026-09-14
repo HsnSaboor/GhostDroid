@@ -1,0 +1,16 @@
+// Preview: PropRow.
+import { PropRow } from "ui-shared.slint";
+
+export component PreviewPropRow inherits Window {
+    title: "preview-prop-row";
+    width: 400px;
+    height: 160px;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+
+        PropRow { key: "model"; value: "cheetah"; }
+        PropRow { key: "serial"; value: "emulator-5554"; }
+    }
+}

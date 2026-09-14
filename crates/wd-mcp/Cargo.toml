@@ -1,0 +1,26 @@
+[package]
+name = "wd-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wd-core = { workspace = true }
+wd-waydroid = { workspace = true }
+wd-input = { path = "../wd-input" }
+wd-spoof = { path = "../wd-spoof" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wd-mcp"
+path = "src/bin/wd-mcp.rs"
+
+[[bin]]
+name = "wd-ctl"
+path = "src/bin/wd-ctl.rs"

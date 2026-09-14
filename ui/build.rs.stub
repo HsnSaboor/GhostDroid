@@ -1,0 +1,3 @@
+// Moved to crates/wd-shell/build.rs in plan 06 (Slint dep deferred: weak i5).
+// Pattern: CompilerConfiguration::with_library_paths material -> material-1.0/material.slint
+// Ref: `.devdocs/material-rust-template/build.rs:5-12`.

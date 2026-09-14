@@ -1,0 +1,29 @@
+// M3E SplitButton: main action + trailing menu.
+// Wraps official M3 FilledButton/TonalButton/PopupMenu.
+// Ref: `.devdocs/react-material-expressive/src/components/index.ts:48-53`.
+import { FilledButton, TonalButton, PopupMenu, MenuItem } from "@material";
+
+export component SplitButton {
+    in property <string> text;
+    in property <[MenuItem]> menu-items;
+
+    callback clicked();
+    callback picked(index: int);
+
+    HorizontalLayout {
+        spacing: 2px;
+
+        FilledButton {
+            text: root.text;
+            clicked => { root.clicked(); }
+        }
+        TonalButton {
+            text: "▾";
+            clicked => { menu.show(); }
+        }
+        menu := PopupMenu {
+            items: root.menu-items;
+            activated(index) => { root.picked(index); }
+        }
+    }
+}
