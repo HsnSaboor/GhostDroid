@@ -175,6 +175,26 @@ impl AppState {
         self.logs.clear();
     }
 
+    /// Pick a spoof profile; clamps out-of-range to the current selection.
+    pub fn set_spoof(&mut self, index: i32) {
+        tracing::debug!(index, "spoof pick");
+        let max = i32::try_from(self.spoof.ids.len()).unwrap_or(0);
+        if index >= 0 && index < max {
+            self.spoof.selected = index;
+            if let Some(id) = self.spoof.ids.get(usize::try_from(index).unwrap_or(0)) {
+                self.spoof.id = id.clone();
+            }
+        }
+    }
+
+    /// Pick a keymap tab; clamps to the 3 known tabs (Map/Aim/DPad).
+    pub fn set_keymap_tab(&mut self, index: i32) {
+        tracing::debug!(index, "keymap tab pick");
+        if (0..3).contains(&index) {
+            self.keymap.tab_index = index;
+        }
+    }
+
     /// Games matching the current query (title or package, case-insensitive).
     #[must_use]
     pub fn visible_games(&self) -> Vec<&GameRow> {

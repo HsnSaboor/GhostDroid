@@ -14,7 +14,20 @@ const CAP_LEN: usize = 262_144;
 /// Poll gap while waiting for the child.
 const POLL_MS: u64 = 5;
 
-// ponytail: std only, no wait-timeout crate. reader threads + poll loop enough.
+/// True for verbs bound to the USER session bus (D-Bus `id.waydro.Session`).
+/// These MUST run as the session user — sudo'd they see "session stopped"
+/// (bus rejects foreign uids). `shell`/`logcat` need euid 0, keep sudo.
+#[must_use]
+pub fn is_app_verb(args: &[&str]) -> bool {
+    let verb = args.first().copied().unwrap_or("");
+    tracing::debug!(verb, "exec: app verb check");
+    // `app ...` needs the session service; `status`/`prop get` also read
+    // session state. `shell`/`logcat`/`upgrade` etc stay elevated.
+    let app = matches!(verb, "app" | "status" | "show-full-ui" | "first-launch")
+        || (verb == "prop" && args.get(1).copied() == Some("get"));
+    tracing::debug!(verb, app, "exec: app verb result");
+    app
+}
 fn drain_capped(pipe: impl std::io::Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut buf = Vec::new();
@@ -36,8 +49,13 @@ fn drain_capped(pipe: impl std::io::Read + Send + 'static) -> std::thread::JoinH
 /// [`wd_core::WdError::Internal`] on non-zero exit.
 pub fn run_waydroid(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
     tracing::info!(?args, timeout_ms, "exec: run in");
-    let mut child = std::process::Command::new("waydroid")
-        .args(args)
+    let mut cmd = std::process::Command::new("waydroid");
+    cmd.args(args);
+    // No bus forwarding: Waydroid's session bus rejects foreign uids, so
+    // sudo'd app verbs can never see the user session. Split instead:
+    // app verbs run as the user, shell/logcat run sudo (needs euid 0).
+    // See `is_app_verb` + SKILL routing (`waydroid-control`).
+    let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -79,5 +97,22 @@ pub fn run_waydroid(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
             "waydroid {} failed: {detail}",
             args.join(" ")
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verb_split() {
+        assert!(is_app_verb(&["app", "list"]));
+        assert!(is_app_verb(&["app", "launch", "x"]));
+        assert!(is_app_verb(&["status"]));
+        assert!(is_app_verb(&["prop", "get", "k"]));
+        assert!(!is_app_verb(&["shell", "--", "input"]));
+        assert!(!is_app_verb(&["logcat", "--", "-d"]));
+        assert!(!is_app_verb(&["prop", "set", "k", "v"]));
+        assert!(!is_app_verb(&[]));
     }
 }

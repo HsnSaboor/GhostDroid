@@ -145,20 +145,78 @@ fn run_local(verb: &str, params: &serde_json::Value) -> serde_json::Value {
     }
 }
 
-/// `spoof-apply` PREVIEW ONLY: validate + render + empty-snapshot merge.
-/// No file write, no spawn. Real write needs pkexec + container restart.
+/// `spoof-apply`: snapshot live base.prop → merge → write → restart → verify.
+/// Real apply (needs root for `/var/lib/waydroid`). `--preview` (or
+/// non-root) prints the merge without writing. Houdini bridge lines survive.
 fn spoof_apply_preview(path: &str) -> Option<serde_json::Value> {
-    tracing::info!(path, "wd-ctl: spoof-apply preview in");
-    let profile = wd_spoof::SpoofProfile::load(std::path::Path::new(path)).ok()?;
+    tracing::info!(path, "wd-ctl: spoof-apply in");
+    let (profile_path, preview) = match path.split_once(' ') {
+        Some((p, "--preview")) | Some(("--preview", p)) => (p, true),
+        _ if path.ends_with(" --preview") => (&path[..path.len() - 10], true),
+        _ => (path, false),
+    };
+    let profile = wd_spoof::SpoofProfile::load(std::path::Path::new(profile_path)).ok()?;
     let rendered = wd_spoof::render(&profile);
-    let merged = wd_spoof::merge_lines("", &rendered);
-    let diff = wd_spoof::swap_diff("", &rendered);
+    let base = std::path::Path::new(wd_spoof::BASE_PROP);
+    let snap = wd_spoof::snapshot(base).ok();
+    let body = snap.as_ref().map(|s| s.body.as_str()).unwrap_or("");
+    let merged = wd_spoof::merge_lines(body, &rendered);
+    let diff = wd_spoof::swap_diff(body, &rendered);
+    let houdini_kept = merged.iter().any(|l| l.contains("libhoudini.so"));
+    if preview || !is_root() {
+        return Some(serde_json::json!({
+            "ok": true,
+            "mode": "preview",
+            "fingerprint": profile.fingerprint,
+            "lines": merged.len(),
+            "diff_count": diff.len(),
+            "houdini_kept": houdini_kept,
+            "note": "preview only: rerun as root to write waydroid_base.prop + restart session"
+        }));
+    }
+    // Real apply: write merged base.prop, restart session, verify getprop.
+    if let Err(e) = std::fs::write(base, merged.join("\n") + "\n") {
+        return Some(
+            serde_json::json!({"ok": false, "error": format!("write failed: {e}"), "isError": true}),
+        );
+    }
+    tracing::info!("wd-ctl: base.prop written, restarting session");
+    let stop_args = wd_waydroid::shutdown_args();
+    let stop: Vec<&str> = stop_args.iter().map(String::as_str).collect();
+    let _ = wd_waydroid::run_waydroid(&stop, 30_000);
+    let boot = wd_waydroid::boot_args(true, true);
+    let boot_ref: Vec<&str> = boot.iter().map(String::as_str).collect();
+    if let Err(e) = wd_waydroid::run_waydroid(&boot_ref, 120_000) {
+        return Some(
+            serde_json::json!({"ok": false, "error": format!("boot failed: {e}"), "isError": true}),
+        );
+    }
+    let got =
+        wd_waydroid::run_waydroid(&["shell", "--", "getprop", "ro.build.fingerprint"], 30_000)
+            .unwrap_or_default();
+    let verified = wd_spoof::verify_fingerprint(&got, &profile.fingerprint);
+    tracing::info!(verified, "wd-ctl: spoof-apply done");
     Some(serde_json::json!({
-        "ok": true,
+        "ok": verified,
+        "mode": "applied",
         "fingerprint": profile.fingerprint,
         "lines": merged.len(),
         "diff_count": diff.len(),
-        "houdini_kept": true,
-        "note": "preview only: pkexec write to waydroid_base.prop + waydroid session restart required"
+        "houdini_kept": houdini_kept,
+        "verified": verified,
     }))
+}
+
+/// euid 0 check for the base.prop write path.
+fn is_root() -> bool {
+    // `libc` absent on purpose — read `/proc/self/status` instead.
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines().find_map(|l| {
+                l.strip_prefix("Uid:")
+                    .map(|v| v.split_whitespace().next().is_some_and(|u| u == "0"))
+            })
+        })
+        .unwrap_or(false)
 }

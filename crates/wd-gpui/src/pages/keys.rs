@@ -1,15 +1,19 @@
 //! Keys page body. Pure render, no mutation.
 
 use gpui_kit::component::{Selectable as _, button::Button, h_flex, label::Label, v_flex};
-use gpui_kit::{IntoElement, ParentElement as _, Styled as _, px};
+use gpui_kit::{Entity, IntoElement, ParentElement as _, Styled as _, px};
 
+use crate::app::ShellView;
 use crate::shared::{empty_state, prop_row};
 use crate::state::AppState;
 
 const TABS: [&str; 3] = ["Map", "Aim", "DPad"];
 
+/// Keymap editor. Ports Slint page 3. Tab clicks select via
+/// `ShellView::set_keymap_tab`.
+
 /// Keymap editor. Ports Slint page 3.
-pub fn render_keys(state: &AppState) -> impl IntoElement {
+pub fn render_keys(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(profile = %state.keymap.profile, tab = state.keymap.tab_index, "render keys");
     let tab = usize::try_from(state.keymap.tab_index)
         .ok()
@@ -26,9 +30,16 @@ pub fn render_keys(state: &AppState) -> impl IntoElement {
             h_flex()
                 .gap(px(8.))
                 .children(TABS.iter().enumerate().map(|(ix, label)| {
+                    let view = view.clone();
+                    let ix = i32::try_from(ix).unwrap_or(i32::MAX);
                     Button::new(format!("keys-tab-{ix}"))
                         .label(*label)
-                        .selected(i32::try_from(ix).unwrap_or(i32::MAX) == state.keymap.tab_index)
+                        .selected(ix == state.keymap.tab_index)
+                        .on_click(move |_, _, cx| {
+                            view.update(cx, |this, cx| {
+                                this.set_keymap_tab(ix, cx);
+                            });
+                        })
                 })),
         )
         .child(canvas)

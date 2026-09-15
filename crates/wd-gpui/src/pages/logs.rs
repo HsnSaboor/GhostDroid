@@ -9,14 +9,19 @@ use gpui_kit::component::{
     v_flex,
 };
 use gpui_kit::{
-    AnyElement, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, px,
+    AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
+    px,
 };
 
+use crate::app::ShellView;
 use crate::shared::{empty_state, log_list};
 use crate::state::AppState;
 
+/// Daemon log stream body. Mirrors the Slint Logs section. Clear wipes
+/// the tail via `ShellView::clear_logs`.
+
 /// Daemon log stream body. Mirrors the Slint Logs section.
-pub fn render_logs(state: &AppState) -> impl IntoElement {
+pub fn render_logs(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(count = state.logs.lines.len(), "render logs");
     let stream: AnyElement = if state.logs.lines.is_empty() {
         empty_state("No log lines", "Daemon output will appear here.").into_any_element()
@@ -32,7 +37,18 @@ pub fn render_logs(state: &AppState) -> impl IntoElement {
         h_flex()
             .gap(px(8.))
             .items_center()
-            .child(Button::new("logs-clear").ghost().small().label("Clear"))
+            .child({
+                let view = view.clone();
+                Button::new("logs-clear")
+                    .ghost()
+                    .small()
+                    .label("Clear")
+                    .on_click(move |_, _, cx| {
+                        view.update(cx, |this, cx| {
+                            this.clear_logs(cx);
+                        });
+                    })
+            })
             .child(Label::new(format!("{} lines", state.logs.lines.len()))),
     )
 }

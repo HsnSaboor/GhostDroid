@@ -19,7 +19,7 @@ pub use android_server::{
 pub use apps::{
     AppRow, install_args, intent_args, launch_args, list_args, parse_app_list, remove_args,
 };
-pub use exec::run_waydroid;
+pub use exec::{is_app_verb, run_waydroid};
 pub use props::{BASE_PROP, PROP_KEYS, get_args, is_managed, set_args};
 pub use ready::{DEFAULT_TIMEOUT_S, POLL_GAP_MS, WAYLAND_SOCKET, WaitDecision, WaitReady, decide};
 pub use session::{

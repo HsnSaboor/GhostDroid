@@ -65,6 +65,9 @@ jobs:
             cp "target/release/$b" "dist/$DIST/"
           done
           cp -r profiles "dist/$DIST/"
+          mkdir -p "dist/$DIST/java"
+          cp java/PhantomServer.java "dist/$DIST/java/"
+          cp .devdocs/phantom/contrib/waydroid/Vendor_1234_Product_5678.idc "dist/$DIST/java/" 2>/dev/null || true
           cat > "dist/$DIST/INSTALL.txt" <<'EOF'
           GhostDroid — quick install
           1. sudo apt install waydroid adb

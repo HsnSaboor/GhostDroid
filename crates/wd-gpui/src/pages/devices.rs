@@ -9,13 +9,17 @@ use gpui_kit::component::{
     progress::Progress,
     v_flex,
 };
-use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, px};
+use gpui_kit::{AnyElement, Entity, IntoElement, ParentElement as _, Styled as _, px};
 
+use crate::app::ShellView;
 use crate::shared::device_dot;
 use crate::state::AppState;
 
+/// Device state + scan body. Mirrors the Slint Devices section. The Scan
+/// button flips `busy` (scan-in-flight label); the sync layer clears it.
+
 /// Device state + scan body. Mirrors the Slint Devices section.
-pub fn render_devices(state: &AppState) -> impl IntoElement {
+pub fn render_devices(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(
         ready = state.device.ready,
         frozen = state.device.frozen,
@@ -60,5 +64,16 @@ pub fn render_devices(state: &AppState) -> impl IntoElement {
                 .item("ip", ip, 1),
         )
         .child(scan)
-        .child(Button::new("device-scan-btn").ghost().small().label("Scan"))
+        .child({
+            let view = view.clone();
+            Button::new("device-scan-btn")
+                .ghost()
+                .small()
+                .label("Scan")
+                .on_click(move |_, _, cx| {
+                    view.update(cx, |this, cx| {
+                        this.set_busy(true, cx);
+                    });
+                })
+        })
 }

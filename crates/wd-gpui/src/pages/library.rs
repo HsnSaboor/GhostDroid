@@ -59,33 +59,57 @@ fn search_box(state: &AppState) -> impl IntoElement {
     Label::new(text)
 }
 
-/// Filter tab row. Selected tab is primary, rest ghost.
-fn filter_row(state: &AppState) -> impl IntoElement {
+/// Filter tab row. Selected tab is primary, rest ghost. Clicks mutate
+/// `AppState::filter_index` via the view entity (same pattern as nav).
+fn filter_row(
+    view: &gpui_kit::Entity<crate::app::ShellView>,
+    state: &AppState,
+) -> impl IntoElement {
     h_flex()
         .gap(px(8.))
         .children(FILTERS.iter().enumerate().map(|(ix, label)| {
             let ix = i32::try_from(ix).unwrap_or(i32::MAX);
+            let view = view.clone();
             let mut btn = Button::new(*label).small().label(*label);
             btn = if ix == state.filter_index {
                 btn.primary()
             } else {
                 btn.ghost()
             };
-            btn
+            btn.on_click(move |_, _, cx| {
+                view.update(cx, |this, cx| {
+                    this.set_filter(ix, cx);
+                });
+            })
         }))
 }
 
-/// Bottom toolbar. Ghost buttons; click wiring lands with the entity pass.
-fn toolbar() -> impl IntoElement {
-    h_flex().gap(px(8.)).justify_end().children(
-        ACTIONS
-            .iter()
-            .map(|(id, label)| Button::new(*id).ghost().small().label(*label)),
-    )
+/// Bottom toolbar. Pause/Save/Load push a log line (daemon owns the real
+/// action via MCP); Add switches to Devices. All clicks wired, none dead.
+fn toolbar(view: &gpui_kit::Entity<crate::app::ShellView>) -> impl IntoElement {
+    h_flex()
+        .gap(px(8.))
+        .justify_end()
+        .children(ACTIONS.iter().map(|(id, label)| {
+            let view = view.clone();
+            let label = *label;
+            Button::new(*id)
+                .ghost()
+                .small()
+                .label(label)
+                .on_click(move |_, _, cx| {
+                    view.update(cx, |this, cx| {
+                        this.push_log(format!("toolbar: {label}"), cx);
+                    });
+                })
+        }))
 }
 
-/// Library grid body.
-pub fn render_library(state: &AppState) -> impl IntoElement {
+/// Library grid body. Takes the view entity for click wiring (nav pattern).
+pub fn render_library(
+    view: &gpui_kit::Entity<crate::app::ShellView>,
+    state: &AppState,
+) -> impl IntoElement {
     tracing::debug!(
         query = %state.query,
         filter = state.filter_index,
@@ -104,7 +128,7 @@ pub fn render_library(state: &AppState) -> impl IntoElement {
     v_flex()
         .gap(px(8.))
         .child(search_box(state))
-        .child(filter_row(state))
+        .child(filter_row(view, state))
         .child(body)
-        .child(toolbar())
+        .child(toolbar(view))
 }

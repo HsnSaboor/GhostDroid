@@ -66,21 +66,29 @@ fn argv_fallback(tool: &str, argv: &[String]) -> serde_json::Value {
     serde_json::json!({"ok": true, "tool": tool, "argv": argv})
 }
 
-/// `shell` needs euid 0 (vendored `tools/__init__.py:actionNeedRoot`).
-/// Surface a pkexec hint instead of the raw waydroid error.
-fn root_hint(err: &wd_core::WdError) -> Option<serde_json::Value> {
+/// `shell` needs euid 0 (vendored `tools/__init__.py:actionNeedRoot`),
+/// but app verbs (`app ...`, `status`, `prop get`) need the USER session
+/// bus (Waydroid rejects foreign uids). Route callers: app verbs as user,
+/// shell/logcat via sudo. Surfaces explicit hints for each case.
+fn root_hint(argv: &[String], err: &wd_core::WdError) -> Option<serde_json::Value> {
     let msg = err.to_string();
+    let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
     if msg.contains("needs root access") {
-        tracing::warn!("call: waydroid shell needs root (pkexec)");
+        tracing::warn!("call: waydroid shell needs root (sudo)");
         Some(
-            serde_json::json!({"ok": false, "error": "waydroid shell needs root: rerun via pkexec", "isError": true}),
+            serde_json::json!({"ok": false, "error": "waydroid shell needs root: rerun via sudo", "isError": true}),
+        )
+    } else if msg.contains("session is stopped") && wd_waydroid::is_app_verb(&refs) {
+        tracing::warn!("call: app verb under sudo sees dead session (run as user)");
+        Some(
+            serde_json::json!({"ok": false, "error": "app verb needs user session: run without sudo", "isError": true}),
         )
     } else {
         None
     }
 }
 
-/// Map spawn errors: root hint, missing binary → argv fallback, else error.
+/// Map spawn errors: hints, missing binary → argv fallback, else error.
 fn spawn_out(
     tool: &str,
     argv: &[String],
@@ -90,7 +98,7 @@ fn spawn_out(
         Ok(_) => None,
         Err(wd_core::WdError::Io(_)) => Some(argv_fallback(tool, argv)),
         Err(err) => {
-            if let Some(hint) = root_hint(&err) {
+            if let Some(hint) = root_hint(argv, &err) {
                 return Some(hint);
             }
             tracing::warn!(tool, error = %err, "call: live failed");
@@ -398,7 +406,8 @@ fn screenshot_live() -> serde_json::Value {
     ];
     match run(&b64, 30_000) {
         Ok(out) => {
-            let image = out.lines().collect::<Vec<_>>().concat();
+            let image: String = out.split_whitespace().collect();
+            tracing::info!(b64_len = image.len(), "call: screenshot b64 joined");
             serde_json::json!({"ok": true, "tool": "vision.screenshot", "source": "waydroid", "remote": remote, "image_base64": image, "frame": crate::screenshot::FRAME_RESOURCE})
         }
         Err(wd_core::WdError::Io(_)) => argv_fallback("vision.screenshot", &cap),
