@@ -1,3 +1,14 @@
 target/
 /tmp/
 *.log
+# session checkpoints + vendored research docs (large, never public)
+session-*.md
+.devdocs/
+# secrets / editor / patch droppings
+.env
+*.orig
+*.rej
+*.swp
+*~
+.DS_Store
+coverage/
