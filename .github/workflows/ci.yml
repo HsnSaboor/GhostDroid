@@ -62,15 +62,20 @@ jobs:
           mkdir -p /tmp/xdg screenshots
           export XDG_RUNTIME_DIR=/tmp/xdg
           export LIBGL_ALWAYS_SOFTWARE=1
+          # GPUI on Linux prefers Wayland when a socket exists; force the
+          # X11/Xvfb path (same recipe as loop1 green runs).
+          unset WAYLAND_DISPLAY
+          export WGPU_BACKEND=gl
           Xvfb :99 -screen 0 1280x800x24 &
           echo $! > xvfb.pid
           export DISPLAY=:99
+          # Surface errors instead of a bare Unknown-connection panic.
           ./target/debug/wd-gpui > screenshots/wd-gpui.log 2>&1 &
           echo $! > app.pid
           sleep 8
           if ! kill -0 "$(cat app.pid)"; then
             echo "wd-gpui died on startup:"
-            tail -n 50 screenshots/wd-gpui.log
+            tail -n 60 screenshots/wd-gpui.log
             exit 1
           fi
           import -window root screenshots/ghostdroid-t8.png || echo "shot1 failed"
