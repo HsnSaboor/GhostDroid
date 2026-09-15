@@ -1,0 +1,18 @@
+[package]
+name = "wd-gpui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wd-core = { workspace = true }
+wd-shell = { path = "../wd-shell" }
+gpui-kit = "0.6"
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wd-gpui"
+path = "src/bin/wd-gpui.rs"

@@ -9,6 +9,7 @@ members = [
   "crates/wd-shell",
   "crates/wd-overlay",
   "crates/wd-mcp",
+  "crates/wd-gpui",
 ]
 resolver = "2"
 
