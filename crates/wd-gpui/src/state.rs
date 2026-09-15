@@ -68,7 +68,7 @@ impl Default for AppState {
         tracing::debug!("app state default (seeded demo fallback)");
         let mut logs = LogStream::default();
         logs.push("boot: ghostdroid 1.0 ready".to_owned(), 500);
-        logs.push("spoof: gaming-full profile loaded".to_owned(), 500);
+        logs.push("spoof: s26-ultra profile loaded".to_owned(), 500);
         logs.push("keymap: pubg.json validated".to_owned(), 500);
         Self {
             page: Page::Library,
@@ -106,11 +106,15 @@ impl Default for AppState {
             },
             busy: false,
             spoof: SpoofProfile {
-                id: "gaming-full".to_owned(),
-                ids: vec!["gaming-full".to_owned(), "gaming-basic".to_owned()],
+                id: "s26-ultra".to_owned(),
+                ids: vec![
+                    "s26-ultra".to_owned(),
+                    "gaming-full".to_owned(),
+                    "gaming-basic".to_owned(),
+                ],
                 selected: 0,
                 props: vec![
-                    ("model".to_owned(), "Pixel 7 Pro (cheetah)".to_owned()),
+                    ("model".to_owned(), "SM-S948B (m3q)".to_owned()),
                     ("stack".to_owned(), "full".to_owned()),
                 ],
             },

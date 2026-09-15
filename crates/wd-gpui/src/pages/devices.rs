@@ -5,10 +5,11 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     description_list::DescriptionList,
     h_flex,
+    label::Label,
     progress::Progress,
     v_flex,
 };
-use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, div, px};
+use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, px};
 
 use crate::shared::device_dot;
 use crate::state::AppState;
@@ -28,8 +29,13 @@ pub fn render_devices(state: &AppState) -> impl IntoElement {
     } else {
         "offline"
     };
+    let session = if state.device.ready {
+        "running"
+    } else {
+        "stopped"
+    };
     let scan: AnyElement = if state.busy {
-        div().child("Scanning…").into_any_element()
+        Label::new("Scanning…").into_any_element()
     } else {
         Progress::new("device-scan").value(100.).into_any_element()
     };
@@ -40,12 +46,12 @@ pub fn render_devices(state: &AppState) -> impl IntoElement {
                 .gap(px(8.))
                 .items_center()
                 .child(device_dot(state.device.ready, state.device.frozen))
-                .child(div().child(status)),
+                .child(Label::new(status)),
         )
         .child(
             DescriptionList::vertical()
-                .item("serial", "emulator-5554", 1)
-                .item("state", "device", 1),
+                .item("status", status, 1)
+                .item("session", session, 1),
         )
         .child(scan)
         .child(Button::new("device-scan-btn").ghost().small().label("Scan"))

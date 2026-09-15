@@ -1,15 +1,14 @@
 //! Per-game spoof profile (TOML).
 //!
-//! Ref: `.devdocs/DeviceSpoofLab-Hooks/device_profile.conf:260`
-//! (cheetah canonical), `.research/04-root-hide-spoof-2026.md:40`
-//! (discard redfin print, broken sed).
+//! Ref: `.devdocs/DeviceSpoofLab-Hooks/device_profile.conf`
+//! (cheetah canonical 260, arm64/hw block 138-148).
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 /// Stack preset: minimal vs full hide stack. Traced on load.
-/// Default is [`StackPreset::Full`] — gaming-full is the default root/spoof profile.
+/// Default is [`StackPreset::Full`] — full is the default root/spoof profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum StackPreset {
@@ -23,7 +22,7 @@ pub enum StackPreset {
 /// Canonical per-game spoof profile. One schema only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpoofProfile {
-    /// `ro.build.fingerprint` value (cheetah A16).
+    /// `ro.build.fingerprint` value.
     pub fingerprint: String,
     /// `persist.waydroid.fake_touch` package globs.
     pub fake_touch: Vec<String>,
@@ -31,9 +30,33 @@ pub struct SpoofProfile {
     pub fake_wifi: Vec<String>,
     /// Denylist packages (applist-hide ref, 05 owns policy).
     pub denylist: Vec<String>,
-    /// Stack preset; defaults `full` (gaming-full is the default profile).
+    /// Stack preset; defaults `full`.
     #[serde(default)]
     pub stack: StackPreset,
+    /// `ro.product.model` (e.g. `SM-S948B`). Empty = line skipped.
+    #[serde(default, rename = "ro.product.model")]
+    pub model: String,
+    /// `ro.product.name` (e.g. `m3qxeea`). Empty = line skipped.
+    #[serde(default, rename = "ro.product.name")]
+    pub product: String,
+    /// `ro.product.device` (e.g. `m3q`). Empty = line skipped.
+    #[serde(default, rename = "ro.product.device")]
+    pub device: String,
+    /// `ro.hardware` (e.g. `m3q`). Empty = line skipped.
+    #[serde(default, rename = "ro.hardware")]
+    pub hardware: String,
+    /// `ro.product.cpu.abi` (always `arm64-v8a`). Empty = line skipped.
+    #[serde(default, rename = "ro.product.cpu.abi")]
+    pub cpu_abi: String,
+    /// `ro.product.cpu.abilist` (never x86). Empty = line skipped.
+    #[serde(default, rename = "ro.product.cpu.abilist")]
+    pub cpu_abilist: String,
+    /// `ro.build.tags` (always `release-keys`). Empty = line skipped.
+    #[serde(default, rename = "ro.build.tags")]
+    pub build_tags: String,
+    /// `ro.build.type` (always `user`). Empty = line skipped.
+    #[serde(default, rename = "ro.build.type")]
+    pub build_type: String,
 }
 
 /// Template keys required per game profile.
@@ -64,30 +87,27 @@ impl SpoofProfile {
         let raw = std::fs::read_to_string(path)?;
         let profile: Self = toml::from_str(&raw).map_err(wd_core::WdError::Toml)?;
         profile.validate()?;
-        tracing::info!(
-            fingerprint = %profile.fingerprint,
-            touch = profile.fake_touch.len(),
-            wifi = profile.fake_wifi.len(),
-            stack = ?profile.stack,
-            "spoof: loaded"
-        );
+        tracing::info!(fingerprint = %profile.fingerprint, stack = ?profile.stack, "spoof: loaded");
         Ok(profile)
     }
 
-    /// Validate: non-empty fingerprint, non-empty glob lists.
+    /// Validate: non-empty fingerprint + globs, never x86 in abilist.
     ///
     /// # Errors
-    /// Returns [`wd_core::WdError::Validation`] when empty.
+    /// Returns [`wd_core::WdError::Validation`] when empty or leaking x86.
     pub fn validate(&self) -> wd_core::Result<()> {
         tracing::debug!(fingerprint = %self.fingerprint, "spoof: validate");
         if self.fingerprint.trim().is_empty() {
-            tracing::warn!("spoof: empty fingerprint");
             return Err(wd_core::WdError::Validation("empty fingerprint".to_owned()));
         }
         if self.fake_touch.is_empty() || self.fake_wifi.is_empty() {
-            tracing::warn!("spoof: empty fake_* globs");
             return Err(wd_core::WdError::Validation(
                 "empty fake_* globs".to_owned(),
+            ));
+        }
+        if self.cpu_abilist.contains("x86") {
+            return Err(wd_core::WdError::Validation(
+                "x86 leak in abilist".to_owned(),
             ));
         }
         tracing::debug!("spoof: valid");
@@ -99,10 +119,14 @@ impl SpoofProfile {
 mod tests {
     use super::*;
 
+    fn load(name: &str) -> SpoofProfile {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../profiles/spoof");
+        SpoofProfile::load(&base.join(name)).expect("profile loads")
+    }
+
     #[test]
     fn golden_example() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../profiles/spoof/example.toml");
-        let profile = SpoofProfile::load(&path).expect("example loads");
+        let profile = load("example.toml");
         assert!(has_keys(REQUIRED_KEYS));
         assert!(profile.fingerprint.contains("cheetah"));
         assert!(profile.validate().is_ok());
@@ -114,23 +138,37 @@ mod tests {
             ("gaming-basic.toml", StackPreset::Basic),
             ("gaming-full.toml", StackPreset::Full),
         ] {
-            let path =
-                Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../profiles/spoof/{name}"));
-            let profile = SpoofProfile::load(&path).expect("gaming preset loads");
+            let profile = load(name);
             assert_eq!(profile.stack, want, "{name}");
             assert!(profile.validate().is_ok());
         }
     }
 
     #[test]
+    fn s26_ultra_spoof() {
+        let p = load("s26-ultra.toml");
+        assert_eq!(p.stack, StackPreset::Full);
+        assert!(p.fingerprint.contains("m3qxeea/m3q"));
+        assert_eq!(
+            (p.model.as_str(), p.product.as_str()),
+            ("SM-S948B", "m3qxeea")
+        );
+        assert_eq!((p.device.as_str(), p.hardware.as_str()), ("m3q", "m3q"));
+        assert_eq!(p.cpu_abi, "arm64-v8a");
+        assert!(!p.cpu_abilist.contains("x86"));
+        assert_eq!(
+            (p.build_tags.as_str(), p.build_type.as_str()),
+            ("release-keys", "user")
+        );
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
     fn rejects_empty() {
-        let bad = SpoofProfile {
-            fingerprint: String::new(),
-            fake_touch: vec![],
-            fake_wifi: vec![],
-            denylist: vec![],
-            stack: StackPreset::Basic,
-        };
+        let mut bad = load("example.toml");
+        bad.fingerprint.clear();
+        bad.fake_touch.clear();
+        bad.fake_wifi.clear();
         assert!(bad.validate().is_err());
         assert!(!has_keys(&["fingerprint"]));
     }

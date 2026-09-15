@@ -1,0 +1,17 @@
+# S26 Ultra default root spoof (EU, m3q). Anti-leak: arm64-only abi, m3q hw.
+# Refs: `.plans/11-ghostdroid-1.0-loop1.md`,
+# `.devdocs/DeviceSpoofLab-Hooks/device_profile.conf:138-148` (arm64 abi, no x86, hw block).
+# NEVER userdebug/test-keys; verified-boot green appended by render.
+fingerprint = "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys"
+fake_touch = ["com.example.game*"]
+fake_wifi = ["com.example.game*"]
+denylist = ["com.example.game"]
+stack = "full"
+"ro.product.model" = "SM-S948B"
+"ro.product.name" = "m3qxeea"
+"ro.product.device" = "m3q"
+"ro.hardware" = "m3q"
+"ro.product.cpu.abi" = "arm64-v8a"
+"ro.product.cpu.abilist" = "arm64-v8a,armeabi-v7a,armeabi"
+"ro.build.tags" = "release-keys"
+"ro.build.type" = "user"

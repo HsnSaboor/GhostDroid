@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 wd-core = { workspace = true }
 wd-shell = { path = "../wd-shell" }
+wd-waydroid = { path = "../wd-waydroid" }
 gpui-kit = "0.6"
 tracing.workspace = true
 

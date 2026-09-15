@@ -1,7 +1,7 @@
 //! Library page body: search + filters + game grid + toolbar.
 //!
 //! Pure render over `&AppState` — no entity creation here. The search box is a
-//! static div showing `query` text; a later pass upgrades it to a kit `Input`
+//! static label showing `query` text; a later pass upgrades it to a kit `Input`
 //! backed by an `Entity<InputState>` (which needs `window`+`cx` at build time,
 //! unavailable to these `&AppState` render fns). Filter tabs are a `Button`
 //! row until the same pass wires clicks to `AppState::set_filter`.
@@ -9,12 +9,14 @@
 use gpui_kit::component::{
     Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    h_flex,
+    label::Label,
+    v_flex,
 };
-use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, div, px};
+use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, px};
 use wd_shell::GameRow;
 
-use crate::shared::game_card;
+use crate::shared::{empty_state, game_card};
 use crate::state::AppState;
 
 /// Segmented filter labels. Index mirrors `AppState::filter_index`.
@@ -54,7 +56,7 @@ fn search_box(state: &AppState) -> impl IntoElement {
     } else {
         state.query.clone()
     };
-    div().px(px(8.)).py(px(4.)).text_sm().child(text)
+    Label::new(text)
 }
 
 /// Filter tab row. Selected tab is primary, rest ghost.
@@ -92,12 +94,7 @@ pub fn render_library(state: &AppState) -> impl IntoElement {
     );
     let rows = visible(state);
     let body: AnyElement = if rows.is_empty() {
-        // Kit 0.6 has no `empty` module; plain centered text until upgrade.
-        div()
-            .w_full()
-            .justify_center()
-            .child("No ROMs yet — Scan to add games.")
-            .into_any_element()
+        empty_state("No games found", "Scan to add games to the library.").into_any_element()
     } else {
         v_flex()
             .gap(px(8.))
@@ -105,7 +102,7 @@ pub fn render_library(state: &AppState) -> impl IntoElement {
             .into_any_element()
     };
     v_flex()
-        .gap(px(12.))
+        .gap(px(8.))
         .child(search_box(state))
         .child(filter_row(state))
         .child(body)

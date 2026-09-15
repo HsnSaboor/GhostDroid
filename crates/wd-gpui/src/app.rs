@@ -23,6 +23,38 @@ pub struct ShellView {
 impl ShellView {
     fn new(cx: &mut Context<Self>) -> Self {
         tracing::debug!("shell view new");
+        // Self-boot: blocking `waydroid` calls run on the background
+        // executor (never the UI thread); results land via weak-entity
+        // `update`. Missing binary keeps the seeded fallback.
+        cx.spawn(async move |view, cx| {
+            tracing::info!("sync: ensure booted");
+            let boot = cx
+                .background_spawn(async { crate::sync::ensure_booted() })
+                .await;
+            if let Err(err) = boot {
+                tracing::warn!(%err, "sync: boot skipped, seeded state kept");
+                return;
+            }
+            let games = cx
+                .background_spawn(async { crate::sync::fetch_games() })
+                .await
+                .unwrap_or_default();
+            let device = cx
+                .background_spawn(async { crate::sync::fetch_device() })
+                .await
+                .ok();
+            tracing::info!(games = games.len(), "sync: loaded");
+            let _ = view.update(cx, |this, cx| {
+                if !games.is_empty() {
+                    this.state.set_games(games);
+                }
+                if let Some((dev, _ip)) = device {
+                    this.state.device = dev;
+                }
+                cx.notify();
+            });
+        })
+        .detach();
         Self {
             state: AppState::default(),
             focus: cx.focus_handle(),
