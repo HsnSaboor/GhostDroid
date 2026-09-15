@@ -14,7 +14,8 @@ const CAP_LEN: usize = 262_144;
 /// Poll gap while waiting for the child.
 const POLL_MS: u64 = 5;
 
-/// True for verbs bound to the USER session bus (D-Bus `id.waydro.Session`).
+/// True for USER-session-bus verbs.
+///
 /// These MUST run as the session user — sudo'd they see "session stopped"
 /// (bus rejects foreign uids). `shell`/`logcat` need euid 0, keep sudo.
 #[must_use]
