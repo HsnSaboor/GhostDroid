@@ -1,0 +1,113 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Empty = use current ref."
+        required: false
+        default: ""
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Kaby Lake i5-8350U class: x86-64-v3 (AVX2/BMI/FMA, no AVX512).
+  RUSTFLAGS: "-C target-cpu=x86-64-v3"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System deps (gpui bindgen + fonts + wayland/xkb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-xcb-dev libxcb1-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ghostdroid-${{ runner.os }}-release
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0-dev)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - run: cargo build --locked --release -p wd-gpui -p wd-daemon -p wd-shell -p wd-overlay -p wd-mcp
+      - name: Smoke test (CLI bins must boot without a device)
+        run: |
+          ./target/release/wd-ctl 2>&1 | head -n 3 || true
+          test "$(./target/release/wd-ctl >/dev/null 2>&1; echo $?)" = "2"
+          ./target/release/wd-shell | head -n 2
+          ./target/release/wd-overlay | head -n 2
+          test -x ./target/release/wd-gpui
+          test -x ./target/release/wd-daemon
+          test -x ./target/release/wd-mcp
+      - name: Package dist
+        run: |
+          DIST="ghostdroid-${{ steps.ver.outputs.version }}-linux-x86_64"
+          mkdir -p "dist/$DIST"
+          for b in wd-gpui wd-daemon wd-shell wd-overlay wd-mcp wd-ctl; do
+            cp "target/release/$b" "dist/$DIST/"
+          done
+          cp -r profiles "dist/$DIST/"
+          cat > "dist/$DIST/INSTALL.txt" <<'EOF'
+          GhostDroid — quick install
+          1. sudo apt install waydroid adb
+          2. sudo ./install.sh  (coming soon)  — or copy bins to /usr/local/bin
+          3. wd-ctl status
+          EOF
+          tar -C dist -czf "dist/$DIST.tar.gz" "$DIST"
+          (cd dist && sha256sum "$DIST.tar.gz" > "$DIST.tar.gz.sha256")
+          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghostdroid-dist
+          path: dist/
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghostdroid-dist
+          path: dist
+      - name: Resolve tag
+        id: ver
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-rc') || contains(steps.ver.outputs.tag, '-beta') || contains(steps.ver.outputs.tag, '-alpha') }}

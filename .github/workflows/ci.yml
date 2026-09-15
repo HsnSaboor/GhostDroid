@@ -1,10 +1,85 @@
 name: ci
-on: [push]
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: System deps (gpui bindgen + fonts + wayland/xkb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-xcb-dev libxcb1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ghostdroid-${{ runner.os }}
       - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+
+  screenshots:
+    runs-on: ubuntu-latest
+    needs: gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: System deps (build + headless X + software GL/Vulkan)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-xcb-dev libxcb1-dev \
+            xvfb imagemagick libgl1-mesa-dri mesa-vulkan-drivers
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ghostdroid-${{ runner.os }}
+      - run: cargo build --locked -p wd-gpui
+      - name: Launch under Xvfb, screenshot, check alive
+        run: |
+          mkdir -p /tmp/xdg screenshots
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          export LIBGL_ALWAYS_SOFTWARE=1
+          Xvfb :99 -screen 0 1280x800x24 &
+          echo $! > xvfb.pid
+          export DISPLAY=:99
+          ./target/debug/wd-gpui > screenshots/wd-gpui.log 2>&1 &
+          echo $! > app.pid
+          sleep 8
+          if ! kill -0 "$(cat app.pid)"; then
+            echo "wd-gpui died on startup:"
+            tail -n 50 screenshots/wd-gpui.log
+            exit 1
+          fi
+          import -window root screenshots/ghostdroid-t8.png || echo "shot1 failed"
+          sleep 5
+          import -window root screenshots/ghostdroid-t13.png || echo "shot2 failed"
+          kill "$(cat app.pid)" || true
+          kill "$(cat xvfb.pid)" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghostdroid-screenshots
+          path: screenshots/
