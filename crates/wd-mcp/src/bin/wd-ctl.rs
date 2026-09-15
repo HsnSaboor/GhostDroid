@@ -151,7 +151,7 @@ fn run_local(verb: &str, params: &serde_json::Value) -> serde_json::Value {
 fn spoof_apply_preview(path: &str) -> Option<serde_json::Value> {
     tracing::info!(path, "wd-ctl: spoof-apply in");
     let (profile_path, preview) = match path.split_once(' ') {
-        Some((p, "--preview")) | Some(("--preview", p)) => (p, true),
+        Some((p, "--preview") | ("--preview", p)) => (p, true),
         _ if path.ends_with(" --preview") => (&path[..path.len() - 10], true),
         _ => (path, false),
     };
@@ -159,7 +159,7 @@ fn spoof_apply_preview(path: &str) -> Option<serde_json::Value> {
     let rendered = wd_spoof::render(&profile);
     let base = std::path::Path::new(wd_spoof::BASE_PROP);
     let snap = wd_spoof::snapshot(base).ok();
-    let body = snap.as_ref().map(|s| s.body.as_str()).unwrap_or("");
+    let body = snap.as_ref().map_or("", |s| s.body.as_str());
     let merged = wd_spoof::merge_lines(body, &rendered);
     let diff = wd_spoof::swap_diff(body, &rendered);
     let houdini_kept = merged.iter().any(|l| l.contains("libhoudini.so"));
