@@ -34,6 +34,40 @@ pub fn list_args() -> Vec<String> {
     vec!["app".to_owned(), "list".to_owned()]
 }
 
+/// One row of `waydroid app list`: display name + package id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppRow {
+    /// Display name (`Name:` line).
+    pub title: String,
+    /// Package id (`packageName:` line).
+    pub pkg: String,
+}
+
+/// Parse `waydroid app list` output into [`AppRow`]s.
+///
+/// Blocks look like `Name: X\npackageName: Y\ncategories:\n\t...`.
+/// Skips blocks missing either line. Pure, no spawn.
+#[must_use]
+pub fn parse_app_list(out: &str) -> Vec<AppRow> {
+    tracing::debug!(len = out.len(), "apps: parse list");
+    let mut rows = Vec::new();
+    let mut title: Option<String> = None;
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if let Some(name) = trimmed.strip_prefix("Name:") {
+            title = Some(name.trim().to_owned());
+        } else if let Some(pkg) = trimmed.strip_prefix("packageName:")
+            && let Some(t) = title.take()
+        {
+            let pkg = pkg.trim().to_owned();
+            if !t.is_empty() && !pkg.is_empty() {
+                rows.push(AppRow { title: t, pkg });
+            }
+        }
+    }
+    rows
+}
+
 /// Build `waydroid app intent <action> <uri>` args.
 #[must_use]
 pub fn intent_args(action: &str, uri: &str) -> Vec<String> {
@@ -64,5 +98,21 @@ mod tests {
             intent_args("android.intent.action.VIEW", "https://x"),
             vec!["app", "intent", "android.intent.action.VIEW", "https://x"]
         );
+    }
+
+    #[test]
+    fn parses_live_list() {
+        let out = "Name: Clash Royale\npackageName: com.supercell.clashroyale\ncategories:\n\tandroid.intent.category.LAUNCHER\nName: Magisk Delta\npackageName: io.github.huskydg.magisk\ncategories:\n\tandroid.intent.category.LAUNCHER\nName: Broken\ncategories:\n\tandroid.intent.category.INFO\n";
+        let rows = parse_app_list(out);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].title, "Clash Royale");
+        assert_eq!(rows[0].pkg, "com.supercell.clashroyale");
+        assert_eq!(rows[1].pkg, "io.github.huskydg.magisk");
+    }
+
+    #[test]
+    fn skips_empty() {
+        assert!(parse_app_list("").is_empty());
+        assert!(parse_app_list("Name: \npackageName: \n").is_empty());
     }
 }

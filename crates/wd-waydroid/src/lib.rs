@@ -6,11 +6,15 @@
 #![deny(missing_docs)]
 
 pub mod apps;
+pub mod exec;
 pub mod props;
 pub mod ready;
 pub mod session;
 
-pub use apps::{install_args, intent_args, launch_args, list_args, remove_args};
+pub use apps::{
+    AppRow, install_args, intent_args, launch_args, list_args, parse_app_list, remove_args,
+};
+pub use exec::run_waydroid;
 pub use props::{BASE_PROP, PROP_KEYS, get_args, is_managed, set_args};
 pub use ready::{DEFAULT_TIMEOUT_S, POLL_GAP_MS, WAYLAND_SOCKET, WaitDecision, WaitReady, decide};
 pub use session::{

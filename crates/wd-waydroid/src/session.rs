@@ -6,7 +6,7 @@
 use wd_core::WdError;
 
 /// Session plus container state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Status {
     /// Session up.
     pub session: bool,
@@ -14,6 +14,8 @@ pub struct Status {
     pub container: bool,
     /// Frozen (show session UI).
     pub frozen: bool,
+    /// Container IP (`IP address:` line), if present.
+    pub ip: Option<String>,
 }
 
 /// Build `waydroid session start` args.
@@ -56,10 +58,28 @@ pub fn unfreeze_args() -> Vec<String> {
 #[must_use]
 pub fn parse_status(out: &str) -> Status {
     tracing::debug!(len = out.len(), "session: parse status");
+    let ip = out
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("IP address:"))
+        .map(str::trim)
+        .filter(|ip| !ip.is_empty())
+        .map(str::to_owned);
+    let session_up = out.lines().any(|line| {
+        let t = line.trim();
+        t.strip_prefix("Session:")
+            .is_some_and(|v| v.trim() == "RUNNING")
+            || t == "RUNNING"
+    });
+    let container_up = out.lines().any(|line| {
+        line.trim()
+            .strip_prefix("Container:")
+            .is_some_and(|v| v.trim() == "RUNNING")
+    });
     let status = Status {
-        session: out.contains("Session: RUNNING") || out.contains("RUNNING"),
-        container: out.contains("Container: RUNNING"),
+        session: session_up,
+        container: container_up,
         frozen: out.contains("FROZEN"),
+        ip,
     };
     if status.frozen {
         tracing::warn!("session: frozen detected in status output");
@@ -93,6 +113,16 @@ mod tests {
         assert_eq!(shutdown_args(), vec!["session", "stop"]);
         assert_eq!(freeze_args(), vec!["container", "freeze"]);
         assert_eq!(unfreeze_args(), vec!["container", "unfreeze"]);
+    }
+
+    #[test]
+    fn parses_live_status() {
+        let out = "Session:\tRUNNING\nContainer:\tRUNNING\nVendor type:\tMAINLINE\nIP address:\t192.168.240.112\nSession user:\tsaboor(1000)\nWayland display:\twayland-1\n";
+        let status = parse_status(out);
+        assert!(status.session);
+        assert!(status.container);
+        assert!(!status.frozen);
+        assert_eq!(status.ip.as_deref(), Some("192.168.240.112"));
     }
 
     #[test]
