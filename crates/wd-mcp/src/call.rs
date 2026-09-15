@@ -404,7 +404,7 @@ fn screenshot_live() -> serde_json::Value {
         "base64".to_owned(),
         remote.clone(),
     ];
-    match run(&b64, 30_000) {
+    match run(&b64, 60_000) {
         Ok(out) => {
             let image: String = out.split_whitespace().collect();
             tracing::info!(b64_len = image.len(), "call: screenshot b64 joined");
