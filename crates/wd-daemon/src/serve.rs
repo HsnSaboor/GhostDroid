@@ -12,11 +12,11 @@ use crate::{decode_req_line, dispatch, socket_path};
 /// Bind [`socket_path`] and serve forever. Threads per conn.
 pub fn serve() {
     let path = socket_path();
-    if let Some(parent) = std::path::Path::new(&path).parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            tracing::warn!(path = %path, error = %e, "wd-daemon: no socket dir");
-            return;
-        }
+    if let Some(parent) = std::path::Path::new(&path).parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        tracing::warn!(path = %path, error = %e, "wd-daemon: no socket dir");
+        return;
     }
     let _ = std::fs::remove_file(&path);
     let listener = match UnixListener::bind(&path) {
