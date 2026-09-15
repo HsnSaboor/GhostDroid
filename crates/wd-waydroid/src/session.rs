@@ -18,17 +18,14 @@ pub struct Status {
     pub ip: Option<String>,
 }
 
-/// Build `waydroid session start` args.
+/// Build `waydroid session start` args. Waydroid 1.6.3's `session start`
+/// takes NO flags (verified `--help` on-device); the old `--wait` /
+/// `--frozen-check` flags never existed upstream. Params kept for
+/// call-site compat but ignored; waiting/frozen live in `sync.rs` polling.
 #[must_use]
 pub fn boot_args(wait: bool, frozen_check: bool) -> Vec<String> {
     tracing::info!(wait, frozen_check, "session: boot args");
-    let mut args = vec!["session".to_owned(), "start".to_owned()];
-    if wait {
-        args.push("--wait".to_owned());
-    }
-    if frozen_check {
-        args.push("--frozen-check".to_owned());
-    }
+    let args = vec!["session".to_owned(), "start".to_owned()];
     tracing::debug!(?args, "session: boot args built");
     args
 }
@@ -109,7 +106,7 @@ mod tests {
 
     #[test]
     fn boot_shutdown_freeze_shapes() {
-        assert_eq!(boot_args(true, true).len(), 4);
+        assert_eq!(boot_args(true, true), vec!["session", "start"]);
         assert_eq!(shutdown_args(), vec!["session", "stop"]);
         assert_eq!(freeze_args(), vec!["container", "freeze"]);
         assert_eq!(unfreeze_args(), vec!["container", "unfreeze"]);
