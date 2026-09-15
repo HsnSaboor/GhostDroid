@@ -5,12 +5,17 @@
 //! `.devdocs/waydroid-mcp/src/waydroid_mcp/adb.py:39-51`.
 #![deny(missing_docs)]
 
+pub mod android_server;
 pub mod apps;
 pub mod exec;
 pub mod props;
 pub mod ready;
 pub mod session;
 
+pub use android_server::{
+    SERVER_BIND_HOST, SERVER_CLASS, SERVER_JAR_DEVICE_PATH, SERVER_LOG_DEVICE_PATH, is_server_up,
+    launch_args as server_launch_args, log_args as server_log_args, push_args as server_push_args,
+};
 pub use apps::{
     AppRow, install_args, intent_args, launch_args, list_args, parse_app_list, remove_args,
 };

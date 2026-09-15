@@ -24,7 +24,7 @@ pub use osd::{OsdState, TOAST_FRAMES};
 pub use profile::{audit_profile, canvas_binds, canvas_keymap, load_profile, validate_profile};
 pub use widgets::{MAPPING_PX, WidgetKind, WidgetRect};
 
-/// Run stub: logs only. Renderer attaches later (separate proc, plan 07).
+/// Run headless: state machine only (glow renderer attaches in its own proc).
 pub fn run() {
-    tracing::info!("wd-overlay run stub");
+    tracing::info!("wd-overlay run headless");
 }

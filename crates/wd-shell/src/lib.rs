@@ -47,7 +47,7 @@ pub struct SpoofProfile {
     pub props: Vec<(String, String)>,
 }
 
-/// Keymap state (page 3 editor stubs; canvas lives in overlay, plan 07).
+/// Keymap state (page 3 editor summary; canvas lives in overlay, plan 07).
 #[derive(Debug, Clone)]
 pub struct KeymapState {
     /// Profile name (e.g. `pubg`).
@@ -56,6 +56,8 @@ pub struct KeymapState {
     pub fire_key: String,
     /// Active editor tab index (Map/Aim/DPad).
     pub tab_index: i32,
+    /// Node count from `profiles/keymap/<profile>.json` (pubg = 21).
+    pub node_count: usize,
 }
 
 /// Log stream viewmodel (page 4; daemon pushes lines, shell keeps tail).

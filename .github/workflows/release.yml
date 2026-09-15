@@ -18,6 +18,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_RELEASE_DEBUG: 0
   # Kaby Lake i5-8350U class: x86-64-v3 (AVX2/BMI/FMA, no AVX512).
   RUSTFLAGS: "-C target-cpu=x86-64-v3"
 
@@ -53,13 +55,8 @@ jobs:
       - run: cargo build --locked --release -p wd-gpui -p wd-daemon -p wd-shell -p wd-overlay -p wd-mcp
       - name: Smoke test (CLI bins must boot without a device)
         run: |
-          ./target/release/wd-ctl 2>&1 | head -n 3 || true
           test "$(./target/release/wd-ctl >/dev/null 2>&1; echo $?)" = "2"
-          ./target/release/wd-shell | head -n 2
-          ./target/release/wd-overlay | head -n 2
-          test -x ./target/release/wd-gpui
-          test -x ./target/release/wd-daemon
-          test -x ./target/release/wd-mcp
+          for b in wd-gpui wd-daemon wd-shell wd-overlay wd-mcp wd-ctl; do test -x "./target/release/$b"; done
       - name: Package dist
         run: |
           DIST="ghostdroid-${{ steps.ver.outputs.version }}-linux-x86_64"

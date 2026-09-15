@@ -21,6 +21,7 @@ rust-version = "1.92"
 
 [workspace.dependencies]
 wd-core = { path = "crates/wd-core" }
+wd-inject = { path = "crates/wd-inject" }
 wd-waydroid = { path = "crates/wd-waydroid" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

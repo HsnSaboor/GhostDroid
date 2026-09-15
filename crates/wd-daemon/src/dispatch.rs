@@ -1,6 +1,7 @@
 //! `Req` -> `Resp` dispatch. One method = one `wd-waydroid` fn.
 //!
-//! Stub data only, no spawn. `Req`/`Resp` shape from `wd-core::rpc`
+//! Probe-parse shapes (no spawn here; live spawn lives in `wd-mcp::call`
+//! and `wd-gpui::sync`). `Req`/`Resp` shape from `wd-core::rpc`
 //! stays MCP-compatible. Ref: `.devdocs/phantom/phantom/src/ipc.rs`.
 
 use wd_core::{Req, Resp};
@@ -39,7 +40,7 @@ fn device_status(req: &Req) -> Resp {
         session = parsed.session,
         container = parsed.container,
         frozen = parsed.frozen,
-        "dispatch: device.status stub"
+        "dispatch: device.status probe"
     );
     Resp::ok(serde_json::json!({
         "session": parsed.session,
@@ -48,17 +49,17 @@ fn device_status(req: &Req) -> Resp {
     }))
 }
 
-/// `device.list`: single stub entry proving the shape.
+/// `device.list`: single offline entry proving the shape.
 fn device_list() -> Resp {
-    tracing::debug!("dispatch: device.list stub");
+    tracing::debug!("dispatch: device.list probe");
     Resp::ok(serde_json::json!({
         "devices": [{"serial": "waydroid-0", "state": "STOPPED"}],
     }))
 }
 
-/// `app.list`: empty stub list proving the shape.
+/// `app.list`: empty probe list proving the shape.
 fn app_list() -> Resp {
-    tracing::debug!("dispatch: app.list stub");
+    tracing::debug!("dispatch: app.list probe");
     Resp::ok(serde_json::json!({ "apps": [] }))
 }
 

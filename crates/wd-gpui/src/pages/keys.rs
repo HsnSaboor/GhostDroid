@@ -32,5 +32,8 @@ pub fn render_keys(state: &AppState) -> impl IntoElement {
                 })),
         )
         .child(canvas)
-        .child(Label::new(format!("0 nodes · {tab} tab")))
+        .child(Label::new(format!(
+            "{} nodes · {tab} tab",
+            state.keymap.node_count
+        )))
 }

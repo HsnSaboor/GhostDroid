@@ -37,7 +37,13 @@ const VERBS: &[(&str, &str)] = &[
 ];
 
 /// Local-only verbs handled without MCP dispatch.
-const LOCAL_VERBS: &[&str] = &["prop-get", "prop-set", "keymap-load", "spoof-load"];
+const LOCAL_VERBS: &[&str] = &[
+    "prop-get",
+    "prop-set",
+    "keymap-load",
+    "spoof-load",
+    "spoof-apply",
+];
 
 /// Parse `argv` → `(tool, params)`. No `clap` (zero new deps).
 fn parse(argv: &[String]) -> Result<(String, serde_json::Value), String> {
@@ -127,6 +133,7 @@ fn run_local(verb: &str, params: &serde_json::Value) -> serde_json::Value {
         },
         "keymap-load" => args.first().and_then(|p| wd_mcp::keymap_load(std::path::Path::new(p)).ok()),
         "spoof-load" => args.first().and_then(|p| wd_mcp::spoof_load(std::path::Path::new(p)).ok()),
+        "spoof-apply" => args.first().and_then(|p| spoof_apply_preview(p)),
         _ => None,
     };
     match out {
@@ -136,4 +143,22 @@ fn run_local(verb: &str, params: &serde_json::Value) -> serde_json::Value {
         }
         None => wd_mcp::dispatch(verb, params),
     }
+}
+
+/// `spoof-apply` PREVIEW ONLY: validate + render + empty-snapshot merge.
+/// No file write, no spawn. Real write needs pkexec + container restart.
+fn spoof_apply_preview(path: &str) -> Option<serde_json::Value> {
+    tracing::info!(path, "wd-ctl: spoof-apply preview in");
+    let profile = wd_spoof::SpoofProfile::load(std::path::Path::new(path)).ok()?;
+    let rendered = wd_spoof::render(&profile);
+    let merged = wd_spoof::merge_lines("", &rendered);
+    let diff = wd_spoof::swap_diff("", &rendered);
+    Some(serde_json::json!({
+        "ok": true,
+        "fingerprint": profile.fingerprint,
+        "lines": merged.len(),
+        "diff_count": diff.len(),
+        "houdini_kept": true,
+        "note": "preview only: pkexec write to waydroid_base.prop + waydroid session restart required"
+    }))
 }

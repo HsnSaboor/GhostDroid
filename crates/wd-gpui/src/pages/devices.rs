@@ -39,6 +39,11 @@ pub fn render_devices(state: &AppState) -> impl IntoElement {
     } else {
         Progress::new("device-scan").value(100.).into_any_element()
     };
+    let ip = if state.ip.is_empty() {
+        "—"
+    } else {
+        state.ip.as_str()
+    };
     v_flex()
         .gap(px(8.))
         .child(
@@ -51,7 +56,8 @@ pub fn render_devices(state: &AppState) -> impl IntoElement {
         .child(
             DescriptionList::vertical()
                 .item("status", status, 1)
-                .item("session", session, 1),
+                .item("session", session, 1)
+                .item("ip", ip, 1),
         )
         .child(scan)
         .child(Button::new("device-scan-btn").ghost().small().label("Scan"))

@@ -51,7 +51,7 @@ pub fn has_tool(name: &str) -> bool {
     hit
 }
 
-/// Minimal JSON schema stub per tool (object params; full
+/// Minimal JSON schema per tool (object params; full
 /// zod-style shapes live in `call.rs` dispatch validation).
 /// Spec `server/tools#data-types`: `name` + `description` + `inputSchema`.
 #[must_use]

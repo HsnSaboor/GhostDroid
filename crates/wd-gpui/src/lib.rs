@@ -4,7 +4,7 @@
 
 /// Shell root view.
 pub mod app;
-/// Page dispatch + stubs (page agents implement bodies).
+/// Page dispatch + bodies (per-page modules own content).
 pub mod pages;
 /// Shared row/card compositions.
 pub mod shared;

@@ -1,4 +1,4 @@
-//! Page dispatch. Bodies are stubs; page agents implement them.
+//! Page dispatch. Bodies live in per-page modules.
 
 pub mod devices;
 pub mod keys;

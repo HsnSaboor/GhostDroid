@@ -5,6 +5,7 @@
 //! `.devdocs/DeviceSpoofLab-Hooks/device_profile.conf:260`.
 #![deny(missing_docs)]
 
+pub mod apply;
 pub mod fake_match;
 pub mod guardrails;
 pub mod modules;
@@ -13,6 +14,7 @@ pub mod profile;
 pub mod render;
 pub mod snapshot;
 
+pub use apply::{merge_lines, verify_fingerprint};
 pub use fake_match::{glob_match, list_match, touch_set_args, wifi_set_args};
 pub use guardrails::{
     BANKING_DENY, CHEAT_HINTS, VERIFY_CHECKLIST, cheat_warning, is_banking, verify_checklist,

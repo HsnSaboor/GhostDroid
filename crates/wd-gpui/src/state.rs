@@ -59,6 +59,8 @@ pub struct AppState {
     pub spoof: SpoofProfile,
     /// Keymap snapshot.
     pub keymap: KeymapState,
+    /// Live container IP from `fetch_device` (empty until first sync).
+    pub ip: String,
     /// Log tail.
     pub logs: LogStream,
 }
@@ -122,7 +124,9 @@ impl Default for AppState {
                 profile: "pubg".to_owned(),
                 fire_key: "MouseLeft".to_owned(),
                 tab_index: 0,
+                node_count: 21,
             },
+            ip: String::new(),
             logs,
         }
     }

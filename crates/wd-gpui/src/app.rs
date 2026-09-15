@@ -48,8 +48,9 @@ impl ShellView {
                 if !games.is_empty() {
                     this.state.set_games(games);
                 }
-                if let Some((dev, _ip)) = device {
+                if let Some((dev, ip)) = device {
                     this.state.device = dev;
+                    this.state.ip = ip;
                 }
                 cx.notify();
             });

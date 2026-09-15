@@ -73,5 +73,6 @@ pub fn canvas_keymap(canvas: &EditorCanvas, profile: &str) -> wd_shell::KeymapSt
         profile: profile.to_string(),
         fire_key: fire,
         tab_index: 0,
+        node_count: canvas.widgets.len(),
     }
 }

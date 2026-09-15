@@ -7,5 +7,5 @@ fn main() {
     for child in supervised_children() {
         tracing::info!(name = %child.name, line = %child.spawn_line(), "wd-daemon: child");
     }
-    tracing::info!("wd-daemon: stub serve, no listen yet (plan 02 scope)");
+    wd_daemon::serve();
 }
