@@ -20,13 +20,9 @@ pub fn dispatch(method: &str, params: &serde_json::Value) -> serde_json::Value {
         "file.push" | "file.pull" if !gate::write_allowed() => {
             serde_json::json!({"ok": false, "error": "write blocked: set ANDROID_MCP_ALLOW_WRITE=1", "isError": true})
         }
-        "device.boot" => {
-            serde_json::json!({"ok": true, "tool": method, "argv": wd_waydroid::boot_args(true, true)})
-        }
-        "device.status" => serde_json::json!({"ok": true, "tool": method, "argv": ["status"]}),
-        "device.list" => {
-            serde_json::json!({"ok": true, "tool": method, "devices": [{"serial": "waydroid-0"}]})
-        }
+        "device.boot" => boot_live(),
+        "device.status" => status_live(),
+        "device.list" => list_live(),
         _ => {
             serde_json::json!({"ok": true, "tool": method, "params": params, "structuredContent": {"source": "adb"}})
         }
@@ -37,6 +33,56 @@ pub fn dispatch(method: &str, params: &serde_json::Value) -> serde_json::Value {
         "call: tools/call out"
     );
     out
+}
+
+/// `device.boot`: run `waydroid session start --wait`, then poll status.
+/// Falls back to argv (no spawn) when the binary is missing.
+fn boot_live() -> serde_json::Value {
+    tracing::info!("call: device.boot live in");
+    let argv = wd_waydroid::boot_args(true, true);
+    let start: Vec<&str> = argv.iter().map(String::as_str).collect();
+    if wd_waydroid::run_waydroid(&start, 120_000).is_err() {
+        tracing::warn!("call: boot spawn failed, argv fallback");
+        return serde_json::json!({"ok": true, "tool": "device.boot", "argv": argv});
+    }
+    status_live()
+}
+
+/// `device.status`: live `waydroid status` parse. Stub only without binary.
+fn status_live() -> serde_json::Value {
+    tracing::info!("call: device.status live in");
+    match wd_waydroid::run_waydroid(&["status"], 10_000) {
+        Ok(out) => {
+            let parsed = wd_waydroid::parse_status(&out);
+            serde_json::json!({"ok": true, "tool": "device.status", "session": parsed.session, "container": parsed.container, "frozen": parsed.frozen, "ip": parsed.ip})
+        }
+        Err(wd_core::WdError::Io(_)) => {
+            serde_json::json!({"ok": true, "tool": "device.status", "argv": ["status"]})
+        }
+        Err(err) => {
+            serde_json::json!({"ok": false, "error": err.to_string(), "isError": true})
+        }
+    }
+}
+
+/// `device.list`: live `waydroid app list` parse. Stub only without binary.
+fn list_live() -> serde_json::Value {
+    tracing::info!("call: device.list live in");
+    match wd_waydroid::run_waydroid(&["app", "list"], 15_000) {
+        Ok(out) => {
+            let apps: Vec<serde_json::Value> = wd_waydroid::parse_app_list(&out)
+                .iter()
+                .map(|row| serde_json::json!({"title": row.title, "pkg": row.pkg}))
+                .collect();
+            serde_json::json!({"ok": true, "tool": "device.list", "devices": [{"serial": "waydroid-0"}], "apps": apps})
+        }
+        Err(wd_core::WdError::Io(_)) => {
+            serde_json::json!({"ok": true, "tool": "device.list", "devices": [{"serial": "waydroid-0"}]})
+        }
+        Err(err) => {
+            serde_json::json!({"ok": false, "error": err.to_string(), "isError": true})
+        }
+    }
 }
 
 /// `keymap.load` helper: validates via `wd-input`, never duplicates schema.
