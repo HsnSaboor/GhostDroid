@@ -1,7 +1,7 @@
 //! Goldens on 8 phantom profiles + Qt import roundtrips.
 //! Refs: `.plans/03-input-keymap.md:48`.
-//! Qt fixtures vendored under `tests/fixtures/` (upstream: QtScrcpy +
-//! ScrcpyKeyMapper examples) so the suite is hermetic on clean checkouts.
+//! Qt fixtures vendored under `tests/fixtures/` (upstream: `QtScrcpy` +
+//! `ScrcpyKeyMapper` examples) so the suite is hermetic on clean checkouts.
 #![deny(missing_docs)]
 
 use std::path::PathBuf;
