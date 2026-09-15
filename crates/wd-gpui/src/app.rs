@@ -1,9 +1,9 @@
 //! Root window wiring: sidebar nav, page dispatch, overlay layers.
 
 use gpui_kit::component::{
-    Root,
-    h_flex, v_flex,
+    Root, h_flex,
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
+    v_flex,
 };
 use gpui_kit::{
     App, AppContext as _, Bounds, Context, FocusHandle, Focusable, InteractiveElement as _,
@@ -48,22 +48,20 @@ impl Render for ShellView {
         div()
             .id("wd-root")
             .size_full()
-            .child(
-                h_flex().size_full().child(Sidebar::new("wd-nav").child(
-                    SidebarMenu::new().children(Page::ALL.iter().map(|page| {
-                        let item = *page;
-                        let view = view.clone();
-                        SidebarMenuItem::new(item.title())
-                            .active(item == active)
-                            .on_click(move |_, _, cx| {
-                                view.update(cx, |this, cx| {
-                                    this.state.set_page(item);
-                                    cx.notify();
-                                });
-                            })
-                    })),
-                )),
-            )
+            .child(h_flex().size_full().child(Sidebar::new("wd-nav").child(
+                SidebarMenu::new().children(Page::ALL.iter().map(|page| {
+                    let item = *page;
+                    let view = view.clone();
+                    SidebarMenuItem::new(item.title())
+                        .active(item == active)
+                        .on_click(move |_, _, cx| {
+                            view.update(cx, |this, cx| {
+                                this.state.set_page(item);
+                                cx.notify();
+                            });
+                        })
+                })),
+            )))
             .child(
                 v_flex()
                     .flex_1()
@@ -77,6 +75,9 @@ impl Render for ShellView {
 }
 
 /// Boot the GPUI app. Called by the `wd-gpui` binary.
+///
+/// # Panics
+/// Panics if the OS refuses to open the application window.
 pub fn run() {
     tracing::info!("wd-gpui run");
     let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);

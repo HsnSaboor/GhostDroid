@@ -19,17 +19,23 @@ pub enum Page {
 
 impl Page {
     /// All pages in nav order.
-    pub const ALL: [Page; 5] = [Page::Library, Page::Devices, Page::Spoof, Page::Keys, Page::Logs];
+    pub const ALL: [Self; 5] = [
+        Self::Library,
+        Self::Devices,
+        Self::Spoof,
+        Self::Keys,
+        Self::Logs,
+    ];
 
     /// Nav label, matching the Slint rail text.
     #[must_use]
     pub const fn title(self) -> &'static str {
         match self {
-            Page::Library => "Library",
-            Page::Devices => "Devices",
-            Page::Spoof => "Spoof",
-            Page::Keys => "Keys",
-            Page::Logs => "Logs",
+            Self::Library => "Library",
+            Self::Devices => "Devices",
+            Self::Spoof => "Spoof",
+            Self::Keys => "Keys",
+            Self::Logs => "Logs",
         }
     }
 }
@@ -65,10 +71,22 @@ impl Default for AppState {
             games: Vec::new(),
             query: String::new(),
             filter_index: 0,
-            device: DeviceState { ready: false, frozen: false },
+            device: DeviceState {
+                ready: false,
+                frozen: false,
+            },
             busy: false,
-            spoof: SpoofProfile { id: String::new(), ids: Vec::new(), selected: 0, props: Vec::new() },
-            keymap: KeymapState { profile: String::new(), fire_key: String::new(), tab_index: 0 },
+            spoof: SpoofProfile {
+                id: String::new(),
+                ids: Vec::new(),
+                selected: 0,
+                props: Vec::new(),
+            },
+            keymap: KeymapState {
+                profile: String::new(),
+                fire_key: String::new(),
+                tab_index: 0,
+            },
             logs: LogStream::default(),
         }
     }
@@ -122,8 +140,13 @@ impl AppState {
     pub fn visible_games(&self) -> Vec<&GameRow> {
         let q = self.query.to_lowercase();
         tracing::debug!(query = %self.query, total = self.games.len(), "filter games");
-        self.games.iter().filter(|g| {
-            q.is_empty() || g.title.to_lowercase().contains(&q) || g.pkg.to_lowercase().contains(&q)
-        }).collect()
+        self.games
+            .iter()
+            .filter(|g| {
+                q.is_empty()
+                    || g.title.to_lowercase().contains(&q)
+                    || g.pkg.to_lowercase().contains(&q)
+            })
+            .collect()
     }
 }

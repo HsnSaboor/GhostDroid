@@ -1,8 +1,8 @@
 //! Spoof page body. Pure render, no mutation.
 
 use gpui_kit::component::{
-    Selectable as _, button::Button, description_list::DescriptionList, h_flex,
-    progress::Progress, v_flex,
+    Selectable as _, button::Button, description_list::DescriptionList, h_flex, progress::Progress,
+    v_flex,
 };
 use gpui_kit::{IntoElement, ParentElement as _, Styled as _, div, px};
 
@@ -15,14 +15,16 @@ pub fn render_spoof(state: &AppState) -> impl IntoElement {
     // Select entity needs window+cx (SelectState::new), so pure-render
     // pass uses a Button row; upgrade to Select entity in view cx later.
     let picker = if state.spoof.ids.is_empty() {
-        div().child(status_tag(state.spoof.id.as_str())).into_any_element()
+        div()
+            .child(status_tag(state.spoof.id.as_str()))
+            .into_any_element()
     } else {
         h_flex()
             .gap(px(6.))
             .children(state.spoof.ids.iter().enumerate().map(|(ix, id)| {
                 Button::new(format!("spoof-profile-{ix}"))
                     .label(id.clone())
-                    .selected(ix as i32 == state.spoof.selected)
+                    .selected(i32::try_from(ix).unwrap_or(i32::MAX) == state.spoof.selected)
             }))
             .into_any_element()
     };

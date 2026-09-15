@@ -59,17 +59,18 @@ fn search_box(state: &AppState) -> impl IntoElement {
 
 /// Filter tab row. Selected tab is primary, rest ghost.
 fn filter_row(state: &AppState) -> impl IntoElement {
-    h_flex().gap(px(8.)).children(FILTERS.iter().enumerate().map(
-        |(ix, label)| {
+    h_flex()
+        .gap(px(8.))
+        .children(FILTERS.iter().enumerate().map(|(ix, label)| {
+            let ix = i32::try_from(ix).unwrap_or(i32::MAX);
             let mut btn = Button::new(*label).small().label(*label);
-            btn = if ix as i32 == state.filter_index {
+            btn = if ix == state.filter_index {
                 btn.primary()
             } else {
                 btn.ghost()
             };
             btn
-        },
-    ))
+        }))
 }
 
 /// Bottom toolbar. Ghost buttons; click wiring lands with the entity pass.

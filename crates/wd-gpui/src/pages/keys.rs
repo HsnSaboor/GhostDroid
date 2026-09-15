@@ -19,13 +19,13 @@ pub fn render_keys(state: &AppState) -> impl IntoElement {
         .child(prop_row("Profile", &state.keymap.profile))
         .child(prop_row("Fire key", &state.keymap.fire_key))
         .child(
-            h_flex().gap(px(6.)).children(TABS.iter().enumerate().map(
-                |(ix, label)| {
+            h_flex()
+                .gap(px(6.))
+                .children(TABS.iter().enumerate().map(|(ix, label)| {
                     Button::new(format!("keys-tab-{ix}"))
                         .label(*label)
-                        .selected(ix as i32 == state.keymap.tab_index)
-                },
-            )),
+                        .selected(i32::try_from(ix).unwrap_or(i32::MAX) == state.keymap.tab_index)
+                })),
         )
         .child(canvas)
         .child(div().child("0 nodes"))

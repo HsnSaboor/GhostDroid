@@ -29,6 +29,10 @@ pub fn render_logs(state: &AppState) -> impl IntoElement {
                 .gap(px(8.))
                 .items_center()
                 .child(Button::new("logs-clear").ghost().small().label("Clear"))
-                .child(div().text_sm().child(format!("{} lines", state.logs.lines.len()))),
+                .child(
+                    div()
+                        .text_sm()
+                        .child(format!("{} lines", state.logs.lines.len())),
+                ),
         )
 }

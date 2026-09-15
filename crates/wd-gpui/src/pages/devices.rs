@@ -4,7 +4,9 @@ use gpui_kit::component::{
     Sizable as _,
     button::{Button, ButtonVariants as _},
     description_list::DescriptionList,
-    h_flex, progress::Progress, v_flex,
+    h_flex,
+    progress::Progress,
+    v_flex,
 };
 use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, div, px};
 
