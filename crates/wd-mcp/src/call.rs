@@ -321,7 +321,8 @@ fn input_live(params: &serde_json::Value, tool: &str) -> serde_json::Value {
     };
     match run(&argv, 15_000) {
         Ok(_) => serde_json::json!({"ok": true, "tool": tool, "argv": argv}),
-        Err(e) => spawn_out(tool, &argv, Err(e)).unwrap_or_else(|| serde_json::json!({"ok": true})),
+        Err(e) => spawn_out(tool, &argv, Err(e))
+            .unwrap_or_else(|| serde_json::json!({"ok": true, "tool": tool})),
     }
 }
 
@@ -329,8 +330,7 @@ fn input_live(params: &serde_json::Value, tool: &str) -> serde_json::Value {
 fn epoch_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis().try_into().unwrap_or(0u64))
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_millis().try_into().unwrap_or(0u64))
 }
 
 /// `vision.screenshot`: live `screencap -p` to a unique remote, then
