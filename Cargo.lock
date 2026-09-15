@@ -7573,6 +7573,7 @@ dependencies = [
  "tracing",
  "wd-core",
  "wd-shell",
+ "wd-waydroid",
 ]
 
 [[package]]
