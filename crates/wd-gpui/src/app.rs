@@ -50,20 +50,22 @@ impl Render for ShellView {
             .flex()
             .flex_row()
             .size_full()
-            .child(Sidebar::new("wd-nav").child(
-                SidebarMenu::new().children(Page::ALL.iter().map(|page| {
-                    let item = *page;
-                    let view = view.clone();
-                    SidebarMenuItem::new(item.title())
-                        .active(item == active)
-                        .on_click(move |_, _, cx| {
-                            view.update(cx, |this, cx| {
-                                this.state.set_page(item);
-                                cx.notify();
-                            });
-                        })
-                })),
-            ))
+            .child(
+                Sidebar::new("wd-nav").child(SidebarMenu::new().children(Page::ALL.iter().map(
+                    |page| {
+                        let item = *page;
+                        let view = view.clone();
+                        SidebarMenuItem::new(item.title())
+                            .active(item == active)
+                            .on_click(move |_, _, cx| {
+                                view.update(cx, |this, cx| {
+                                    this.state.set_page(item);
+                                    cx.notify();
+                                });
+                            })
+                    },
+                ))),
+            )
             .child(
                 v_flex()
                     .flex_1()
