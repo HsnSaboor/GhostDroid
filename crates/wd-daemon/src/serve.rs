@@ -52,10 +52,8 @@ fn handle_conn(stream: UnixStream) {
         if line.trim().is_empty() {
             continue;
         }
-        let resp = match decode_req_line(&line) {
-            Some(req) => dispatch(&req),
-            None => wd_core::Resp::err("bad req line"),
-        };
+        let resp = decode_req_line(&line)
+            .map_or_else(|| wd_core::Resp::err("bad req line"), |req| dispatch(&req));
         let mut out = serde_json::to_string(&resp)
             .unwrap_or_else(|_| r#"{"ok":false,"data":"encode failed"}"#.to_owned());
         out.push('\n');

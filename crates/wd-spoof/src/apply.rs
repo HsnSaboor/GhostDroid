@@ -1,6 +1,7 @@
-//! Houdini-safe apply preview: snapshot + render + merge + verify.
-//! Pure, no spawn, no write. Caller owns `pkexec` write + session restart.
-//! Live bridge `libhoudini.so` + abilist `x86_64,x86,arm64-v8a` survive (merge).
+//! Houdini-safe apply preview.
+//!
+//! Pure snapshot + render + merge + verify, no spawn, no write. Caller owns
+//! `pkexec` write + session restart. Live bridge `libhoudini.so` survives.
 
 use std::collections::HashSet;
 
@@ -65,11 +66,11 @@ pub fn merge_lines(snapshot_body: &str, rendered: &[String]) -> Vec<String> {
             let Some((key, val)) = split_kv(line) else {
                 return line.clone();
             };
-            if key == "ro.product.cpu.abilist" {
-                if let Some((_, host_val)) = host.iter().find(|(k, _)| k == key) {
-                    let merged = union_abilist(val, host_val);
-                    return format!("{key}={merged}");
-                }
+            if key == "ro.product.cpu.abilist"
+                && let Some((_, host_val)) = host.iter().find(|(k, _)| k == key)
+            {
+                let merged = union_abilist(val, host_val);
+                return format!("{key}={merged}");
             }
             line.clone()
         })
