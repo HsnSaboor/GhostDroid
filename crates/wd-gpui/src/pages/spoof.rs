@@ -10,10 +10,7 @@ use crate::app::ShellView;
 use crate::shared::{empty_state, setting_row, status_tag};
 use crate::state::AppState;
 
-/// Spoof profile picker + props + toggles. Ports Slint page 2. Picker
-/// clicks select the profile id via `ShellView::set_spoof`.
-
-/// Spoof profile picker + props + toggles. Ports Slint page 2.
+/// Spoof picker + props + toggles. Clicks select via `ShellView::set_spoof`.
 pub fn render_spoof(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(id = %state.spoof.id, props = state.spoof.props.len(), "render spoof");
     // Select entity needs window+cx (SelectState::new), so pure-render

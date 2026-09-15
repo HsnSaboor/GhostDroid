@@ -9,10 +9,7 @@ use crate::state::AppState;
 
 const TABS: [&str; 3] = ["Map", "Aim", "DPad"];
 
-/// Keymap editor. Ports Slint page 3. Tab clicks select via
-/// `ShellView::set_keymap_tab`.
-
-/// Keymap editor. Ports Slint page 3.
+/// Keymap editor. Tab clicks select via `ShellView::set_keymap_tab`.
 pub fn render_keys(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(profile = %state.keymap.profile, tab = state.keymap.tab_index, "render keys");
     let tab = usize::try_from(state.keymap.tab_index)

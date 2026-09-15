@@ -17,10 +17,7 @@ use crate::app::ShellView;
 use crate::shared::{empty_state, log_list};
 use crate::state::AppState;
 
-/// Daemon log stream body. Mirrors the Slint Logs section. Clear wipes
-/// the tail via `ShellView::clear_logs`.
-
-/// Daemon log stream body. Mirrors the Slint Logs section.
+/// Daemon log stream. Clear wipes the tail via `ShellView::clear_logs`.
 pub fn render_logs(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(count = state.logs.lines.len(), "render logs");
     let stream: AnyElement = if state.logs.lines.is_empty() {

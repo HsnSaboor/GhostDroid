@@ -15,10 +15,7 @@ use crate::app::ShellView;
 use crate::shared::device_dot;
 use crate::state::AppState;
 
-/// Device state + scan body. Mirrors the Slint Devices section. The Scan
-/// button flips `busy` (scan-in-flight label); the sync layer clears it.
-
-/// Device state + scan body. Mirrors the Slint Devices section.
+/// Device state + scan body. Scan flips `busy`; sync clears it.
 pub fn render_devices(view: &Entity<ShellView>, state: &AppState) -> impl IntoElement {
     tracing::debug!(
         ready = state.device.ready,
