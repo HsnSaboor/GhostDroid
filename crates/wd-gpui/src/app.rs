@@ -1,7 +1,7 @@
 //! Root window wiring: sidebar nav, page dispatch, overlay layers.
 
 use gpui_kit::component::{
-    Root, h_flex,
+    Root,
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
@@ -47,8 +47,10 @@ impl Render for ShellView {
 
         div()
             .id("wd-root")
+            .flex()
+            .flex_row()
             .size_full()
-            .child(h_flex().size_full().child(Sidebar::new("wd-nav").child(
+            .child(Sidebar::new("wd-nav").child(
                 SidebarMenu::new().children(Page::ALL.iter().map(|page| {
                     let item = *page;
                     let view = view.clone();
@@ -61,7 +63,7 @@ impl Render for ShellView {
                             });
                         })
                 })),
-            )))
+            ))
             .child(
                 v_flex()
                     .flex_1()
