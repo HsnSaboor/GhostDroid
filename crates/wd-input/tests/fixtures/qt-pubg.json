@@ -1,0 +1,587 @@
+{
+  "switchKey": "Key_Control",
+  "mouseMoveMap": {
+    "type": "KMT_MOUSE_MOVE",
+    "startPos": {
+      "x": 0.512,
+      "y": 0.188
+    },
+    "speedRatioX": 3.25,
+    "speedRatioY": 1.25,
+    "opacity": 1,
+    "smallEyes": {
+      "enabled": true,
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "key": "Key_Alt",
+      "pos": {
+        "x": 0.778,
+        "y": 0.31
+      }
+    },
+    "comment": "Camera / Free look"
+  },
+  "keyMapNodes": [
+    {
+      "type": "KMT_STEER_WHEEL",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Move around",
+      "centerPos": {
+        "x": 0.1777,
+        "y": 0.763
+      },
+      "leftOffset": 0.10001,
+      "rightOffset": 0.10033,
+      "upOffset": 0.25097,
+      "downOffset": 0.19125,
+      "leftKey": "Key_A",
+      "rightKey": "Key_D",
+      "upKey": "Key_W",
+      "downKey": "Key_S"
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Auto run / Vehicle speed boost",
+      "key": "Key_Shift",
+      "pos": {
+        "x": 0.827,
+        "y": 0.294
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Peek Left",
+      "key": "Key_Q",
+      "pos": {
+        "x": 0.153,
+        "y": 0.369
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Peek Right",
+      "key": "Key_E",
+      "pos": {
+        "x": 0.219,
+        "y": 0.367
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Open crates",
+      "key": "Key_QuoteLeft",
+      "pos": {
+        "x": 0.684,
+        "y": 0.233
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Jump",
+      "key": "Key_Space",
+      "pos": {
+        "x": 0.915,
+        "y": 0.732
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": true,
+      "opacity": 1,
+      "comment": "Map",
+      "key": "Key_M",
+      "pos": {
+        "x": 0.929,
+        "y": 0.061
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Backpack",
+      "key": "Key_Tab",
+      "pos": {
+        "x": 0.096,
+        "y": 0.916
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Perspective View",
+      "key": "Key_V",
+      "pos": {
+        "x": 0.2563,
+        "y": 0.8594
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_Z",
+      "comment": "Prone/Change seat",
+      "pos": {
+        "x": 0.8335,
+        "y": 0.9305
+      },
+      "switchMap": false
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_C",
+      "comment": "Crouch",
+      "pos": {
+        "x": 0.9111,
+        "y": 0.9351
+      },
+      "switchMap": false
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_R",
+      "comment": "Reload / Change seat",
+      "pos": {
+        "x": 0.7738,
+        "y": 0.9329
+      },
+      "switchMap": false
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Open or close doors/Drive/Revive/Pick up the first item/Exit vehicles",
+      "key": "Key_F",
+      "pos": {
+        "x": 0.697,
+        "y": 0.333
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Pick up the second item",
+      "key": "Key_G",
+      "pos": {
+        "x": 0.697,
+        "y": 0.428
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Pick up the third item / Exit vehicle",
+      "key": "Key_H",
+      "pos": {
+        "x": 0.705,
+        "y": 0.503
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Primary weapon",
+      "key": "Key_1",
+      "pos": {
+        "x": 0.445,
+        "y": 0.926
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Secondary weapon",
+      "key": "Key_2",
+      "pos": {
+        "x": 0.538,
+        "y": 0.925
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Pistol",
+      "key": "Key_3",
+      "pos": {
+        "x": 0.596,
+        "y": 0.84
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "throwable",
+      "key": "Key_4",
+      "pos": {
+        "x": 0.655,
+        "y": 0.937
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_5",
+      "comment": "recovery item",
+      "pos": {
+        "x": 0.339,
+        "y": 0.9467
+      },
+      "switchMap": false
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Cencel gernade",
+      "key": "Key_X",
+      "pos": {
+        "x": 0.273,
+        "y": 0.566
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Scope",
+      "key": "RightButton",
+      "pos": {
+        "x": 0.928,
+        "y": 0.518
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "OpenScope zoom",
+      "key": "MiddleButton",
+      "pos": {
+        "x": 0.8812,
+        "y": 0.5652
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_CapsLock",
+      "comment": "Open loot",
+      "pos": {
+        "x": 0.7291,
+        "y": 0.2365
+      },
+      "switchMap": false
+    },
+    {
+      "type": "KMT_CLICK",
+      "switchMap": false,
+      "opacity": 1,
+      "comment": "Fire / Release the parachute",
+      "key": "LeftButton",
+      "pos": {
+        "x": 0.838,
+        "y": 0.747
+      }
+    },
+    {
+      "type": "KMT_CLICK",
+      "key": "Key_Up",
+      "comment": "Horse up",
+      "pos": {
+        "x": 0.1742,
+        "y": 0.5379
+      },
+      "switchMap": false
+    },
+    {
+      "comment": "Horse down",
+      "type": "KMT_CLICK",
+      "pos": {
+        "x": 0.1615,
+        "y": 0.7919
+      },
+      "key": "Key_Down",
+      "switchMap": false
+    },
+    {
+      "comment": "Horse right",
+      "type": "KMT_CLICK",
+      "pos": {
+        "x": 0.8151,
+        "y": 0.6773
+      },
+      "key": "Key_Right",
+      "switchMap": false
+    },
+    {
+      "comment": "Horse left",
+      "type": "KMT_CLICK",
+      "pos": {
+        "x": 0.6913,
+        "y": 0.6975
+      },
+      "key": "Key_Left",
+      "switchMap": false
+    },
+    {
+      "comment": "Quick recovery item 1",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.34,
+        "y": 0.9535
+      },
+      "endPos": {
+        "x": 0.2913,
+        "y": 0.9502
+      },
+      "key": "Key_F1",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick recovery item 2",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.3412,
+        "y": 0.9517
+      },
+      "endPos": {
+        "x": 0.2967,
+        "y": 0.8713
+      },
+      "key": "Key_F2",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick recovery item 3",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.3412,
+        "y": 0.9517
+      },
+      "endPos": {
+        "x": 0.3373,
+        "y": 0.8231
+      },
+      "key": "Key_F3",
+      "startDelay": 0,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick recovery item 4",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.3412,
+        "y": 0.9517
+      },
+      "endPos": {
+        "x": 0.382,
+        "y": 0.8464
+      },
+      "key": "Key_F4",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick recovery item 5",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.3412,
+        "y": 0.9517
+      },
+      "endPos": {
+        "x": 0.4117,
+        "y": 0.9787
+      },
+      "key": "Key_F5",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick throwable 1",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.6541,
+        "y": 0.9477
+      },
+      "endPos": {
+        "x": 0.594,
+        "y": 0.973
+      },
+      "key": "Key_6",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick throwable 2",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.6536,
+        "y": 0.9481
+      },
+      "endPos": {
+        "x": 0.6075,
+        "y": 0.816
+      },
+      "key": "Key_7",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick throwable 3",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.6536,
+        "y": 0.9481
+      },
+      "endPos": {
+        "x": 0.6555,
+        "y": 0.7909
+      },
+      "key": "Key_8",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick throwable 4",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.6536,
+        "y": 0.9481
+      },
+      "endPos": {
+        "x": 0.7033,
+        "y": 0.8303
+      },
+      "key": "Key_9",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Quick throwable 5",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.6536,
+        "y": 0.9481
+      },
+      "endPos": {
+        "x": 0.7274,
+        "y": 0.9305
+      },
+      "key": "Key_0",
+      "startDelay": 80,
+      "dragSpeed": 0.4,
+      "switchMap": false
+    },
+    {
+      "comment": "Single or batter",
+      "type": "KMT_CLICK_MULTI",
+      "key": "Key_B",
+      "clickNodes": [
+        {
+          "delay": 0,
+          "pos": {
+            "x": 0.4364,
+            "y": 0.8461
+          },
+          "order": 1
+        },
+        {
+          "delay": 10,
+          "pos": {
+            "x": 0.5505,
+            "y": 0.8498
+          },
+          "order": 2
+        }
+      ],
+      "switchMap": false
+    },
+    {
+      "comment": "Scope zoom-in",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.2909,
+        "y": 0.1627
+      },
+      "endPos": {
+        "x": 0.2917,
+        "y": 0.0634
+      },
+      "key": "Key_Plus",
+      "startDelay": 20,
+      "dragSpeed": 0.5,
+      "switchMap": false
+    },
+    {
+      "comment": "Scope zoom-out",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.2909,
+        "y": 0.1278
+      },
+      "endPos": {
+        "x": 0.2903,
+        "y": 0.2285
+      },
+      "key": "Key_Minus",
+      "startDelay": 20,
+      "dragSpeed": 0.5,
+      "switchMap": false
+    },
+    {
+      "comment": "Mark location",
+      "type": "KMT_CLICK",
+      "pos": {
+        "x": 0.8798,
+        "y": 0.3593
+      },
+      "key": "Key_T",
+      "switchMap": false
+    },
+    {
+      "comment": "Quick chat <up>",
+      "type": "KMT_DRAG",
+      "startPos": {
+        "x": 0.9324,
+        "y": 0.3588
+      },
+      "endPos": {
+        "x": 0.9311,
+        "y": 0.2504
+      },
+      "key": "Key_Y",
+      "startDelay": 0,
+      "dragSpeed": 0.7,
+      "switchMap": false
+    }
+  ],
+  "width": 2336,
+  "height": 1080
+}

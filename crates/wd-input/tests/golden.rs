@@ -1,5 +1,7 @@
 //! Goldens on 8 phantom profiles + Qt import roundtrips.
-//! Refs: `.devdocs/phantom/profiles/*.json`, `.plans/03-input-keymap.md:48`.
+//! Refs: `.plans/03-input-keymap.md:48`.
+//! Qt fixtures vendored under `tests/fixtures/` (upstream: QtScrcpy +
+//! ScrcpyKeyMapper examples) so the suite is hermetic on clean checkouts.
 #![deny(missing_docs)]
 
 use std::path::PathBuf;
@@ -69,8 +71,7 @@ fn dup_slot_version_checks() {
 #[test]
 fn qt_imports() {
     let raw = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.devdocs/QtScrcpy/keymap/gameforpeace.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gameforpeace.json"),
     )
     .expect("gameforpeace");
     let p = import_qt(
@@ -100,8 +101,7 @@ fn qt_imports() {
     assert!(validate(&p).is_ok());
 
     let raw2 = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.devdocs/ScrcpyKeyMapper/examples/pubg.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/qt-pubg.json"),
     )
     .expect("mapper pubg");
     let p2 = import_qt(
