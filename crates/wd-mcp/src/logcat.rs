@@ -28,12 +28,13 @@ pub struct LogRecord {
     pub message: String,
 }
 
-/// One-shot dump argv (`-d -t N`, filters appended by caller).
+/// One-shot dump argv (`--` stops waydroid argparse eating `-d/-v/-t`).
 #[must_use]
 pub fn dump_args(lines: u32) -> Vec<String> {
     tracing::debug!(lines, "logcat: dump args");
     vec![
         "logcat".into(),
+        "--".into(),
         "-d".into(),
         "-v".into(),
         "threadtime".into(),
@@ -46,7 +47,12 @@ pub fn dump_args(lines: u32) -> Vec<String> {
 #[must_use]
 pub fn start_args(buffers: Option<&str>) -> Vec<String> {
     tracing::info!(?buffers, "logcat: start args");
-    let mut a = vec!["logcat".into(), "-v".into(), "threadtime".into()];
+    let mut a = vec![
+        "logcat".into(),
+        "--".into(),
+        "-v".into(),
+        "threadtime".into(),
+    ];
     if let Some(b) = buffers.filter(|b| !b.is_empty()) {
         a.push("-b".into());
         a.push(b.into());
