@@ -83,6 +83,9 @@ pub fn run() {
     let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
     app.run(move |cx| {
         gpui_kit::init(cx);
+        // Dark-only: GhostDroid never ships light mode. Forced before
+        // window open so first paint is dark (no white flash).
+        gpui_kit::component::Theme::change(gpui_kit::component::ThemeMode::Dark, None, cx);
         cx.spawn(async move |cx| {
             let window_size = Size {
                 width: px(1280.),

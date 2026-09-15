@@ -65,10 +65,39 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        tracing::debug!("app state default");
+        tracing::debug!("app state default (seeded demo fallback)");
+        let mut logs = LogStream::default();
+        logs.push("boot: ghostdroid 1.0 ready".to_owned(), 500);
+        logs.push("spoof: gaming-full profile loaded".to_owned(), 500);
+        logs.push("keymap: pubg.json validated".to_owned(), 500);
         Self {
             page: Page::Library,
-            games: Vec::new(),
+            games: vec![
+                GameRow {
+                    title: "Clash Royale".to_owned(),
+                    pkg: "com.supercell.clashroyale".to_owned(),
+                    genre: "Strategy".to_owned(),
+                    state: "ready".to_owned(),
+                },
+                GameRow {
+                    title: "PUBG Mobile".to_owned(),
+                    pkg: "com.tencent.ig".to_owned(),
+                    genre: "FPS".to_owned(),
+                    state: "ready".to_owned(),
+                },
+                GameRow {
+                    title: "Genshin Impact".to_owned(),
+                    pkg: "com.miHoYo.GenshinImpact".to_owned(),
+                    genre: "RPG".to_owned(),
+                    state: "ready".to_owned(),
+                },
+                GameRow {
+                    title: "Roblox".to_owned(),
+                    pkg: "com.roblox.client".to_owned(),
+                    genre: "Sandbox".to_owned(),
+                    state: "update".to_owned(),
+                },
+            ],
             query: String::new(),
             filter_index: 0,
             device: DeviceState {
@@ -77,17 +106,20 @@ impl Default for AppState {
             },
             busy: false,
             spoof: SpoofProfile {
-                id: String::new(),
-                ids: Vec::new(),
+                id: "gaming-full".to_owned(),
+                ids: vec!["gaming-full".to_owned(), "gaming-basic".to_owned()],
                 selected: 0,
-                props: Vec::new(),
+                props: vec![
+                    ("model".to_owned(), "Pixel 7 Pro (cheetah)".to_owned()),
+                    ("stack".to_owned(), "full".to_owned()),
+                ],
             },
             keymap: KeymapState {
-                profile: String::new(),
-                fire_key: String::new(),
+                profile: "pubg".to_owned(),
+                fire_key: "MouseLeft".to_owned(),
                 tab_index: 0,
             },
-            logs: LogStream::default(),
+            logs,
         }
     }
 }
