@@ -33,10 +33,17 @@ pub fn unique_remote(now_ms: u64) -> String {
 }
 
 /// rm-first argv. Always run before dump (stale = wrong screen).
+/// `--` separators stop waydroid's own argparse eating flags like `-f`.
 #[must_use]
 pub fn rm_args(remote: &str) -> Vec<String> {
     tracing::debug!(remote, "ui_dump: rm-first");
-    vec!["shell".into(), "rm".into(), "-f".into(), remote.into()]
+    vec![
+        "shell".into(),
+        "--".into(),
+        "rm".into(),
+        "-f".into(),
+        remote.into(),
+    ]
 }
 
 /// `uiautomator dump <remote>` argv.
@@ -45,6 +52,7 @@ pub fn dump_args(remote: &str) -> Vec<String> {
     tracing::info!(remote, "ui_dump: dump args");
     vec![
         "shell".into(),
+        "--".into(),
         "uiautomator".into(),
         "dump".into(),
         remote.into(),
@@ -57,6 +65,7 @@ pub fn tty_args() -> Vec<String> {
     tracing::debug!("ui_dump: tty fast-path");
     vec![
         "shell".into(),
+        "--".into(),
         "uiautomator".into(),
         "dump".into(),
         "/dev/tty".into(),

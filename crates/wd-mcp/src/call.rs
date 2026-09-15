@@ -66,7 +66,21 @@ fn argv_fallback(tool: &str, argv: &[String]) -> serde_json::Value {
     serde_json::json!({"ok": true, "tool": tool, "argv": argv})
 }
 
-/// Map spawn errors: missing binary → argv fallback, else error JSON.
+/// `shell` needs euid 0 (vendored `tools/__init__.py:actionNeedRoot`).
+/// Surface a pkexec hint instead of the raw waydroid error.
+fn root_hint(err: &wd_core::WdError) -> Option<serde_json::Value> {
+    let msg = err.to_string();
+    if msg.contains("needs root access") {
+        tracing::warn!("call: waydroid shell needs root (pkexec)");
+        Some(
+            serde_json::json!({"ok": false, "error": "waydroid shell needs root: rerun via pkexec", "isError": true}),
+        )
+    } else {
+        None
+    }
+}
+
+/// Map spawn errors: root hint, missing binary → argv fallback, else error.
 fn spawn_out(
     tool: &str,
     argv: &[String],
@@ -76,6 +90,9 @@ fn spawn_out(
         Ok(_) => None,
         Err(wd_core::WdError::Io(_)) => Some(argv_fallback(tool, argv)),
         Err(err) => {
+            if let Some(hint) = root_hint(&err) {
+                return Some(hint);
+            }
             tracing::warn!(tool, error = %err, "call: live failed");
             Some(serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}))
         }
@@ -175,6 +192,7 @@ fn app_stop_live(params: &serde_json::Value) -> serde_json::Value {
     };
     let argv = vec![
         "shell".to_owned(),
+        "--".to_owned(),
         "am".to_owned(),
         "force-stop".to_owned(),
         pkg.clone(),
@@ -251,6 +269,7 @@ fn activity_live() -> serde_json::Value {
     tracing::info!("call: activity.current live in");
     let argv = vec![
         "shell".to_owned(),
+        "--".to_owned(),
         "dumpsys".to_owned(),
         "activity".to_owned(),
         "activities".to_owned(),
@@ -269,7 +288,14 @@ fn input_argv(tool: &str, params: &serde_json::Value) -> Result<Vec<String>, ser
     let arg = |key: &str, idx: usize| str_param(params, key, idx);
     match tool {
         "input.tap" => match (arg("x", 0), arg("y", 1)) {
-            (Some(x), Some(y)) => Ok(vec!["shell".into(), "input".into(), "tap".into(), x, y]),
+            (Some(x), Some(y)) => Ok(vec![
+                "shell".into(),
+                "--".into(),
+                "input".into(),
+                "tap".into(),
+                x,
+                y,
+            ]),
             _ => Err(need(tool, "x y")),
         },
         "input.swipe" => {
@@ -279,6 +305,7 @@ fn input_argv(tool: &str, params: &serde_json::Value) -> Result<Vec<String>, ser
                 [Some(x1), Some(y1), Some(x2), Some(y2)] => {
                     let mut argv = vec![
                         "shell".into(),
+                        "--".into(),
                         "input".into(),
                         "swipe".into(),
                         x1,
@@ -296,13 +323,22 @@ fn input_argv(tool: &str, params: &serde_json::Value) -> Result<Vec<String>, ser
         }
         "input.key" => arg("key", 0).or_else(|| arg("keycode", 0)).map_or_else(
             || Err(need(tool, "key")),
-            |k| Ok(vec!["shell".into(), "input".into(), "keyevent".into(), k]),
+            |k| {
+                Ok(vec![
+                    "shell".into(),
+                    "--".into(),
+                    "input".into(),
+                    "keyevent".into(),
+                    k,
+                ])
+            },
         ),
         _ => arg("text", 0).map_or_else(
             || Err(need(tool, "text")),
             |t| {
                 Ok(vec![
                     "shell".into(),
+                    "--".into(),
                     "input".into(),
                     "text".into(),
                     t.replace(' ', "%s"),
@@ -342,6 +378,7 @@ fn screenshot_live() -> serde_json::Value {
         .replace(".xml", ".png");
     let cap = vec![
         "shell".to_owned(),
+        "--".to_owned(),
         "screencap".to_owned(),
         "-p".to_owned(),
         remote.clone(),
@@ -353,7 +390,12 @@ fn screenshot_live() -> serde_json::Value {
             return serde_json::json!({"ok": false, "error": err.to_string(), "isError": true});
         }
     }
-    let b64 = vec!["shell".to_owned(), "base64".to_owned(), remote.clone()];
+    let b64 = vec![
+        "shell".to_owned(),
+        "--".to_owned(),
+        "base64".to_owned(),
+        remote.clone(),
+    ];
     match run(&b64, 30_000) {
         Ok(out) => {
             let image = out.lines().collect::<Vec<_>>().concat();
@@ -382,7 +424,12 @@ fn fetch_dump(no_tree: bool) -> Result<String, wd_core::WdError> {
             "uiautomator dump failed".to_owned(),
         ));
     }
-    let cat = vec!["shell".to_owned(), "cat".to_owned(), remote];
+    let cat = vec![
+        "shell".to_owned(),
+        "--".to_owned(),
+        "cat".to_owned(),
+        remote,
+    ];
     run(&cat, 15_000).map(|text| crate::ui_dump::strip_status(&text).to_owned())
 }
 
@@ -587,9 +634,9 @@ mod tests {
     #[test]
     fn input_argv_shapes() {
         let tap = input_argv("input.tap", &serde_json::json!({"x": "10", "y": "20"})).unwrap();
-        assert_eq!(tap, vec!["shell", "input", "tap", "10", "20"]);
+        assert_eq!(tap, vec!["shell", "--", "input", "tap", "10", "20"]);
         let key = input_argv("input.key", &serde_json::json!({"args": ["4"]})).unwrap();
-        assert_eq!(key, vec!["shell", "input", "keyevent", "4"]);
+        assert_eq!(key, vec!["shell", "--", "input", "keyevent", "4"]);
         let swipe = input_argv(
             "input.swipe",
             &serde_json::json!({"args": ["1", "2", "3", "4", "500"]}),
@@ -597,10 +644,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             swipe,
-            vec!["shell", "input", "swipe", "1", "2", "3", "4", "500"]
+            vec!["shell", "--", "input", "swipe", "1", "2", "3", "4", "500"]
         );
         let text = input_argv("input.text", &serde_json::json!({"text": "a b"})).unwrap();
-        assert_eq!(text, vec!["shell", "input", "text", "a%sb"]);
+        assert_eq!(text, vec!["shell", "--", "input", "text", "a%sb"]);
     }
 
     #[test]
