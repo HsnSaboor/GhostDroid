@@ -36,11 +36,12 @@ pub fn dispatch(method: &str, params: &serde_json::Value) -> serde_json::Value {
         "input.key" => input_live(params, "input.key"),
         "input.text" => input_live(params, "input.text"),
         "vision.screenshot" => screenshot_live(),
-        "vision.stream_start" | "vision.stream_stop" => argv_preview(method, params),
+        "vision.stream_start" | "vision.stream_stop" | "logcat.start" | "logcat.stop" => {
+            argv_preview(method, params)
+        }
         "ui.dump" => ui_dump_live(params),
         "ui.find" => ui_find_live(params),
         "logcat.dump" => logcat_live(params),
-        "logcat.start" | "logcat.stop" => argv_preview(method, params),
         _ => {
             serde_json::json!({"ok": true, "tool": method, "params": params, "structuredContent": {"source": "adb"}})
         }
@@ -293,19 +294,21 @@ fn input_argv(tool: &str, params: &serde_json::Value) -> Result<Vec<String>, ser
                 _ => Err(need(tool, "x1 y1 x2 y2")),
             }
         }
-        "input.key" => match arg("key", 0).or_else(|| arg("keycode", 0)) {
-            Some(k) => Ok(vec!["shell".into(), "input".into(), "keyevent".into(), k]),
-            None => Err(need(tool, "key")),
-        },
-        _ => match arg("text", 0) {
-            Some(t) => Ok(vec![
-                "shell".into(),
-                "input".into(),
-                "text".into(),
-                t.replace(' ', "%s"),
-            ]),
-            None => Err(need(tool, "text")),
-        },
+        "input.key" => arg("key", 0).or_else(|| arg("keycode", 0)).map_or_else(
+            || Err(need(tool, "key")),
+            |k| Ok(vec!["shell".into(), "input".into(), "keyevent".into(), k]),
+        ),
+        _ => arg("text", 0).map_or_else(
+            || Err(need(tool, "text")),
+            |t| {
+                Ok(vec![
+                    "shell".into(),
+                    "input".into(),
+                    "text".into(),
+                    t.replace(' ', "%s"),
+                ])
+            },
+        ),
     }
 }
 
@@ -322,18 +325,21 @@ fn input_live(params: &serde_json::Value, tool: &str) -> serde_json::Value {
     }
 }
 
+/// Epoch millis for unique remotes. Zero when the clock is unavailable.
+fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis().try_into().unwrap_or(0u64))
+        .unwrap_or(0)
+}
+
 /// `vision.screenshot`: live `screencap -p` to a unique remote, then
-/// `base64` it back (run_waydroid returns text, never raw PNG bytes).
+/// `base64` it back (`run_waydroid` returns text, never raw PNG bytes).
 fn screenshot_live() -> serde_json::Value {
     tracing::info!("call: vision.screenshot live in");
-    let remote = crate::ui_dump::unique_remote(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis().try_into().unwrap_or(0u64))
-            .unwrap_or(0),
-    )
-    .replace("ui_dump_", "shot_")
-    .replace(".xml", ".png");
+    let remote = crate::ui_dump::unique_remote(epoch_ms())
+        .replace("ui_dump_", "shot_")
+        .replace(".xml", ".png");
     let cap = vec![
         "shell".to_owned(),
         "screencap".to_owned(),
@@ -363,11 +369,7 @@ fn screenshot_live() -> serde_json::Value {
 /// Fetch one ui dump: rm-first, `uiautomator dump`, `cat` back.
 /// Returns XML text. Missing binary surfaces as `Io` (caller falls back).
 fn fetch_dump(no_tree: bool) -> Result<String, wd_core::WdError> {
-    let now_ms: u64 = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis().try_into().unwrap_or(0u64))
-        .unwrap_or(0);
-    let remote = crate::ui_dump::unique_remote(now_ms);
+    let remote = crate::ui_dump::unique_remote(epoch_ms());
     let _ = run(&crate::ui_dump::rm_args(&remote), 10_000);
     let dump = if crate::ui_dump::tree_disabled(no_tree) {
         crate::ui_dump::tty_args()
@@ -429,10 +431,10 @@ fn ui_find_live(params: &serde_json::Value) -> serde_json::Value {
         .unwrap_or(false);
     let probe = crate::ui_dump::dump_args("/sdcard/.ui_dump_probe.xml");
     match fetch_dump(no_tree) {
-        Ok(xml) => match find_in_dump(&xml, &needle) {
-            Some(at) => serde_json::json!({"ok": true, "tool": "ui.find", "found": true, "at": at}),
-            None => serde_json::json!({"ok": true, "tool": "ui.find", "found": false}),
-        },
+        Ok(xml) => find_in_dump(&xml, &needle).map_or_else(
+            || serde_json::json!({"ok": true, "tool": "ui.find", "found": false}),
+            |at| serde_json::json!({"ok": true, "tool": "ui.find", "found": true, "at": at}),
+        ),
         Err(wd_core::WdError::Io(_)) => argv_fallback("ui.find", &probe),
         Err(err) => serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}),
     }
