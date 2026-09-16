@@ -41,7 +41,10 @@ pub fn render(profile: &SpoofProfile) -> Vec<String> {
     push_if(&mut lines, "ro.product.model", &profile.model);
     push_if(&mut lines, "ro.product.name", &profile.product);
     push_if(&mut lines, "ro.product.device", &profile.device);
-    push_if(&mut lines, "ro.hardware", &profile.hardware);
+    // NEVER render `ro.hardware`: the graphics HAL reads it at boot and
+    // `m3q` (a phone SoC string) kills hwcomposer+surfaceflinger (SIGABRT
+    // bootloop, 2026-09-16). Host keeps `unknown`; Build.HARDWARE spoofing
+    // belongs in a Vector/Zygisk module, not base.prop.
     push_if(&mut lines, "ro.product.cpu.abi", &profile.cpu_abi);
     push_if(&mut lines, "ro.product.cpu.abilist", &profile.cpu_abilist);
     push_if(&mut lines, "ro.build.tags", &profile.build_tags);
@@ -99,10 +102,11 @@ mod tests {
     #[test]
     fn s26_renders_no_x86_leak() {
         let lines = render(&load("s26-ultra.toml"));
-        assert_eq!(lines.len(), 14);
+        assert_eq!(lines.len(), 13);
         assert!(lines.contains(&"ro.product.model=SM-S948B".to_owned()));
         assert!(lines.contains(&"ro.product.cpu.abi=arm64-v8a".to_owned()));
         assert!(lines.contains(&"ro.build.tags=release-keys".to_owned()));
+        assert!(!lines.iter().any(|l| l.starts_with("ro.hardware=")));
         assert!(
             !lines
                 .iter()

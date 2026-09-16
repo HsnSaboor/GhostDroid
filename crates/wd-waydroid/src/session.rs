@@ -18,10 +18,7 @@ pub struct Status {
     pub ip: Option<String>,
 }
 
-/// Build `waydroid session start` args. Waydroid 1.6.3's `session start`
-/// takes NO flags (verified `--help` on-device); the old `--wait` /
-/// `--frozen-check` flags never existed upstream. Params kept for
-/// call-site compat but ignored; waiting/frozen live in `sync.rs` polling.
+/// Boot args. Plain start; waits live in sync polling.
 #[must_use]
 pub fn boot_args(wait: bool, frozen_check: bool) -> Vec<String> {
     tracing::info!(wait, frozen_check, "session: boot args");

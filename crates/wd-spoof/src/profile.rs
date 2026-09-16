@@ -42,7 +42,8 @@ pub struct SpoofProfile {
     /// `ro.product.device` (e.g. `m3q`). Empty = line skipped.
     #[serde(default, rename = "ro.product.device")]
     pub device: String,
-    /// `ro.hardware` (e.g. `m3q`). Empty = line skipped.
+    /// `ro.hardware` (NEVER rendered: graphics HAL reads it at boot, phone
+    /// SoC strings kill hwcomposer+surfaceflinger; kept for compat, ignored).
     #[serde(default, rename = "ro.hardware")]
     pub hardware: String,
     /// `ro.product.cpu.abi` (always `arm64-v8a`). Empty = line skipped.
@@ -110,6 +111,11 @@ impl SpoofProfile {
                 "x86 leak in abilist".to_owned(),
             ));
         }
+        if !self.hardware.trim().is_empty() {
+            return Err(wd_core::WdError::Validation(
+                "ro.hardware banned in base.prop (kills hwcomposer/surfaceflinger)".to_owned(),
+            ));
+        }
         tracing::debug!("spoof: valid");
         Ok(())
     }
@@ -153,7 +159,11 @@ mod tests {
             (p.model.as_str(), p.product.as_str()),
             ("SM-S948B", "m3qxeea")
         );
-        assert_eq!((p.device.as_str(), p.hardware.as_str()), ("m3q", "m3q"));
+        assert_eq!(p.device.as_str(), "m3q");
+        assert!(
+            p.hardware.trim().is_empty(),
+            "ro.hardware banned in base.prop"
+        );
         assert_eq!(p.cpu_abi, "arm64-v8a");
         assert!(!p.cpu_abilist.contains("x86"));
         assert_eq!(
