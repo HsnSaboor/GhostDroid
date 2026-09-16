@@ -43,7 +43,7 @@ pub struct SpoofProfile {
     #[serde(default, rename = "ro.product.device")]
     pub device: String,
     /// `ro.hardware` (NEVER rendered: graphics HAL reads it at boot, phone
-    /// SoC strings kill hwcomposer+surfaceflinger; kept for compat, ignored).
+    /// `SoC` strings kill `hwcomposer`/`surfaceflinger`; kept for compat, ignored).
     #[serde(default, rename = "ro.hardware")]
     pub hardware: String,
     /// `ro.product.cpu.abi` (always `arm64-v8a`). Empty = line skipped.
