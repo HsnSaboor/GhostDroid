@@ -29,9 +29,9 @@ std::string LookupOr(const char* key, const char* fallback) {
 int my_uname(struct utsname* u) {
     int rc = orig_uname ? orig_uname(u) : -1;
     if (u != nullptr) {
-        std::string release = LookupOr("kernel.osrelease", "5.10.157-android13");
+        std::string release = LookupOr("kernel.osrelease", "5.15.148-android13-4-00003-gabcdef123456-ab11223344");
         std::string version = LookupOr("kernel.version",
-                                       "#1 SMP PREEMPT Tue Dec  3 21:01:46 UTC 2024");
+                                       "#1 SMP PREEMPT Wed May 22 18:00:00 UTC 2024");
         std::string nodename = LookupOr("kernel.hostname", "localhost");
 
         // sysname/machine left as Linux/aarch64.

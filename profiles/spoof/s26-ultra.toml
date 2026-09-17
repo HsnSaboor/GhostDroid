@@ -4,7 +4,7 @@
 # NEVER ro.hardware here: graphics HAL reads it at boot, `m3q` kills
 # hwcomposer+surfaceflinger (SIGABRT bootloop, 2026-09-16). Build.HARDWARE
 # spoofing belongs in Vector/Zygisk, not base.prop.
-fingerprint = "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys"
+fingerprint = "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys"
 fake_touch = ["com.example.game*"]
 fake_wifi = ["com.example.game*"]
 denylist = ["com.example.game"]

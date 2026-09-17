@@ -116,7 +116,7 @@ public class RandomGenerator {
         String safeBrand = safeToken(brand, "android");
         String safeProduct = safeToken(product, "generic");
         String safeDevice = safeToken(device, safeProduct);
-        String safeRelease = safeToken(release, "15");
+        String safeRelease = safeToken(release, "13");
         String safeBuildId = safeToken(buildId, generateBuildId());
         String safeIncremental = safeToken(incremental, generateIncremental());
         String safeType = safeToken(type, "user");

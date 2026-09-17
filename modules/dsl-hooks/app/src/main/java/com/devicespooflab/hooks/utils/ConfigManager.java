@@ -323,53 +323,53 @@ public class ConfigManager {
             defaults.put("ro.product." + partition + ".device", "m3qxeea");
         }
 
-        defaults.put("ro.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.build.id", "BP4A.251205.006");
-        defaults.put("ro.build.display.id", "BP4A.251205.006");
-        defaults.put("ro.build.version.incremental", "S948BXXS4AZG5");
-        defaults.put("build.id.prefix", "BP4A");
+        defaults.put("ro.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.build.id", "TQ3A.230901.001");
+        defaults.put("ro.build.display.id", "TQ3A.230901.001");
+        defaults.put("ro.build.version.incremental", "S948BXXU1AXE4");
+        defaults.put("build.id.prefix", "TQ3A");
         defaults.put("ro.build.type", "user");
         defaults.put("ro.build.tags", "release-keys");
-        defaults.put("ro.build.description", "m3qxeea-user 16 BP4A.251205.006 S948BXXS4AZG5 release-keys");
+        defaults.put("ro.build.description", "m3qxeea-user 13 TQ3A.230901.001 S948BXXU1AXE4 release-keys");
         defaults.put("ro.build.product", "m3qxeea");
         defaults.put("ro.build.device", "m3qxeea");
         defaults.put("ro.build.characteristics", "nosdcard");
         defaults.put("ro.build.flavor", "m3qxeea-user");
 
-        defaults.put("ro.build.version.release", "16");
-        defaults.put("ro.build.version.release_or_codename", "16");
-        defaults.put("ro.build.version.release_or_preview_display", "16");
-        defaults.put("ro.build.version.sdk", "36");
+        defaults.put("ro.build.version.release", "13");
+        defaults.put("ro.build.version.release_or_codename", "13");
+        defaults.put("ro.build.version.release_or_preview_display", "13");
+        defaults.put("ro.build.version.sdk", "33");
         defaults.put("ro.build.version.codename", "REL");
-        defaults.put("ro.build.version.security_patch", "2025-12-05");
+        defaults.put("ro.build.version.security_patch", "2024-05-01");
 
-        defaults.put("ro.product.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.product.build.id", "BP4A.251205.006");
+        defaults.put("ro.product.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.product.build.id", "TQ3A.230901.001");
         defaults.put("ro.product.build.tags", "release-keys");
         defaults.put("ro.product.build.type", "user");
-        defaults.put("ro.product.build.version.incremental", "S948BXXS4AZG5");
-        defaults.put("ro.product.build.version.release", "16");
-        defaults.put("ro.product.build.version.release_or_codename", "16");
-        defaults.put("ro.product.build.version.sdk", "36");
+        defaults.put("ro.product.build.version.incremental", "S948BXXU1AXE4");
+        defaults.put("ro.product.build.version.release", "13");
+        defaults.put("ro.product.build.version.release_or_codename", "13");
+        defaults.put("ro.product.build.version.sdk", "33");
 
-        defaults.put("ro.system.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.system_ext.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.vendor.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.odm.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.bootimage.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.system_dlkm.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
-        defaults.put("ro.vendor_dlkm.build.fingerprint", "samsung/m3qxeea/m3q:16/BP4A.251205.006/S948BXXS4AZG5_OXM4AZG5:user/release-keys");
+        defaults.put("ro.system.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.system_ext.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.vendor.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.odm.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.bootimage.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.system_dlkm.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
+        defaults.put("ro.vendor_dlkm.build.fingerprint", "samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys");
 
-        defaults.put("ro.vendor.build.version.release", "16");
-        defaults.put("ro.vendor.build.version.release_or_codename", "16");
-        defaults.put("ro.vendor_dlkm.build.version.release", "16");
-        defaults.put("ro.vendor_dlkm.build.version.release_or_codename", "16");
-        defaults.put("ro.odm.build.version.release", "16");
-        defaults.put("ro.odm.build.version.release_or_codename", "16");
-        defaults.put("ro.bootimage.build.version.release", "16");
-        defaults.put("ro.bootimage.build.version.release_or_codename", "16");
-        defaults.put("ro.system_dlkm.build.version.release", "16");
-        defaults.put("ro.system_dlkm.build.version.release_or_codename", "16");
+        defaults.put("ro.vendor.build.version.release", "13");
+        defaults.put("ro.vendor.build.version.release_or_codename", "13");
+        defaults.put("ro.vendor_dlkm.build.version.release", "13");
+        defaults.put("ro.vendor_dlkm.build.version.release_or_codename", "13");
+        defaults.put("ro.odm.build.version.release", "13");
+        defaults.put("ro.odm.build.version.release_or_codename", "13");
+        defaults.put("ro.bootimage.build.version.release", "13");
+        defaults.put("ro.bootimage.build.version.release_or_codename", "13");
+        defaults.put("ro.system_dlkm.build.version.release", "13");
+        defaults.put("ro.system_dlkm.build.version.release_or_codename", "13");
 
         defaults.put("ro.debuggable", "0");
         defaults.put("ro.secure", "1");
@@ -454,7 +454,7 @@ public class ConfigManager {
         defaults.put("persist.sys.timezone", "");
         defaults.put("persist.sys.usb.config", "none");
 
-        defaults.put("webview.user_agent", "Mozilla/5.0 (Linux; Android 16; SM-S948B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36");
+        defaults.put("webview.user_agent", "Mozilla/5.0 (Linux; Android 13; SM-S948B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
 
         // Blank means generate or derive at runtime.
         defaults.put("SERIAL_NUMBER", "");
@@ -482,8 +482,8 @@ public class ConfigManager {
         defaults.put("storage.total_bytes", "274877906944");
         defaults.put("storage.available_bytes", "198000000000");
 
-        defaults.put("kernel.osrelease", "5.15.137-android14-11-g8c56e3b2b412");
-        defaults.put("kernel.version", "#1 SMP PREEMPT Thu Dec  5 21:01:46 UTC 2024");
+        defaults.put("kernel.osrelease", "5.15.148-android13-4-00003-gabcdef123456-ab11223344");
+        defaults.put("kernel.version", "#1 SMP PREEMPT Wed May 22 18:00:00 UTC 2024");
         defaults.put("kernel.hostname", "localhost");
 
         defaults.put("locale.language", "en");
@@ -544,7 +544,7 @@ public class ConfigManager {
         Set<String> emitted = new LinkedHashSet<>();
 
         sb.append("# DeviceSpoofLab-Hooks Auto-Generated Config\n");
-        sb.append("# Default profile: Google Pixel 7 Pro (Android 16)\n");
+        sb.append("# Default profile: Samsung Galaxy S26 Ultra (Android 13)\n");
         sb.append("# Edit values here to spoof a different Android device profile.\n");
         sb.append("# Blank identifier fields are generated or derived at runtime.\n\n");
 
@@ -1032,7 +1032,7 @@ public class ConfigManager {
         try {
             return Integer.parseInt(sdk);
         } catch (Exception e) {
-            return 36;
+            return 33;
         }
     }
 
@@ -1264,7 +1264,7 @@ public class ConfigManager {
 
     public static String getKernelOsRelease() {
         return propStringDef("kernel.osrelease",
-                "5.10.157-android13-4-00006-g1234567-ab12345");
+                "5.15.148-android13-4-00003-gabcdef123456-ab11223344");
     }
 
     public static String getKernelVersion() {
