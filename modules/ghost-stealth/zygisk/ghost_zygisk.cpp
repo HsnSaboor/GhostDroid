@@ -57,8 +57,8 @@ std::vector<char> ReadFile(const char *path) {
 }
 
 // Installs gs_native prop map for THIS process only. The .so is loaded
-// from the module lib dir (zygisk/<abi>/libgs_native.so, same layout as
-// TargetedFix zygisk/<abi>.so); lsplt hooks apply to this process's libc.
+// from the module lib dir (zygisk/<abi>/libgs_native.so, same dir as the
+// Zygisk entry zygisk/<abi>.so); lsplt hooks apply to this process's libc.
 void InstallForProcess(const std::vector<char> &conf) {
     // Parse key=value into g_props via native entry point.
     // Loaded dynamically to keep this TU dependency-free.

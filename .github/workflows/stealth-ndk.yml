@@ -37,8 +37,8 @@ jobs:
       - name: Build all ABIs (x86_64 + x86 + arm64-v8a + armeabi-v7a)
         run: |
           cd modules/ghost-stealth
-          # Pack magisk module zip: zygisk/<abi>/libgs_native.so +
-          # zygisk/<abi>/libghost_zygisk.so (matches InstallForProcess paths).
+          # Pack magisk module zip: zygisk/<abi>.so entry +
+          # zygisk/<abi>/libgs_native.so (matches InstallForProcess paths).
           mkdir -p out/pkg
           cp -r config module.prop service.sh META-INF assets out/pkg/
           for ABI in x86_64 x86 arm64-v8a armeabi-v7a; do
@@ -50,8 +50,8 @@ jobs:
             cmake --build out/$ABI -j
             mkdir -p out/pkg/zygisk/$ABI
             cp out/$ABI/libgs_native.so out/pkg/zygisk/$ABI/ || exit 1
-            # Zygisk entry lib. zygisk.hpp vendored in zygisk/
-            # (topjohnwu, API v2, do-not-modify).
+            # Zygisk entry lib. Zygisk/Magisk convention: zygisk/<abi>.so
+            # (single file, e.g. targetedfix zygisk/x86_64.so). NOT a subdir.
             TARGET_TRIPLE=$(echo $ABI | sed 's/x86_64/x86_64-linux-android/;s/^x86$/i686-linux-android/;s/arm64-v8a/aarch64-linux-android/;s/armeabi-v7a/armv7a-linux-androideabi/')
             $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ \
               --target=${TARGET_TRIPLE}26 \
@@ -59,7 +59,7 @@ jobs:
               -Wl,--gc-sections -Wl,--exclude-libs,ALL -llog \
               -Izygisk \
               zygisk/ghost_zygisk.cpp \
-              -o out/pkg/zygisk/$ABI/libghost_zygisk.so || exit 1
+              -o out/pkg/zygisk/$ABI.so || exit 1
           done
           (cd out/pkg && zip -qr ../ghost-stealth.zip .)
           ls -la out/*.zip; unzip -l out/ghost-stealth.zip | head -n 25
