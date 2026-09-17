@@ -5,10 +5,8 @@
 # Idempotent: re-run safe (remount over existing bind).
 MODDIR=${0%/*}
 FAKE="$MODDIR/fake_cpuinfo"
-if [ -f "$FAKE" ]; then
-    cp "$MODDIR"/assets/fake_cpuinfo "$FAKE" 2>/dev/null || true
-    mount -o bind "$FAKE" /proc/cpuinfo 2>/dev/null || true
-fi
+cp "$MODDIR"/assets/fake_cpuinfo "$FAKE" 2>/dev/null || true
+mount -o bind "$FAKE" /proc/cpuinfo 2>/dev/null || true
 # DMI mask: hide host board/serial, keep dir present (ENOENT-safe).
 if [ -d /sys/class/dmi/id ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/class/dmi/id 2>/dev/null || true
