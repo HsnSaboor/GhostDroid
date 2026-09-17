@@ -16,6 +16,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # LSPlt upstream target is plain `lsplt` (+ `lsplt_static`), no namespaced
 # alias in standalone source builds (verified .devdocs/LSPlt clone).
 if(DEFINED LSPLT_SOURCE_DIR)
+  # LSPlt standalone writes debug symbols under DEBUG_SYMBOLS_PATH
+  # (defaults to <bindir>/symbols). Pin it explicitly: with an empty
+  # value it expands to "/<ABI>" and the link fails (CI 35198938544).
+  set(DEBUG_SYMBOLS_PATH ${CMAKE_BINARY_DIR}/symbols CACHE PATH "")
   add_subdirectory(${LSPLT_SOURCE_DIR}/lsplt/src/main/jni lsplt)
   add_library(lsplt::lsplt ALIAS lsplt)
 else()
