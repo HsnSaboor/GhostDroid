@@ -5,8 +5,9 @@ name: stealth-ndk
 # Runs on push touching modules/ghost-stealth/** + manual + release tags.
 on:
   push:
-    paths: ["modules/ghost-stealth/**"]
+    branches: ["**"]
     tags: ["v*"]
+    paths: ["modules/ghost-stealth/**"]
   workflow_dispatch:
 
 permissions:

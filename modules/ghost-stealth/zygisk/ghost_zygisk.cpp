@@ -61,9 +61,11 @@ std::vector<char> ReadFile(const char *path) {
     return out;
 }
 
-// Installs gs_native prop map for THIS process only. The .so is loaded
-// from the module lib dir (zygisk/<abi>/libgs_native.so, same dir as the
-// Zygisk entry zygisk/<abi>.so); lsplt hooks apply to this process's libc.
+// Installs gs_native prop map for THIS process. MUST run in
+// preAppSpecialize: FORCE_DENYLIST_UNMOUNT hides /data/adb during
+// specialization, so postAppSpecialize cannot dlopen the module lib
+// ("not found" for every ABI). Hooks target this process's libc and
+// persist — specialization sandboxes, it does not re-exec.
 void InstallForProcess(const std::vector<char> &conf) {
     // Parse key=value into g_props via native entry point.
     // Loaded dynamically to keep this TU dependency-free.
@@ -118,13 +120,12 @@ public:
         GS_LOGI("target hit: %.*s", (int)process.size(), process.data());
         api->setOption(zygisk::FORCE_DENYLIST_UNMOUNT);
         conf_ = ReadFile(SPOOF_CONF);
-    }
-
-    void postAppSpecialize(const zygisk::AppSpecializeArgs * /*args*/) override {
-        if (conf_.empty()) return;
         InstallForProcess(conf_);
         conf_.clear();
         conf_.shrink_to_fit();
+    }
+
+    void postAppSpecialize(const zygisk::AppSpecializeArgs * /*args*/) override {
     }
 
     void preServerSpecialize(zygisk::ServerSpecializeArgs * /*args*/) override {
