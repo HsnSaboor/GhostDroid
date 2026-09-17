@@ -1,7 +1,8 @@
 name: stealth-ndk
 # Builds ghost-stealth native libs (gs_native + zygisk entry) for all
 # ABIs via Android NDK. Pins (2026-09): NDK r26 LTS (DSL uses
-# 26.3.11579264), cmake 3.22.1, cxx17, LSPlt 2.1 (latest upstream).
+# 26.3.11579264), cmake 3.22.1, cxx17, Dobby (JingMatrix fork, same pin
+# as TargetedFix; provides export-side DobbyHook + DobbySymbolResolver).
 # Runs on push touching modules/ghost-stealth/** + manual + release tags.
 on:
   push:
@@ -20,11 +21,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Fetch LSPlt 2.1 source (latest)
-        run: |
-          git clone --depth 1 --branch 2.1 \
-            https://github.com/LSPosed/LSPlt.git /tmp/lsplt
-          ls /tmp/lsplt
       - name: Fetch Dobby (TargetedFix fork pin)
         run: |
           git clone --depth 1 \
@@ -39,7 +35,9 @@ jobs:
         run: |
           cd modules/ghost-stealth
           # Pack magisk module zip: zygisk/<abi>.so entry +
-          # zygisk/<abi>/libgs_native.so (matches InstallForProcess paths).
+          # zygisk/<abi>/{libgs_native.so,libdobby.so} (Dobby ships shared;
+          # same-dir DT_NEEDED does not resolve, so the entry preloads it
+          # via dlopen with an absolute path before loading gs_native).
           mkdir -p out/pkg
           cp -r config module.prop service.sh META-INF assets out/pkg/
           for ABI in x86_64 x86 arm64-v8a armeabi-v7a; do
@@ -48,10 +46,11 @@ jobs:
               -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-26 \
               -DANDROID_STL=c++_static \
               -DCMAKE_BUILD_TYPE=Release \
-              -DLSPLT_SOURCE_DIR=/tmp/lsplt
+              -DDOBBY_SOURCE_DIR=/tmp/dobby
             cmake --build out/$ABI -j
             mkdir -p out/pkg/zygisk/$ABI
             cp out/$ABI/libgs_native.so out/pkg/zygisk/$ABI/ || exit 1
+            cp out/$ABI/dobby/libdobby.so out/pkg/zygisk/$ABI/ || exit 1
             # Zygisk entry lib. Zygisk/Magisk convention: zygisk/<abi>.so
             # (single file, e.g. targetedfix zygisk/x86_64.so). NOT a subdir.
             TARGET_TRIPLE=$(echo $ABI | sed 's/x86_64/x86_64-linux-android/;s/^x86$/i686-linux-android/;s/arm64-v8a/aarch64-linux-android/;s/armeabi-v7a/armv7a-linux-androideabi/')

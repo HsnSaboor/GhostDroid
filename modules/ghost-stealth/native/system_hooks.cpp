@@ -10,7 +10,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include <lsplt.hpp>
+#include <dobby.h>
 
 namespace gs {
 
@@ -103,16 +103,20 @@ int my_getifaddrs(struct ifaddrs** ifap) {
 
 }  // namespace
 
-void InstallSystemHooks(dev_t dev, ino_t inode) {
-    bool ok_uname = lsplt::RegisterHook(dev, inode, "uname",
-            reinterpret_cast<void*>(&my_uname),
-            reinterpret_cast<void**>(&orig_uname));
-    bool ok_gh    = lsplt::RegisterHook(dev, inode, "gethostname",
-            reinterpret_cast<void*>(&my_gethostname),
-            reinterpret_cast<void**>(&orig_gethostname));
-    bool ok_gi    = lsplt::RegisterHook(dev, inode, "getifaddrs",
-            reinterpret_cast<void*>(&my_getifaddrs),
-            reinterpret_cast<void**>(&orig_getifaddrs));
+void InstallSystemHooks() {
+    void *u = DobbySymbolResolver(nullptr, "uname");
+    void *gh = DobbySymbolResolver(nullptr, "gethostname");
+    void *gi = DobbySymbolResolver(nullptr, "getifaddrs");
+    bool ok_uname = false, ok_gh = false, ok_gi = false;
+    if (u != nullptr)
+        ok_uname = DobbyHook(u, (dobby_dummy_func_t)&my_uname,
+                             (dobby_dummy_func_t *)&orig_uname) == 0;
+    if (gh != nullptr)
+        ok_gh = DobbyHook(gh, (dobby_dummy_func_t)&my_gethostname,
+                          (dobby_dummy_func_t *)&orig_gethostname) == 0;
+    if (gi != nullptr)
+        ok_gi = DobbyHook(gi, (dobby_dummy_func_t)&my_getifaddrs,
+                          (dobby_dummy_func_t *)&orig_getifaddrs) == 0;
     DS_LOGI("system hooks: uname=%d gethostname=%d getifaddrs=%d",
             ok_uname, ok_gh, ok_gi);
 }

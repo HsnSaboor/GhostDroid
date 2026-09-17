@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <lsplt.hpp>
+#include <dobby.h>
 
 namespace gs {
 
@@ -176,79 +176,46 @@ void my_sp_read_callback(const prop_info* pi,
     }
 }
 
-struct LibLocation {
-    bool found;
-    dev_t dev;
-    ino_t inode;
-    std::string path;
-};
-
-LibLocation FindLibrary(const char* suffix) {
-    LibLocation result{false, 0, 0, {}};
-    auto maps = lsplt::MapInfo::Scan();
-    std::string suf = suffix;
-    for (const auto& m : maps) {
-        if (m.path.size() >= suf.size()) {
-            auto pos = m.path.rfind(suf);
-            if (pos != std::string::npos &&
-                pos + suf.size() == m.path.size()) {
-                result.found = true;
-                result.dev = m.dev;
-                result.inode = m.inode;
-                result.path = m.path;
-                return result;
-            }
-        }
+// Dobby export-side hook: patches the symbol in libc itself, so libraries
+// loaded later (e.g. libemulatordetector.so via System.loadLibrary) call
+// the replacement too. LSPlt PLT-patching only covered already-loaded
+// callers, which is why reveny still saw real values.
+bool HookExport(const char *sym, void *replace, void **orig) {
+    void *addr = DobbySymbolResolver(nullptr, sym);
+    if (addr == nullptr) {
+        DS_LOGW("DobbySymbolResolver(%s) -> null, skipping", sym);
+        return false;
     }
-    return result;
+    int rc = DobbyHook(addr, (dobby_dummy_func_t)replace,
+                       (dobby_dummy_func_t *)orig);
+    DS_LOGI("DobbyHook %s @ %p rc=%d", sym, addr, rc);
+    return rc == 0;
 }
 
 }  // namespace
 
 void InstallPropertyHooks() {
-    LibLocation libc = FindLibrary("/libc.so");
-    if (!libc.found) {
-        DS_LOGE("InstallPropertyHooks: libc.so not found in /proc/self/maps");
-        return;
-    }
-    DS_LOGI("Located libc at %s (dev=%lu inode=%lu)", libc.path.c_str(),
-            (unsigned long)libc.dev, (unsigned long)libc.inode);
+    bool ok_get  = HookExport("__system_property_get",
+            reinterpret_cast<void*>(&my_sp_get),
+            reinterpret_cast<void**>(&orig_sp_get));
+    bool ok_find = HookExport("__system_property_find",
+            reinterpret_cast<void*>(&my_sp_find),
+            reinterpret_cast<void**>(&orig_sp_find));
+    bool ok_read = HookExport("__system_property_read",
+            reinterpret_cast<void*>(&my_sp_read),
+            reinterpret_cast<void**>(&orig_sp_read));
+    bool ok_cb   = HookExport("__system_property_read_callback",
+            reinterpret_cast<void*>(&my_sp_read_callback),
+            reinterpret_cast<void**>(&orig_sp_read_callback));
 
-    bool ok_get  = lsplt::RegisterHook(
-        libc.dev, libc.inode, "__system_property_get",
-        reinterpret_cast<void*>(&my_sp_get),
-        reinterpret_cast<void**>(&orig_sp_get));
-    bool ok_find = lsplt::RegisterHook(
-        libc.dev, libc.inode, "__system_property_find",
-        reinterpret_cast<void*>(&my_sp_find),
-        reinterpret_cast<void**>(&orig_sp_find));
-    bool ok_read = lsplt::RegisterHook(
-        libc.dev, libc.inode, "__system_property_read",
-        reinterpret_cast<void*>(&my_sp_read),
-        reinterpret_cast<void**>(&orig_sp_read));
-    bool ok_cb   = lsplt::RegisterHook(
-        libc.dev, libc.inode, "__system_property_read_callback",
-        reinterpret_cast<void*>(&my_sp_read_callback),
-        reinterpret_cast<void**>(&orig_sp_read_callback));
-
-    DS_LOGI("RegisterHook(prop): get=%d find=%d read=%d read_callback=%d",
+    DS_LOGI("Hook(prop): get=%d find=%d read=%d read_callback=%d",
             ok_get, ok_find, ok_read, ok_cb);
 
-    InstallSystemHooks(libc.dev, libc.inode);
+    InstallSystemHooks();
 
-    LibLocation libdl = FindLibrary("/libdl.so");
-    if (libdl.found) {
-        DS_LOGI("Located libdl at %s (dev=%lu inode=%lu)", libdl.path.c_str(),
-                (unsigned long)libdl.dev, (unsigned long)libdl.inode);
-        InstallDlopenHooks(libdl.dev, libdl.inode);
-    } else {
-        DS_LOGW("libdl.so not found — dlopen re-hook skipped");
-    }
-
-    bool committed = lsplt::CommitHook();
-    DS_LOGI("CommitHook=%d  spoofed_keys=%zu  orig_get=%p orig_find=%p "
+    DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
-            committed, (size_t)g_props.size(), (void*)orig_sp_get,
+            (size_t)g_props.size(), (void*)orig_sp_get,
             (void*)orig_sp_find, (void*)orig_sp_read,
             (void*)orig_sp_read_callback);
 }

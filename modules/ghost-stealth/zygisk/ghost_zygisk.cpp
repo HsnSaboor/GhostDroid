@@ -9,6 +9,7 @@
 // Ref: /tmp/tfsrc/app/src/main/cpp/main.cpp,
 // .devdocs/Android-Emulator-Detection/.../EmulatorDetection.cpp.
 #include <android/log.h>
+#include <cstdio>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -69,28 +70,39 @@ std::vector<char> ReadFile(const char *path) {
 void InstallForProcess(const std::vector<char> &conf) {
     // Parse key=value into g_props via native entry point.
     // Loaded dynamically to keep this TU dependency-free.
-    const char *paths[] = {
-        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a/libgs_native.so",
-        "/data/adb/modules/ghost-stealth/zygisk/x86_64/libgs_native.so",
-        "/data/adb/modules/ghost-stealth/zygisk/x86/libgs_native.so",
-        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a/libgs_native.so",
+    // libgs_native links libdobby.so (DT_NEEDED, same dir) but the loader
+    // does not resolve same-dir deps for absolute-path dlopen, so preload
+    // libdobby first from the same directory.
+    const char *dirs[] = {
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
+        "/data/adb/modules/ghost-stealth/zygisk/x86_64",
+        "/data/adb/modules/ghost-stealth/zygisk/x86",
+        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a",
         nullptr,
     };
     typedef int (*InstallFn)(const char *, size_t);
-    for (const char **p = paths; *p != nullptr; p++) {
-        void *h = dlopen(*p, RTLD_NOW | RTLD_LOCAL);
+    char dep[256], lib[256];
+    for (const char **d = dirs; *d != nullptr; d++) {
+        snprintf(dep, sizeof(dep), "%s/libdobby.so", *d);
+        snprintf(lib, sizeof(lib), "%s/libgs_native.so", *d);
+        void *dep_h = dlopen(dep, RTLD_NOW | RTLD_GLOBAL);
+        if (dep_h == nullptr) {
+            GS_LOGE("dlopen %s failed: %s", dep, dlerror());
+            continue;
+        }
+        void *h = dlopen(lib, RTLD_NOW | RTLD_LOCAL);
         if (h == nullptr) {
-            GS_LOGE("dlopen %s failed: %s", *p, dlerror());
+            GS_LOGE("dlopen %s failed: %s", lib, dlerror());
             continue;
         }
         auto fn = (InstallFn)dlsym(h, "gs_install_buf");
         if (fn == nullptr) {
-            GS_LOGE("dlsym gs_install_buf in %s failed: %s", *p, dlerror());
+            GS_LOGE("dlsym gs_install_buf in %s failed: %s", lib, dlerror());
             return;
         }
         if (!conf.empty()) {
             int n = fn(conf.data(), conf.size());
-            GS_LOGI("installed %d spoof keys from %s", n, *p);
+            GS_LOGI("installed %d spoof keys from %s", n, lib);
         }
         return;
     }

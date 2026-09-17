@@ -21,9 +21,6 @@ bool IsVerboseLoggingEnabled();
 
 void InstallPropertyHooks();
 
-void InstallSystemHooks(dev_t dev, ino_t inode);
-
-// Re-applies LSPlt on .so files loaded after the initial install.
-void InstallDlopenHooks(dev_t dev, ino_t inode);
+void InstallSystemHooks();
 
 }  // namespace gs
