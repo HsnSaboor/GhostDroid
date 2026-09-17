@@ -45,6 +45,7 @@ jobs:
             cmake -S native -B out/$ABI \
               -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
               -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-26 \
+              -DANDROID_STL=c++_static \
               -DCMAKE_BUILD_TYPE=Release \
               -DLSPLT_SOURCE_DIR=/tmp/lsplt
             cmake --build out/$ABI -j
@@ -56,6 +57,7 @@ jobs:
             $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ \
               --target=${TARGET_TRIPLE}26 \
               -std=c++17 -fPIC -shared -Oz -ffunction-sections -fdata-sections \
+              -static-libstdc++ \
               -Wl,--gc-sections -Wl,--exclude-libs,ALL -llog \
               -Izygisk \
               zygisk/ghost_zygisk.cpp \
