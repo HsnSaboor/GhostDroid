@@ -1,8 +1,10 @@
 # gs_native: LSPlt PLT hooks (get/find/read/read_callback, uname,
 # gethostname, getifaddrs). Copied MIT from DeviceSpoofLab-Hooks cpp/.
 # Pins (2026-09): NDK r26+ (DSL uses 26.3.11579264), cmake 3.22.1,
-# cxx17, LSPlt 2.1 (latest upstream, LSPosed/LSPlt). Prefab via AGP;
-# standalone NDK: consume lsplt as prefab package (see CI workflow).
+# cxx17, LSPlt 2.1 (latest upstream, LSPosed/LSPlt).
+# LSPlt source layout (verified .devdocs/LSPlt clone):
+#   lsplt/src/main/jni/{lsplt.cc,elf_util.cc,include/lsplt.hpp}.
+# Standalone NDK: add_subdirectory LSPlt source, link lsplt::lsplt.
 cmake_minimum_required(VERSION 3.22.1)
 project("gs_native")
 
@@ -10,7 +12,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-find_package(lsplt REQUIRED CONFIG)
+# LSPLT_SOURCE_DIR: path to LSPosed/LSPlt checkout (CI clones tag 2.1).
+if(DEFINED LSPLT_SOURCE_DIR)
+  add_subdirectory(${LSPLT_SOURCE_DIR}/lsplt/src/main/jni lsplt)
+else()
+  find_package(lsplt REQUIRED CONFIG)
+endif()
 
 add_library(gs_native SHARED
     native_hooks.cpp

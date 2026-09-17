@@ -57,17 +57,27 @@ std::vector<char> ReadFile(const char *path) {
 }
 
 // Installs gs_native prop map for THIS process only. The .so is loaded
-// from the module dir; lsplt hooks apply to this process's libc.
+// from the module lib dir (zygisk/<abi>/libgs_native.so, same layout as
+// TargetedFix zygisk/<abi>.so); lsplt hooks apply to this process's libc.
 void InstallForProcess(const std::vector<char> &conf) {
     // Parse key=value into g_props via native entry point.
     // Loaded dynamically to keep this TU dependency-free.
-    void *h = dlopen("/data/adb/modules/ghost-stealth/zygisk/gs_native.so",
-                     RTLD_NOW | RTLD_LOCAL);
-    if (h == nullptr) return;
+    const char *paths[] = {
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a/libgs_native.so",
+        "/data/adb/modules/ghost-stealth/zygisk/x86_64/libgs_native.so",
+        "/data/adb/modules/ghost-stealth/zygisk/x86/libgs_native.so",
+        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a/libgs_native.so",
+        nullptr,
+    };
     typedef int (*InstallFn)(const char *, size_t);
-    auto fn = (InstallFn)dlsym(h, "gs_install_buf");
-    if (fn != nullptr && !conf.empty()) {
-        fn(conf.data(), conf.size());
+    for (const char **p = paths; *p != nullptr; p++) {
+        void *h = dlopen(*p, RTLD_NOW | RTLD_LOCAL);
+        if (h == nullptr) continue;
+        auto fn = (InstallFn)dlsym(h, "gs_install_buf");
+        if (fn != nullptr && !conf.empty()) {
+            fn(conf.data(), conf.size());
+        }
+        return;
     }
 }
 
