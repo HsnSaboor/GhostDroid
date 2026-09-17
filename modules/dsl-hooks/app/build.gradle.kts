@@ -16,7 +16,7 @@ android {
         // GhostDroid Option A: Java-only. No native build — the LSPlt
         // cpp/ tree (property/uname hooks) is dead code; ghost-stealth
         // owns those symbols via Dobby. Shipping a ds_native.so would
-        // reintroduce the SEGV_ACCERR collision.
+        // reintroduce the SEGV_ACCERR collision. (trigger stealth-ndk)
     }
 
     buildTypes {
