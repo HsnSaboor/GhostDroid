@@ -38,6 +38,17 @@ pub fn render(profile: &SpoofProfile) -> Vec<String> {
         format!("persist.waydroid.fake_touch={touch}"),
         format!("persist.waydroid.fake_wifi={wifi}"),
     ];
+    // Partition fingerprints must match ro.build.fingerprint or
+    // Build.isBuildConsistent() fires the "internal problem with your
+    // device" popup (2026-09-17: main fp Samsung, partitions Waydroid).
+    for key in [
+        "ro.system.build.fingerprint",
+        "ro.system_ext.build.fingerprint",
+        "ro.vendor.build.fingerprint",
+        "ro.odm.build.fingerprint",
+    ] {
+        lines.push(format!("{key}={}", profile.fingerprint));
+    }
     push_if(&mut lines, "ro.product.model", &profile.model);
     push_if(&mut lines, "ro.product.name", &profile.product);
     push_if(&mut lines, "ro.product.device", &profile.device);
@@ -92,7 +103,7 @@ mod tests {
     #[test]
     fn renders_three_lines() {
         let lines = render(&load("example.toml"));
-        assert_eq!(lines.len(), 6);
+        assert_eq!(lines.len(), 10);
         assert!(lines[0].starts_with("ro.build.fingerprint=google/cheetah"));
         assert!(lines[1].starts_with("persist.waydroid.fake_touch="));
         assert!(lines[2].starts_with("persist.waydroid.fake_wifi="));
@@ -102,7 +113,17 @@ mod tests {
     #[test]
     fn s26_renders_no_x86_leak() {
         let lines = render(&load("s26-ultra.toml"));
-        assert_eq!(lines.len(), 13);
+        assert_eq!(lines.len(), 17);
+        // Partition fingerprints carry the Samsung fp (no x86/houdini).
+        for key in [
+            "ro.system.build.fingerprint",
+            "ro.system_ext.build.fingerprint",
+            "ro.vendor.build.fingerprint",
+            "ro.odm.build.fingerprint",
+        ] {
+            let line = lines.iter().find(|l| l.starts_with(key)).expect(key);
+            assert!(line.contains("m3qxeea/m3q"), "{line}");
+        }
         assert!(lines.contains(&"ro.product.model=SM-S948B".to_owned()));
         assert!(lines.contains(&"ro.product.cpu.abi=arm64-v8a".to_owned()));
         assert!(lines.contains(&"ro.build.tags=release-keys".to_owned()));
@@ -118,7 +139,7 @@ mod tests {
     fn diff_finds_new_lines() {
         let lines = render(&load("example.toml"));
         let diff = swap_diff("", &lines);
-        assert_eq!(diff.len(), 6);
+        assert_eq!(diff.len(), 10);
         let body = lines.join("\n");
         assert!(swap_diff(&body, &lines).is_empty());
     }
