@@ -13,8 +13,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # LSPLT_SOURCE_DIR: path to LSPosed/LSPlt checkout (CI clones tag 2.1).
+# LSPlt upstream target is plain `lsplt` (+ `lsplt_static`), no namespaced
+# alias in standalone source builds (verified .devdocs/LSPlt clone).
 if(DEFINED LSPLT_SOURCE_DIR)
   add_subdirectory(${LSPLT_SOURCE_DIR}/lsplt/src/main/jni lsplt)
+  add_library(lsplt::lsplt ALIAS lsplt)
 else()
   find_package(lsplt REQUIRED CONFIG)
 endif()
