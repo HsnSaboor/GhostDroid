@@ -8,7 +8,7 @@ on:
   push:
     branches: ["**"]
     tags: ["v*"]
-    paths: ["modules/ghost-stealth/**"]
+    paths: ["modules/ghost-stealth/**", "modules/dsl-hooks/app/src/**", "modules/dsl-hooks/app/*.kts"]
   workflow_dispatch:
 
 permissions:
@@ -69,3 +69,23 @@ jobs:
         with:
           name: ghost-stealth-libs
           path: modules/ghost-stealth/out/
+
+  dsl-apk:
+    # Java-only Xposed module (no NDK: cpp/ tree deleted, lsplt dropped).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build DSL release APK (Java-only)
+        working-directory: modules/dsl-hooks
+        run: ./gradlew :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsl-hooks-apk
+          path: modules/dsl-hooks/app/build/outputs/apk/release/*.apk

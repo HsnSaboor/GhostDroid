@@ -7,6 +7,10 @@ MODDIR=${0%/*}
 FAKE="$MODDIR/fake_cpuinfo"
 cp "$MODDIR"/assets/fake_cpuinfo "$FAKE" 2>/dev/null || true
 mount -o bind "$FAKE" /proc/cpuinfo 2>/dev/null || true
+# Kernel mask: DeviceInfoHW System tab reads /proc/version directly
+# (uname() hook does not cover file reads). GKI 5.15, no host strings.
+cp "$MODDIR"/assets/fake_version "$MODDIR/fake_version" 2>/dev/null || true
+mount -o bind "$MODDIR/fake_version" /proc/version 2>/dev/null || true
 # DMI mask: hide host board/serial, keep dir present (ENOENT-safe).
 if [ -d /sys/class/dmi/id ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/class/dmi/id 2>/dev/null || true

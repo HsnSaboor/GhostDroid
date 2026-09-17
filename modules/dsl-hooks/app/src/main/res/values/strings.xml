@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeviceSpoofLabs-Hooks</string>
+    <string name="app_title">Device Spoof Labs</string>
+    <string name="xposed_description">Standalone LSPosed module for runtime device, identifier, WebView, and native property spoofing.</string>
+    <string name="select_all_label">Enable all</string>
+    <string name="android_version_label">Android version</string>
+    <string name="android_version_decrement">−</string>
+    <string name="android_version_increment">+</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_randomize">Randomize</string>
+    <string name="action_randomize_all">Randomize all</string>
+    <string name="copied_toast">Copied to clipboard</string>
+    <string name="edit_dialog_title">Edit %1$s</string>
+    <string name="dialog_save">Save</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="invalid_value">Value doesn\'t match expected format</string>
+    <string name="save_failed">Failed to save: %1$s</string>
+    <string name="timezone_label">Timezone</string>
+    <string name="timezone_dialog_title">Select timezone</string>
+    <string name="timezone_search_hint">Search…</string>
+
+    <!-- Populates the "Recommended" section in LSPosed Manager's scope picker.
+         The module's own process does NOT need to be ticked: the writable
+         IXposedService binder is delivered to our manifest-declared
+         XposedProvider when this UID starts (independent of hook scope), so
+         MainActivity publishes edits straight to RemotePreferences over that
+         binder. Self-scoping is unnecessary.
+         - com.google.android.gms is listed because AdvertisingIdHooks and
+           AppSetIdHooks have server-side hook paths that only run when GMS is
+           in scope; without it the client-side hooks still work but apps that
+           bypass them via raw AIDL will read the real ID from GMS. -->
+    <string-array name="xposed_scope">
+        <item>com.google.android.gms</item>
+    </string-array>
+</resources>
