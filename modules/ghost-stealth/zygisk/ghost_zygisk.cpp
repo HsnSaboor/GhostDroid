@@ -8,10 +8,15 @@
 //
 // Ref: /tmp/tfsrc/app/src/main/cpp/main.cpp,
 // .devdocs/Android-Emulator-Detection/.../EmulatorDetection.cpp.
+#include <android/log.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#define GS_TAG "GhostStealth"
+#define GS_LOGI(...) __android_log_print(ANDROID_LOG_INFO, GS_TAG, __VA_ARGS__)
+#define GS_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, GS_TAG, __VA_ARGS__)
 
 #include <string>
 #include <string_view>
@@ -72,13 +77,22 @@ void InstallForProcess(const std::vector<char> &conf) {
     typedef int (*InstallFn)(const char *, size_t);
     for (const char **p = paths; *p != nullptr; p++) {
         void *h = dlopen(*p, RTLD_NOW | RTLD_LOCAL);
-        if (h == nullptr) continue;
+        if (h == nullptr) {
+            GS_LOGE("dlopen %s failed: %s", *p, dlerror());
+            continue;
+        }
         auto fn = (InstallFn)dlsym(h, "gs_install_buf");
-        if (fn != nullptr && !conf.empty()) {
-            fn(conf.data(), conf.size());
+        if (fn == nullptr) {
+            GS_LOGE("dlsym gs_install_buf in %s failed: %s", *p, dlerror());
+            return;
+        }
+        if (!conf.empty()) {
+            int n = fn(conf.data(), conf.size());
+            GS_LOGI("installed %d spoof keys from %s", n, *p);
         }
         return;
     }
+    GS_LOGE("no libgs_native.so found in module zygisk dirs");
 }
 
 }  // namespace
@@ -88,6 +102,7 @@ public:
     void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
+        GS_LOGI("ghost-stealth loaded");
     }
 
     void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
@@ -100,6 +115,7 @@ public:
             api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
             return;
         }
+        GS_LOGI("target hit: %.*s", (int)process.size(), process.data());
         api->setOption(zygisk::FORCE_DENYLIST_UNMOUNT);
         conf_ = ReadFile(SPOOF_CONF);
     }

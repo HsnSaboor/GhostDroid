@@ -54,11 +54,11 @@ jobs:
             # Zygisk entry lib. Zygisk/Magisk convention: zygisk/<abi>.so
             # (single file, e.g. targetedfix zygisk/x86_64.so). NOT a subdir.
             TARGET_TRIPLE=$(echo $ABI | sed 's/x86_64/x86_64-linux-android/;s/^x86$/i686-linux-android/;s/arm64-v8a/aarch64-linux-android/;s/armeabi-v7a/armv7a-linux-androideabi/')
-            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ \
+              $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ \
               --target=${TARGET_TRIPLE}26 \
               -std=c++17 -fPIC -shared -Oz -ffunction-sections -fdata-sections \
               -static-libstdc++ \
-              -Wl,--gc-sections -Wl,--exclude-libs,ALL -llog \
+              -Wl,--gc-sections -Wl,--exclude-libs,ALL -llog -ldl \
               -Izygisk \
               zygisk/ghost_zygisk.cpp \
               -o out/pkg/zygisk/$ABI.so || exit 1

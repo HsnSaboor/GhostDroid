@@ -21,7 +21,9 @@ if(DEFINED LSPLT_SOURCE_DIR)
   # value it expands to "/<ABI>" and the link fails (CI 35198938544).
   set(DEBUG_SYMBOLS_PATH ${CMAKE_BINARY_DIR}/symbols CACHE PATH "")
   add_subdirectory(${LSPLT_SOURCE_DIR}/lsplt/src/main/jni lsplt)
-  add_library(lsplt::lsplt ALIAS lsplt)
+  # Static link: liblsplt.so is NOT shipped in the module zip, so a shared
+  # NEEDED entry fails dlopen inside the target process (silent no-op).
+  add_library(lsplt::lsplt ALIAS lsplt_static)
 else()
   find_package(lsplt REQUIRED CONFIG)
 endif()
@@ -37,6 +39,7 @@ target_link_libraries(gs_native
     PRIVATE
     lsplt::lsplt
     log
+    dl
 )
 
 target_compile_options(gs_native PRIVATE
