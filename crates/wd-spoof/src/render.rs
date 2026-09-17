@@ -45,6 +45,7 @@ pub fn render(profile: &SpoofProfile) -> Vec<String> {
         "ro.system.build.fingerprint",
         "ro.system_ext.build.fingerprint",
         "ro.vendor.build.fingerprint",
+        "ro.vendor_dlkm.build.fingerprint",
         "ro.odm.build.fingerprint",
     ] {
         lines.push(format!("{key}={}", profile.fingerprint));
@@ -103,7 +104,7 @@ mod tests {
     #[test]
     fn renders_three_lines() {
         let lines = render(&load("example.toml"));
-        assert_eq!(lines.len(), 10);
+        assert_eq!(lines.len(), 11);
         assert!(lines[0].starts_with("ro.build.fingerprint=google/cheetah"));
         assert!(lines[1].starts_with("persist.waydroid.fake_touch="));
         assert!(lines[2].starts_with("persist.waydroid.fake_wifi="));
@@ -113,12 +114,13 @@ mod tests {
     #[test]
     fn s26_renders_no_x86_leak() {
         let lines = render(&load("s26-ultra.toml"));
-        assert_eq!(lines.len(), 17);
+        assert_eq!(lines.len(), 18);
         // Partition fingerprints carry the Samsung fp (no x86/houdini).
         for key in [
             "ro.system.build.fingerprint",
             "ro.system_ext.build.fingerprint",
             "ro.vendor.build.fingerprint",
+            "ro.vendor_dlkm.build.fingerprint",
             "ro.odm.build.fingerprint",
         ] {
             let line = lines.iter().find(|l| l.starts_with(key)).expect(key);
@@ -139,7 +141,7 @@ mod tests {
     fn diff_finds_new_lines() {
         let lines = render(&load("example.toml"));
         let diff = swap_diff("", &lines);
-        assert_eq!(diff.len(), 10);
+        assert_eq!(diff.len(), 11);
         let body = lines.join("\n");
         assert!(swap_diff(&body, &lines).is_empty());
     }
