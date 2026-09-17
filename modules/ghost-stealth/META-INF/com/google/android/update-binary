@@ -1,0 +1,18 @@
+#!/sbin/sh
+# Minimal Magisk installer: copy tree, set perms. No util_functions dep
+# (overlay ships them; module must install even if stale).
+umask 022
+OUTFD=$2
+ZIPFILE=$3
+MODPATH=$MODPATH
+[ -z "$MODPATH" ] && MODPATH=/data/adb/modules_update/ghost-stealth
+mkdir -p "$MODPATH"
+ui_print() { echo "$1"; }
+ui_print "- Installing GhostDroid Stealth..."
+cd "$MODPATH" || exit 1
+unzip -o "$ZIPFILE" -x 'META-INF/*' >&2
+cp /system/etc/init/magisk/module_installer.sh /data/adb/magisk/ 2>/dev/null || true
+set_perm_recursive "$MODPATH" 0 0 0755 0644 2>/dev/null || chmod -R 755 "$MODPATH"
+chmod 755 "$MODPATH/service.sh" 2>/dev/null || true
+ui_print "- Done. Reboot or restart zygote."
+exit 0

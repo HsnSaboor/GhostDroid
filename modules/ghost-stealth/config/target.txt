@@ -1,0 +1,6 @@
+# ghost-stealth target processes (exact match, '#' comments).
+ru.andr7e.deviceinfohw
+com.reveny.emulator.detection.sample
+io.github.vvb2060.keyattestation
+com.henrikherzig.playintegritychecker
+rikka.safetynetchecker

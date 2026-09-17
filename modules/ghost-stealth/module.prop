@@ -1,0 +1,7 @@
+id=ghost-stealth
+name=GhostDroid Stealth (get-prop hook + cpuinfo mask)
+version=v0.1.0
+versionCode=1
+author=GhostDroid
+description=Per-process __system_property_get hook (closes TargetedFix bypass) + SD8 Elite cpuinfo bind. Requires ReZygisk + denylist OFF (Shamiko hides).
+updateJson=

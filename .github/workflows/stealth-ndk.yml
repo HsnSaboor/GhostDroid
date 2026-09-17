@@ -1,0 +1,78 @@
+name: stealth-ndk
+# Builds ghost-stealth native libs (gs_native + zygisk entry) for all
+# ABIs via Android NDK. Pins (2026-09): NDK r26 LTS (DSL uses
+# 26.3.11579264), cmake 3.22.1, cxx17, LSPlt 2.1 (latest upstream).
+# Runs on push touching modules/ghost-stealth/** + manual + release tags.
+on:
+  push:
+    paths: ["modules/ghost-stealth/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ndk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Fetch LSPlt 2.1 source (latest)
+        run: |
+          git clone --depth 1 --branch 2.1 \
+            https://github.com/LSPosed/LSPlt.git /tmp/lsplt
+          ls /tmp/lsplt
+      - name: Fetch Dobby (TargetedFix fork pin)
+        run: |
+          git clone --depth 1 \
+            https://github.com/JingMatrix/Dobby.git /tmp/dobby
+          ls /tmp/dobby
+      - name: Setup Android NDK r26 LTS
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          link-to-sdk: true
+      - name: Build all ABIs (x86_64 + x86 + arm64-v8a + armeabi-v7a)
+        run: |
+          cd modules/ghost-stealth
+          mkdir -p zygisk
+          for ABI in x86_64 x86 arm64-v8a armeabi-v7a; do
+            cmake -S native -B out/$ABI \
+              -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-26 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLSPLT_SOURCE_DIR=/tmp/lsplt
+            cmake --build out/$ABI -j
+            # Stage: gs_native per-ABI dir + zygisk entry .so
+            mkdir -p out/stage/$ABI
+            cp out/$ABI/libgs_native.so out/stage/$ABI/ 2>/dev/null || \
+              cp out/$ABI/gs_native.so out/stage/$ABI/ || true
+          done
+          # Zygisk entry lib: same LSPlt include path as native, per ABI.
+          # zygisk.hpp vendored in zygisk/ (topjohnwu, API v2, do-not-modify).
+          for ABI in x86_64 x86 arm64-v8a armeabi-v7a; do
+            TARGET_TRIPLE=$(echo $ABI | sed 's/x86_64/x86_64-linux-android/;s/^x86$/i686-linux-android/;s/arm64-v8a/aarch64-linux-android/;s/armeabi-v7a/armv7a-linux-androideabi/')
+            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ \
+              --target=${TARGET_TRIPLE}26 \
+              -std=c++17 -fPIC -shared -Oz -ffunction-sections -fdata-sections \
+              -Wl,--gc-sections -Wl,--exclude-libs,ALL -llog \
+              -Izygisk -Inative \
+              zygisk/ghost_zygisk.cpp \
+              -o out/stage/zygisk-$ABI.so || exit 1
+          done
+          # Pack magisk module zip per ABI layout (zygisk/<abi>.so)
+          mkdir -p out/pkg
+          cp -r config module.prop service.sh META-INF assets out/pkg/
+          mkdir -p out/pkg/zygisk
+          for ABI in x86_64 x86 arm64-v8a armeabi-v7a; do
+            cp out/stage/$ABI/libgs_native.so out/pkg/zygisk/$ABI-gs.so || true
+            cp out/stage/zygisk-$ABI.so out/pkg/zygisk/$ABI.so
+          done
+          (cd out/pkg && zip -qr ../ghost-stealth.zip .)
+          ls -la out/*.zip; ls -R out/stage/ || ls -R out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-stealth-libs
+          path: modules/ghost-stealth/out/
