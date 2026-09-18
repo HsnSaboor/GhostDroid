@@ -26,6 +26,16 @@ fi
 # /data/local/tmp/gs_fake_mounts for the redirect to serve.
 cp "$MODDIR"/assets/fake_mounts /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
+# Extended redirect table (file_hooks.cpp): drivers/input/audio/usb fakes.
+# World-readable snapshots; per-process open/openat/fopen redirect serves
+# them because binds don't propagate across mount namespaces.
+# Snapshot names MUST match file_hooks.cpp #defines:
+# gs_fake_modules, gs_fake_input_devices, gs_fake_asound_cards,
+# gs_fake_usb_devices.
+for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices; do
+    cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
+    chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
+done
 cp "$MODDIR"/assets/fake_mounts "$MODDIR/fake_mounts" 2>/dev/null || true
 mount -o bind "$MODDIR/fake_mounts" /proc/mounts 2>/dev/null || true
 mount -o bind "$MODDIR/fake_mounts" /proc/self/mountinfo 2>/dev/null || true

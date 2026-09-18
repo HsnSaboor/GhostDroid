@@ -18,9 +18,11 @@ public class GpuHooks {
     // GL strings (GLES10.GL_VENDOR etc.).
     private static final int GL_VENDOR = 0x1F00;
     private static final int GL_RENDERER = 0x1F01;
+    private static final int GL_VERSION = 0x1F02;
 
     // EGL strings (EGL14.EGL_VENDOR).
     private static final int EGL_VENDOR = 0x3053;
+    private static final int EGL_VERSION = 0x3054;
 
     public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         hookGlGetString("android.opengl.GLES10", lpparam.classLoader);
@@ -45,6 +47,9 @@ public class GpuHooks {
                                 param.setResult(ConfigManager.getGpuVendor());
                             } else if (name == GL_RENDERER) {
                                 param.setResult(ConfigManager.getGpuRenderer());
+                            } else if (name == GL_VERSION) {
+                                // String label only — context/config stay real.
+                                param.setResult(ConfigManager.getGpuVersion());
                             }
                         }
                     });
@@ -66,6 +71,9 @@ public class GpuHooks {
                             int name = (Integer) param.args[1];
                             if (name == EGL_VENDOR) {
                                 param.setResult(ConfigManager.getGpuVendor());
+                            } else if (name == EGL_VERSION) {
+                                // String label only — EGL init stays real.
+                                param.setResult(ConfigManager.getGpuEglVersion());
                             }
                         }
                     });

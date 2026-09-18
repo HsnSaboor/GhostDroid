@@ -12,13 +12,25 @@ namespace gs {
 
 namespace {
 
-// FORCE_DENYLIST_UNMOUNT hides /data/adb in targets, so the fake file
-// lives at a world-readable path service.sh maintains.
+// FORCE_DENYLIST_UNMOUNT hides /data/adb in targets, so the fake files
+// live at world-readable paths service.sh maintains.
 #define FAKE_MOUNTS "/data/local/tmp/gs_fake_mounts"
+#define FAKE_MODULES "/data/local/tmp/gs_fake_modules"
+#define FAKE_INPUT "/data/local/tmp/gs_fake_input_devices"
+#define FAKE_ASOUND "/data/local/tmp/gs_fake_asound_cards"
+#define FAKE_USB "/data/local/tmp/gs_fake_usb_devices"
 
 int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
 FILE* (*orig_fopen)(const char*, const char*) = nullptr;
+
+// Covers both exact paths and per-device node paths (DeviceInfoHW reads
+// nodes like /sys/bus/usb/devices/1-0:1.0/descriptors and ALSA card dirs).
+bool PathStartsWith(const char* p, const char* prefix) {
+    if (p == nullptr || prefix == nullptr) return false;
+    size_t n = strlen(prefix);
+    return strncmp(p, prefix, n) == 0;
+}
 
 bool IsMountsPath(const char* p) {
     if (p == nullptr) return false;
@@ -29,7 +41,19 @@ bool IsMountsPath(const char* p) {
 }
 
 const char* Redirect(const char* path) {
-    return IsMountsPath(path) ? FAKE_MOUNTS : path;
+    if (IsMountsPath(path)) return FAKE_MOUNTS;
+    // DRIVERS tab: /proc/modules lists host-only modules (snd_hda_intel,
+    // thinkpad_acpi, i2c_*...). Serve a short virtio-only list instead.
+    if (path != nullptr && strcmp(path, "/proc/modules") == 0) return FAKE_MODULES;
+    // INPUT tab: /proc/bus/input/devices leaks ThinkPad/Elantech/HDA.
+    if (path != nullptr && strcmp(path, "/proc/bus/input/devices") == 0) return FAKE_INPUT;
+    // AUDIO tab: /proc/asound/cards leaks HDA Intel PCH.
+    if (path != nullptr && strcmp(path, "/proc/asound/cards") == 0) return FAKE_ASOUND;
+    // USB tab: /sys/bus/usb/devices leaks xhci/cachyos/SunplusIT.
+    // Directory listing itself is per-node; mask the uevent/product/vendor
+    // strings via the common parent read fallback below.
+    if (path != nullptr && strcmp(path, "/sys/bus/usb/devices") == 0) return FAKE_USB;
+    return path;
 }
 
 // NOTE: orig_open/openat MUST be int-returning variadic pointers. An early
@@ -56,6 +80,14 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
     if (dirfd == AT_FDCWD && IsMountsPath(path)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
+    }
+    if (dirfd == AT_FDCWD && path != nullptr) {
+        // Same fake-file treatment for the extended redirect table.
+        const char* eff = Redirect(path);
+        if (eff != path) {
+            flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
+            return orig_openat(dirfd, eff, flags | O_RDONLY, (mode_t)0);
+        }
     }
     if ((flags & O_CREAT) != 0) {
         va_list ap;

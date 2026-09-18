@@ -14,7 +14,14 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class SensorHooks {
 
     private static final String TAG = "DeviceSpoofLab-Sensor";
-    private static final String[] DENY = {"goldfish", "ranchu", "emulator", "qemu", "vbox"};
+    private static final String[] DENY = {"goldfish", "ranchu", "emulator", "qemu", "vbox",
+            "thinkpad", "elantech", "etps", "hda intel", "sunplusit", "xhci",
+            "pnp0c", "lnxpwr", "lnxvideo", "i8042", "pcspkr", "isa006",
+            "acpi", "cachyos", "mesa"};
+
+    // S26 Ultra style sensor set: present-but-generic, nothing host-specific.
+    // Real values would need HAL; presence + neutral vendor is enough for
+    // DeviceInfoHW while games keep working (no fake data injected).
 
     public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         try {

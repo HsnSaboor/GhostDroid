@@ -468,6 +468,9 @@ public class ConfigManager {
         defaults.put("gpu.renderer", "Adreno (TM) 840");
         defaults.put("gpu.unmasked_vendor", "Qualcomm");
         defaults.put("gpu.unmasked_renderer", "Adreno (TM) 840");
+        // String labels only — contexts/drivers stay real, games keep accel.
+        defaults.put("gpu.version", "OpenGL ES 3.2 V@0530.0");
+        defaults.put("gpu.egl_version", "1.5 Android META-EGL");
 
         defaults.put("wifi.mac", "");
         defaults.put("wifi.bssid", "");
@@ -643,7 +646,8 @@ public class ConfigManager {
         appendConfigBlock(sb, defaults, emitted, "Network, Bluetooth, WebView, and GPU",
                 "wifi.mac", "wifi.bssid", "wifi.ssid", "bluetooth.mac",
                 "bluetooth.name", "webview.user_agent", "gpu.vendor",
-                "gpu.renderer", "gpu.unmasked_vendor", "gpu.unmasked_renderer");
+                "gpu.renderer", "gpu.unmasked_vendor", "gpu.unmasked_renderer",
+                "gpu.version", "gpu.egl_version");
 
         appendConfigBlock(sb, defaults, emitted, "Battery, storage, kernel, locale, and install metadata",
                 "battery.capacity_uah", "battery.charge_counter_uah",
@@ -1309,6 +1313,16 @@ public class ConfigManager {
 
     public static String getGpuUnmaskedRenderer() {
         return propStringDef("gpu.unmasked_renderer", getGpuRenderer());
+    }
+
+    // String-only GL version label. NEVER touch context creation, driver
+    // loading, or feature flags — games keep full GPU accel.
+    public static String getGpuVersion() {
+        return propStringDef("gpu.version", "OpenGL ES 3.2 V@0530.0");
+    }
+
+    public static String getGpuEglVersion() {
+        return propStringDef("gpu.egl_version", "1.5 Android META-EGL");
     }
 
     // 0 means "use a default seed".
