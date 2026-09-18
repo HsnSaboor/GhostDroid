@@ -7,6 +7,7 @@ import com.devicespooflab.hooks.hooks.AccountHooks;
 import com.devicespooflab.hooks.hooks.AdvertisingIdHooks;
 import com.devicespooflab.hooks.hooks.AppSetIdHooks;
 import com.devicespooflab.hooks.hooks.BatteryHooks;
+import com.devicespooflab.hooks.hooks.BatteryIntentHooks;
 import com.devicespooflab.hooks.hooks.BuildHooks;
 import com.devicespooflab.hooks.hooks.CameraHooks;
 import com.devicespooflab.hooks.hooks.EuiccHooks;
@@ -21,6 +22,7 @@ import com.devicespooflab.hooks.hooks.PackageManagerHooks;
 import com.devicespooflab.hooks.hooks.SensorHooks;
 import com.devicespooflab.hooks.hooks.SettingsHooks;
 import com.devicespooflab.hooks.hooks.StorageHooks;
+import com.devicespooflab.hooks.hooks.SysfsListHooks;
 import com.devicespooflab.hooks.hooks.SystemPropertiesHooks;
 import com.devicespooflab.hooks.hooks.TelephonyHooks;
 import com.devicespooflab.hooks.hooks.WebViewHooks;
@@ -230,6 +232,16 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": GpuHooks failed: " + e.getMessage());
         }
 
+        // File.listFiles/list sysfs enumeration (USB/DRIVERS tabs): Java
+        // opendir/getdents bypasses libc open hooks, so mask listings here
+        // (single Qualcomm node). PCI sysfs dirs stay real for minigbm.
+        try {
+            SysfsListHooks.hook(lpparam);
+            logInfo(verbose, TAG + ": SysfsListHooks loaded");
+        } catch (Exception e) {
+            XposedBridge.log(TAG + ": SysfsListHooks failed: " + e.getMessage());
+        }
+
         try {
             CameraHooks.hook(lpparam);
             logInfo(verbose, TAG + ": CameraHooks loaded");
@@ -278,6 +290,17 @@ public class MainHook implements IXposedHookLoadPackage {
             logInfo(verbose, TAG + ": BatteryHooks loaded");
         } catch (Exception e) {
             XposedBridge.log(TAG + ": BatteryHooks failed: " + e.getMessage());
+        }
+
+        // Sticky ACTION_BATTERY_CHANGED broadcast: Level/Status/Health/
+        // Power source/Technology/Temperature/Voltage rows. Rewritten to
+        // S26 Ultra discharging values (BatteryManager counters alone
+        // don't cover the broadcast path).
+        try {
+            BatteryIntentHooks.hook(lpparam);
+            logInfo(verbose, TAG + ": BatteryIntentHooks loaded");
+        } catch (Exception e) {
+            XposedBridge.log(TAG + ": BatteryIntentHooks failed: " + e.getMessage());
         }
 
         if (realDeviceSdk >= 28) {

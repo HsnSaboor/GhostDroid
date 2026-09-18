@@ -103,9 +103,9 @@ public class GpuHooks {
         }
 
         // UsbManager.getDeviceList(): DeviceInfoHW USB tab reads this AND
-        // parses /sys/bus/usb/devices (linux mode). Return empty so the
-        // Java path shows a phone-like "no host USB" view; sysfs nodes are
-        // masked separately by the ghost-stealth file redirect (FAKE_USB).
+        // parses /sys/bus/usb via File.listFiles (opendir/getdents, bypasses
+        // libc open hooks — covered natively by dir_hooks). Return empty so
+        // the Java path shows a phone-like "no host USB" view.
         // ADB/function state untouched — debugging keeps working.
         Class<?> usbManager = XposedHelpers.findClassIfExists(
                 "android.hardware.usb.UsbManager", loader);

@@ -1,0 +1,5 @@
+virtio_gpu
+virtio_input
+virtio_snd
+virtio_blk
+virtio_net

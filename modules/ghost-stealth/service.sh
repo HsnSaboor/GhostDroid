@@ -31,8 +31,20 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # them because binds don't propagate across mount namespaces.
 # Snapshot names MUST match file_hooks.cpp #defines:
 # gs_fake_modules, gs_fake_input_devices, gs_fake_asound_cards,
-# gs_fake_usb_devices.
-for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices; do
+# gs_fake_usb_devices, gs_fake_usb_drivers_list, gs_fake_pci_drivers_list,
+# gs_fake_platform_drivers_list, gs_fake_sys_module_list,
+# gs_fake_usb_{manufacturer,product,serial,idvendor,idproduct,version,
+# busnum,devnum}, gs_fake_pci_{vendor,device},
+# gs_fake_bat_{charge_full,charge_full_design,model,manufacturer}.
+for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
+         fake_usb_drivers_list fake_pci_drivers_list \
+         fake_platform_drivers_list fake_sys_module_list \
+         fake_usb_manufacturer fake_usb_product fake_usb_serial \
+         fake_usb_idvendor fake_usb_idproduct fake_usb_version \
+         fake_usb_busnum fake_usb_devnum \
+         fake_pci_vendor fake_pci_device \
+         fake_bat_charge_full fake_bat_charge_full_design \
+         fake_bat_model fake_bat_manufacturer; do
     cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
     chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
 done
