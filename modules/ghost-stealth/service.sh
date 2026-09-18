@@ -93,3 +93,28 @@ fi
 if [ -f /proc/modules ]; then
     mount -o bind "$MODDIR/assets/fake_modules" /proc/modules 2>/dev/null || true
 fi
+# WiFi/sound strings: DeviceInfoHW GENERAL tab reads these via sysfs/ALSA
+# paths (not open-hooked): iwlwifi came from /sys/bus/pci DRIVER=iwlwifi
+# (PCI_ID=8086:24FD), PCH from /sys/class/sound/card0/id + ALSA version
+# cachyos. Mask /sys/module scan dir, PCI uevent driver strings, sound id,
+# ALSA version. /sys/module tmpfs hides iwl*/snd_hda*/thinkpad_acpi (350
+# host entries); /sys/bus/pci tmpfs blinds DRIVER/PCI_ID enumeration with
+# a single clean Qualcomm node; sound id bind reports SM8850.
+if [ -d /sys/module ]; then
+    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/module 2>/dev/null || true
+    mkdir -p /sys/module/virtio_gpu /sys/module/virtio_input /sys/module/virtio_snd /sys/module/virtio_blk /sys/module/virtio_net 2>/dev/null || true
+fi
+if [ -d /sys/bus/pci/devices ]; then
+    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/bus/pci/devices 2>/dev/null || true
+    mkdir -p /sys/bus/pci/devices/0000:00:00 2>/dev/null || true
+    cp "$MODDIR/assets/fake_pci_uevent" /sys/bus/pci/devices/0000:00:00.0/uevent 2>/dev/null || true
+fi
+if [ -d /sys/class/sound ]; then
+    for f in /sys/class/sound/card*/id; do
+        [ -f "$f" ] || continue
+        echo SM8850 > "$f" 2>/dev/null || mount -o bind "$MODDIR/assets/fake_sound_id" "$f" 2>/dev/null || true
+    done
+fi
+if [ -f /proc/asound/version ]; then
+    mount -o bind "$MODDIR/assets/fake_asound_version" /proc/asound/version 2>/dev/null || true
+fi
