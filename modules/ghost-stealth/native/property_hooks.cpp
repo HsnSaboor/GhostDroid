@@ -213,6 +213,8 @@ void InstallPropertyHooks() {
 
     InstallSystemHooks();
 
+    InstallFileHooks();
+
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
             (size_t)g_props.size(), (void*)orig_sp_get,

@@ -23,4 +23,6 @@ void InstallPropertyHooks();
 
 void InstallSystemHooks();
 
+void InstallFileHooks();
+
 }  // namespace gs

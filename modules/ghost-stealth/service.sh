@@ -19,8 +19,13 @@ if [ -d /sys/class/dmi/id ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/class/dmi/id 2>/dev/null || true
 fi
 # Mounts mask: DeviceInfoHW Mounts tab leaks /dev/nvme0n1p2, btrfs subvol
-# /@/@home, and overlay lowerdirs under /var/lib/waydroid. Replace with
-# standard dm-verity + f2fs userdata layout (S26 Ultra view).
+# /@/@home, and overlay lowerdirs under /var/lib/waydroid. The canonical
+# mask is the native open/openat/fopen redirect (file_hooks.cpp) because
+# /proc/mounts is a per-process symlink (binds don't propagate across
+# mount namespaces). service.sh keeps a world-readable snapshot at
+# /data/local/tmp/gs_fake_mounts for the redirect to serve.
+cp "$MODDIR"/assets/fake_mounts /data/local/tmp/gs_fake_mounts 2>/dev/null || true
+chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 cp "$MODDIR"/assets/fake_mounts "$MODDIR/fake_mounts" 2>/dev/null || true
 mount -o bind "$MODDIR/fake_mounts" /proc/mounts 2>/dev/null || true
 mount -o bind "$MODDIR/fake_mounts" /proc/self/mountinfo 2>/dev/null || true
