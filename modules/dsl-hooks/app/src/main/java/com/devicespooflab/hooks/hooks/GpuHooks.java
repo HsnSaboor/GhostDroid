@@ -25,12 +25,33 @@ public class GpuHooks {
     private static final int EGL_VERSION = 0x3054;
 
     public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+        // glGetString is only declared on GLES10/GLES20 (GLES30+ inherit
+        // the static from GLES20 — hooking them throws NoSuchMethodError).
         hookGlGetString("android.opengl.GLES10", lpparam.classLoader);
         hookGlGetString("android.opengl.GLES20", lpparam.classLoader);
-        hookGlGetString("android.opengl.GLES30", lpparam.classLoader);
-        hookGlGetString("android.opengl.GLES31", lpparam.classLoader);
-        hookGlGetString("android.opengl.GLES32", lpparam.classLoader);
         hookEglQueryString(lpparam.classLoader);
+        hookVulkanVersion(lpparam);
+    }
+
+    // VkPhysicalDeviceProperties.deviceName / driverVersion read via
+    // android.hardware.vulkan.VulkanDeviceInfo. Cosmetic strings only —
+    // VkDevice creation path untouched, accel keeps working.
+    // S26 Ultra / Adreno 840: Vulkan 1.3 (confirmed Qualcomm SM8850 brief).
+    private static void hookVulkanVersion(XC_LoadPackage.LoadPackageParam lpparam) {
+        Class<?> info = XposedHelpers.findClassIfExists(
+                "android.hardware.vulkan.VulkanDeviceInfo", lpparam.classLoader);
+        if (info == null) return;
+        try {
+            XposedHelpers.findAndHookMethod(info, "getDeviceName",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            param.setResult("Adreno (TM) 840");
+                        }
+                    });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": failed to hook VulkanDeviceInfo.getDeviceName: " + t);
+        }
     }
 
     private static void hookGlGetString(String className, ClassLoader loader) {
@@ -79,6 +100,27 @@ public class GpuHooks {
                     });
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": failed to hook EGL14.eglQueryString: " + t);
+        }
+
+        // UsbManager.getDeviceList(): DeviceInfoHW USB tab reads this AND
+        // parses /sys/bus/usb/devices (linux mode). Return empty so the
+        // Java path shows a phone-like "no host USB" view; sysfs nodes are
+        // masked separately by the ghost-stealth file redirect (FAKE_USB).
+        // ADB/function state untouched — debugging keeps working.
+        Class<?> usbManager = XposedHelpers.findClassIfExists(
+                "android.hardware.usb.UsbManager", loader);
+        if (usbManager != null) {
+            try {
+                XposedHelpers.findAndHookMethod(usbManager, "getDeviceList",
+                        new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                param.setResult(new java.util.HashMap<String, Object>());
+                            }
+                        });
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to hook UsbManager.getDeviceList: " + t);
+            }
         }
     }
 }

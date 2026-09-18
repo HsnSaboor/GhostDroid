@@ -17,11 +17,11 @@ public class SensorHooks {
     private static final String[] DENY = {"goldfish", "ranchu", "emulator", "qemu", "vbox",
             "thinkpad", "elantech", "etps", "hda intel", "sunplusit", "xhci",
             "pnp0c", "lnxpwr", "lnxvideo", "i8042", "pcspkr", "isa006",
-            "acpi", "cachyos", "mesa"};
+            "acpi", "cachyos", "mesa", "intel", "linux"};
 
-    // S26 Ultra style sensor set: present-but-generic, nothing host-specific.
-    // Real values would need HAL; presence + neutral vendor is enough for
-    // DeviceInfoHW while games keep working (no fake data injected).
+    // S26 Ultra style sensor set: presence + neutral vendor so DeviceInfoHW
+    // SENSORS tab is fully populated. No fake data injected (values come
+    // from the real HAL pass-through); only host-named entries filtered.
 
     public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
