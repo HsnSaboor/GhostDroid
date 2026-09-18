@@ -10,8 +10,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.concurrent.CopyOnWriteArraySet;
 
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
-
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
@@ -63,13 +61,27 @@ public final class XposedModuleImpl extends XposedModule {
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         try {
-            XC_LoadPackage.LoadPackageParam lp = newLoadPackageParam();
-            lp.packageName = param.getPackageName();
-            lp.processName = getProcessName(param);
-            lp.classLoader = param.getDefaultClassLoader();
-            lp.appInfo = param.getApplicationInfo();
-            lp.isFirstApplication = param.isFirstPackage();
-            new MainHook().handleLoadPackage(lp);
+            // Vector's runtime provides the legacy de.robv classes inside
+            // target processes (see framework/vector.dex: XC_LoadPackage,
+            // XposedBridge, XposedHelpers all present). Resolve through the
+            // module classloader explicitly — the compileOnly api:82 + stub
+            // jars are NOT packaged into the APK, so a direct static
+            // reference would throw NoClassDefFoundError at class-load time
+            // (verified 2026-09-19: onPackageLoaded delegation failed).
+            // Reflection keeps this class loadable even if Vector ever drops
+            // a legacy symbol; failures degrade to "module loaded, no hooks"
+            // instead of a crash.
+            ClassLoader loader = XposedModuleImpl.class.getClassLoader();
+            Class<?> lpClass = Class.forName(
+                    "de.robv.android.xposed.callbacks.XC_LoadPackage$LoadPackageParam",
+                    false, loader);
+            Object lp = allocateLoadPackageParam(lpClass);
+            setField(lpClass, lp, "packageName", param.getPackageName());
+            setField(lpClass, lp, "processName", getProcessName(param));
+            setField(lpClass, lp, "classLoader", param.getDefaultClassLoader());
+            setField(lpClass, lp, "appInfo", param.getApplicationInfo());
+            setField(lpClass, lp, "isFirstApplication", param.isFirstPackage());
+            invokeMainHookHandleLoadPackage(lp);
         } catch (Throwable t) {
             Log.e(TAG, "onPackageLoaded delegation failed: "
                     + t.getClass().getSimpleName() + ": " + t.getMessage(), t);
@@ -91,39 +103,41 @@ public final class XposedModuleImpl extends XposedModule {
 
     // Runtime LoadPackageParam takes a CopyOnWriteArraySet; the api-82 stub
     // exposes only a package-private no-arg ctor. Reflect to bypass the mismatch.
-    private static XC_LoadPackage.LoadPackageParam newLoadPackageParam() throws Exception {
-        for (Constructor<?> c : XC_LoadPackage.LoadPackageParam.class.getDeclaredConstructors()) {
+    // NOTE: callers must pass the Class resolved from THIS module's loader
+    // (Vector injects legacy de.robv classes into target processes).
+    private static Object allocateLoadPackageParam(Class<?> lpClass) throws Exception {
+        for (Constructor<?> c : lpClass.getDeclaredConstructors()) {
             c.setAccessible(true);
             Class<?>[] params = c.getParameterTypes();
             if (params.length == 0) {
-                return (XC_LoadPackage.LoadPackageParam) c.newInstance();
+                return c.newInstance();
             }
             if (params.length == 1 && CopyOnWriteArraySet.class.isAssignableFrom(params[0])) {
-                return (XC_LoadPackage.LoadPackageParam)
-                        c.newInstance(new CopyOnWriteArraySet<>());
+                return c.newInstance(new CopyOnWriteArraySet<>());
             }
         }
-        try {
-            return allocateLoadPackageParam();
-        } catch (Throwable t) {
-            NoSuchMethodException e =
-                    new NoSuchMethodException("LoadPackageParam constructor not found");
-            e.initCause(t);
-            throw e;
-        }
-    }
-
-    private static XC_LoadPackage.LoadPackageParam allocateLoadPackageParam() throws Exception {
         Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
         java.lang.reflect.Field field = unsafeClass.getDeclaredField("theUnsafe");
         field.setAccessible(true);
         Object unsafe = field.get(null);
         Method allocateInstance = unsafeClass.getMethod("allocateInstance", Class.class);
-        Object value = allocateInstance.invoke(unsafe, XC_LoadPackage.LoadPackageParam.class);
-        if (value instanceof XC_LoadPackage.LoadPackageParam) {
-            Log.w(TAG, "LoadPackageParam created via Unsafe fallback");
-            return (XC_LoadPackage.LoadPackageParam) value;
-        }
-        throw new ClassCastException("Unexpected LoadPackageParam allocation result");
+        Object value = allocateInstance.invoke(unsafe, lpClass);
+        Log.w(TAG, "LoadPackageParam created via Unsafe fallback");
+        return value;
+    }
+
+    private static void setField(Class<?> cls, Object obj, String name, Object value)
+            throws Exception {
+        java.lang.reflect.Field f = cls.getField(name);
+        f.set(obj, value);
+    }
+
+    private static void invokeMainHookHandleLoadPackage(Object lp) throws Exception {
+        Method m = MainHook.class.getMethod(
+                "handleLoadPackage",
+                Class.forName(
+                        "de.robv.android.xposed.callbacks.XC_LoadPackage$LoadPackageParam",
+                        false, XposedModuleImpl.class.getClassLoader()));
+        m.invoke(new MainHook(), lp);
     }
 }
