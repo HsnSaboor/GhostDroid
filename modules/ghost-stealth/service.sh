@@ -118,3 +118,34 @@ fi
 if [ -f /proc/asound/version ]; then
     mount -o bind "$MODDIR/assets/fake_asound_version" /proc/asound/version 2>/dev/null || true
 fi
+# ALSA detail nodes: GENERAL Sound string came from /proc/asound/card0/id
+# (PCH), not cards/version. Bind-report SM8850 across id/cards/modules,
+# codec (Realtek ALC257/Intel HDMI -> Qualcomm SM8850), and pcm info
+# (ALC257 Analog -> SM8850 Audio).
+if [ -f /proc/asound/card0/id ]; then
+    mount -o bind "$MODDIR/assets/fake_sound_id" /proc/asound/card0/id 2>/dev/null || true
+fi
+if [ -f /proc/asound/modules ]; then
+    mount -o bind "$MODDIR/assets/fake_asound_modules" /proc/asound/modules 2>/dev/null || true
+fi
+for f in /proc/asound/card0/codec#*; do
+    [ -f "$f" ] || continue
+    mount -o bind "$MODDIR/assets/fake_codec" "$f" 2>/dev/null || true
+done
+for f in /proc/asound/card0/pcm*/info; do
+    [ -f "$f" ] || continue
+    mount -o bind "$MODDIR/assets/fake_pcm_info" "$f" 2>/dev/null || true
+done
+# PCI enumeration: GENERAL Wi-Fi row came from /sys/bus/pci DRIVER=iwlwifi
+# + /proc/bus/pci/devices Intel IDs. Blind pci/devices listing, bind fake
+# single-Qualcomm devices table, and blind pci/drivers scan dir.
+if [ -f /proc/bus/pci/devices ]; then
+    mount -o bind "$MODDIR/assets/fake_pci_devices" /proc/bus/pci/devices 2>/dev/null || true
+fi
+if [ -d /sys/bus/pci/drivers ]; then
+    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/bus/pci/drivers 2>/dev/null || true
+    mkdir -p /sys/bus/pci/drivers/pcieport /sys/bus/pci/drivers/virtio-pci 2>/dev/null || true
+fi
+if [ -d /sys/devices/pci0000:00 ]; then
+    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/devices/pci0000:00 2>/dev/null || true
+fi

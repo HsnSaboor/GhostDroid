@@ -1,0 +1,8 @@
+card: 0
+device: 0
+subdevice: 0
+stream: PLAYBACK
+id: SM8850 Audio
+name: SM8850 Audio
+subname: subdevice #0
+class: 0
