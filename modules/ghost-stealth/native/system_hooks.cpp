@@ -33,11 +33,14 @@ int my_uname(struct utsname* u) {
         std::string version = LookupOr("kernel.version",
                                        "#1 SMP PREEMPT Wed May 22 18:00:00 UTC 2024");
         std::string nodename = LookupOr("kernel.hostname", "localhost");
+        std::string machine = LookupOr("kernel.machine", "aarch64");
 
-        // sysname/machine left as Linux/aarch64.
+        // sysname left as Linux; machine forced aarch64 (DeviceInfoHW SoC
+        // tab leaked x86_64 because u->machine was untouched).
         snprintf(u->release, sizeof(u->release), "%s", release.c_str());
         snprintf(u->version, sizeof(u->version), "%s", version.c_str());
         snprintf(u->nodename, sizeof(u->nodename), "%s", nodename.c_str());
+        snprintf(u->machine, sizeof(u->machine), "%s", machine.c_str());
     }
     return rc;
 }

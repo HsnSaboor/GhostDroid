@@ -1,0 +1,13 @@
+/dev/block/dm-0 / ext4 ro,seclabel,relatime 0 0
+/dev/block/dm-1 /vendor ext4 ro,seclabel,relatime 0 0
+/dev/block/dm-2 /product ext4 ro,seclabel,relatime 0 0
+/dev/block/dm-3 /system_ext ext4 ro,seclabel,relatime 0 0
+/dev/block/dm-4 /odm ext4 ro,seclabel,relatime 0 0
+/dev/block/dm-5 /vendor_dlkm ext4 ro,seclabel,relatime 0 0
+/dev/block/by-name/userdata /data f2fs rw,seclabel,nosuid,nodev,noatime 0 0
+/dev/block/by-name/cache /cache ext4 rw,seclabel,nosuid,nodev,noatime 0 0
+/dev/block/by-name/metadata /metadata ext4 rw,seclabel,nosuid,nodev,noatime 0 0
+tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,mode=755 0 0
+tmpfs /storage tmpfs rw,seclabel,nosuid,nodev,relatime,mode=751,gid=4000 0 0
+/dev/block/by-name/userdata /mnt/expand/00000000-0000-0000-0000-000000000000 f2fs rw,seclabel,nosuid,nodev,noatime 0 0
+/dev/fuse /mnt/user/0/emulated fuse rw,nosuid,nodev,noexec,noatime,user_id=0,group_id=0 0 0
