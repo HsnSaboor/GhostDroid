@@ -19,6 +19,8 @@ namespace {
 #define FAKE_INPUT "/data/local/tmp/gs_fake_input_devices"
 #define FAKE_ASOUND "/data/local/tmp/gs_fake_asound_cards"
 #define FAKE_USB "/data/local/tmp/gs_fake_usb_devices"
+#define FAKE_PCI_DEVICES "/data/local/tmp/gs_fake_pci_devices"
+#define FAKE_PCI_UEVENT "/data/local/tmp/gs_fake_pci_uevent"
 
 int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
@@ -53,6 +55,13 @@ const char* Redirect(const char* path) {
     // Directory listing itself is per-node; mask the uevent/product/vendor
     // strings via the common parent read fallback below.
     if (path != nullptr && strcmp(path, "/sys/bus/usb/devices") == 0) return FAKE_USB;
+    // PCI Wi-Fi/iGPU: /proc/bus/pci/devices leaks Intel IDs, pci uevent
+    // leaks DRIVER=iwlwifi. Per-process redirect only — NEVER global tmpfs
+    // (minigbm/libdrm need real PCI sysfs for Intel GPU BO alloc).
+    if (path != nullptr && strcmp(path, "/proc/bus/pci/devices") == 0) return FAKE_PCI_DEVICES;
+    if (path != nullptr && PathStartsWith(path, "/sys/bus/pci/devices/") &&
+        strlen(path) >= 7 && strcmp(path + strlen(path) - 7, "/uevent") == 0)
+        return FAKE_PCI_UEVENT;
     return path;
 }
 

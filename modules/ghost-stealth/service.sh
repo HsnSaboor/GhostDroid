@@ -99,19 +99,17 @@ fi
 # WiFi/sound strings: DeviceInfoHW GENERAL tab reads these via sysfs/ALSA
 # paths (not open-hooked): iwlwifi came from /sys/bus/pci DRIVER=iwlwifi
 # (PCI_ID=8086:24FD), PCH from /sys/class/sound/card0/id + ALSA version
-# cachyos. Mask /sys/module scan dir, PCI uevent driver strings, sound id,
-# ALSA version. /sys/module tmpfs hides iwl*/snd_hda*/thinkpad_acpi (350
-# host entries); /sys/bus/pci tmpfs blinds DRIVER/PCI_ID enumeration with
-# a single clean Qualcomm node; sound id bind reports SM8850.
+# cachyos. Mask /sys/module scan dir, sound id, ALSA version.
+# NOTE 2026-09-19: NEVER tmpfs-mask /sys/bus/pci/devices, /sys/bus/pci/drivers,
+# or /sys/devices/pci0000:00 globally — minigbm/libdrm need the Intel GPU
+# at 0000:00:02 (0x8086) to allocate GBM BOs; blank tmpfs caused
+# "Unable to create BO" + SF abort "output buffer not gpu writeable".
+# PCI masking is per-process only (file_hooks.cpp / Vector).
 if [ -d /sys/module ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/module 2>/dev/null || true
     mkdir -p /sys/module/virtio_gpu /sys/module/virtio_input /sys/module/virtio_snd /sys/module/virtio_blk /sys/module/virtio_net 2>/dev/null || true
 fi
-if [ -d /sys/bus/pci/devices ]; then
-    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/bus/pci/devices 2>/dev/null || true
-    mkdir -p /sys/bus/pci/devices/0000:00:00 2>/dev/null || true
-    cp "$MODDIR/assets/fake_pci_uevent" /sys/bus/pci/devices/0000:00:00.0/uevent 2>/dev/null || true
-fi
+# PCI sysfs left UNMASKED globally (see NOTE above).
 if [ -d /sys/class/sound ]; then
     for f in /sys/class/sound/card*/id; do
         [ -f "$f" ] || continue
@@ -139,16 +137,11 @@ for f in /proc/asound/card0/pcm*/info; do
     [ -f "$f" ] || continue
     mount -o bind "$MODDIR/assets/fake_pcm_info" "$f" 2>/dev/null || true
 done
-# PCI enumeration: GENERAL Wi-Fi row came from /sys/bus/pci DRIVER=iwlwifi
-# + /proc/bus/pci/devices Intel IDs. Blind pci/devices listing, bind fake
-# single-Qualcomm devices table, and blind pci/drivers scan dir.
-if [ -f /proc/bus/pci/devices ]; then
-    mount -o bind "$MODDIR/assets/fake_pci_devices" /proc/bus/pci/devices 2>/dev/null || true
-fi
-if [ -d /sys/bus/pci/drivers ]; then
-    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/bus/pci/drivers 2>/dev/null || true
-    mkdir -p /sys/bus/pci/drivers/pcieport /sys/bus/pci/drivers/virtio-pci 2>/dev/null || true
-fi
-if [ -d /sys/devices/pci0000:00 ]; then
-    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/devices/pci0000:00 2>/dev/null || true
-fi
+# PCI enumeration (Wi-Fi DRIVER=iwlwifi + Intel IDs): per-process ONLY via
+# file_hooks.cpp (serves /data/local/tmp/gs_fake_pci_*). NEVER global
+# tmpfs/bind here — minigbm/libdrm need real PCI sysfs for Intel GPU BO
+# alloc (2026-09-19 root cause: blank tmpfs -> "Unable to create BO").
+for f in fake_pci_devices fake_pci_uevent; do
+    cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
+    chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
+done
