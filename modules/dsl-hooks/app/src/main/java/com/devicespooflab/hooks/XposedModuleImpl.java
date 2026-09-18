@@ -61,31 +61,56 @@ public final class XposedModuleImpl extends XposedModule {
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         try {
-            // Vector's runtime provides the legacy de.robv classes inside
-            // target processes (see framework/vector.dex: XC_LoadPackage,
-            // XposedBridge, XposedHelpers all present). Resolve through the
-            // module classloader explicitly — the compileOnly api:82 + stub
-            // jars are NOT packaged into the APK, so a direct static
-            // reference would throw NoClassDefFoundError at class-load time
-            // (verified 2026-09-19: onPackageLoaded delegation failed).
-            // Reflection keeps this class loadable even if Vector ever drops
-            // a legacy symbol; failures degrade to "module loaded, no hooks"
-            // instead of a crash.
-            ClassLoader loader = XposedModuleImpl.class.getClassLoader();
-            Class<?> lpClass = Class.forName(
-                    "de.robv.android.xposed.callbacks.XC_LoadPackage$LoadPackageParam",
-                    false, loader);
+            // Vector injects legacy de.robv classes via its OWN
+            // VectorModuleClassLoader — NOT the module APK classloader
+            // (verified 2026-09-19: Class.forName through module loader
+            // throws ClassNotFoundException even though vector.dex ships
+            // XC_LoadPackage). So resolve through the call stack: walk up
+            // from Vector's callback frame (x2.a/s.d/h2.b in the stack)
+            // to the ClassLoader that actually hosts de.robv.
+            Class<?> lpClass = findLegacyLoadPackageParamClass();
             Object lp = allocateLoadPackageParam(lpClass);
             setField(lpClass, lp, "packageName", param.getPackageName());
             setField(lpClass, lp, "processName", getProcessName(param));
             setField(lpClass, lp, "classLoader", param.getDefaultClassLoader());
             setField(lpClass, lp, "appInfo", param.getApplicationInfo());
             setField(lpClass, lp, "isFirstApplication", param.isFirstPackage());
-            invokeMainHookHandleLoadPackage(lp);
+            invokeMainHookHandleLoadPackage(lpClass, lp);
         } catch (Throwable t) {
             Log.e(TAG, "onPackageLoaded delegation failed: "
                     + t.getClass().getSimpleName() + ": " + t.getMessage(), t);
         }
+    }
+
+    // Walk the current thread's stack: Vector calls onPackageLoaded from
+    // its own frames (x2.a/s.d/h2.b...), whose classes live in the loader
+    // that also hosts de.robv legacy classes. Try each frame's loader in
+    // order; fall back to module + app loaders.
+    private static Class<?> findLegacyLoadPackageParamClass() throws Exception {
+        final String target =
+                "de.robv.android.xposed.callbacks.XC_LoadPackage$LoadPackageParam";
+        for (StackTraceElement el : Thread.currentThread().getStackTrace()) {
+            try {
+                Class<?> frame = Class.forName(el.getClassName(), false,
+                        XposedModuleImpl.class.getClassLoader());
+                if (frame == null) continue;
+                ClassLoader l = frame.getClassLoader();
+                if (l == null) continue;
+                try {
+                    return Class.forName(target, false, l);
+                } catch (ClassNotFoundException ignored) {
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        // Fallbacks: module loader, then thread context loader.
+        try {
+            return Class.forName(target, false,
+                    XposedModuleImpl.class.getClassLoader());
+        } catch (ClassNotFoundException ignored) {
+        }
+        return Class.forName(target, false,
+                Thread.currentThread().getContextClassLoader());
     }
 
     private static String getProcessName(XposedModuleInterface.PackageLoadedParam param) {
@@ -132,12 +157,9 @@ public final class XposedModuleImpl extends XposedModule {
         f.set(obj, value);
     }
 
-    private static void invokeMainHookHandleLoadPackage(Object lp) throws Exception {
-        Method m = MainHook.class.getMethod(
-                "handleLoadPackage",
-                Class.forName(
-                        "de.robv.android.xposed.callbacks.XC_LoadPackage$LoadPackageParam",
-                        false, XposedModuleImpl.class.getClassLoader()));
+    private static void invokeMainHookHandleLoadPackage(Class<?> lpClass, Object lp)
+            throws Exception {
+        Method m = MainHook.class.getMethod("handleLoadPackage", lpClass);
         m.invoke(new MainHook(), lp);
     }
 }
