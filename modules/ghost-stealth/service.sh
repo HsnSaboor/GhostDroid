@@ -74,3 +74,22 @@ for cpu in 0 1 2 3 4 5 6 7; do
         echo $F > "$D/$node" 2>/dev/null || mount -o bind "$MODDIR/fake_freq_$cpu" "$D/$node" 2>/dev/null || true
     done
 done
+# USB mask: DeviceInfoHW enumerates via opendir/getdents64, bypassing
+# libc open hooks. Tmpfs blinds listing globally (kills SunplusIT/xhci).
+if [ -d /sys/bus/usb/devices ]; then
+    mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/bus/usb/devices 2>/dev/null || true
+    mkdir -p /sys/bus/usb/devices/usb1 2>/dev/null || true
+    echo "Qualcomm Technologies, Inc" > /sys/bus/usb/devices/usb1/manufacturer 2>/dev/null || true
+    echo "Snapdragon USB Controller" > /sys/bus/usb/devices/usb1/product 2>/dev/null || true
+fi
+# Audio/input/modules binds: global masks (per-process open redirect in
+# file_hooks.cpp covers other mount namespaces).
+if [ -f /proc/asound/cards ]; then
+    mount -o bind "$MODDIR/assets/fake_asound_cards" /proc/asound/cards 2>/dev/null || true
+fi
+if [ -f /proc/bus/input/devices ]; then
+    mount -o bind "$MODDIR/assets/fake_input_devices" /proc/bus/input/devices 2>/dev/null || true
+fi
+if [ -f /proc/modules ]; then
+    mount -o bind "$MODDIR/assets/fake_modules" /proc/modules 2>/dev/null || true
+fi
