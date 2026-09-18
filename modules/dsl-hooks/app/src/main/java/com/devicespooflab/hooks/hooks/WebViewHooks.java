@@ -375,10 +375,12 @@ public class WebViewHooks {
                 .replace("__DS_GPU_RENDERER__", esc(ConfigManager.getGpuRenderer()))
                 .replace("__DS_UACH_MODEL__", esc(ConfigManager.getBuildModel()))
                 .replace("__DS_UACH_PLATFORM_VERSION__", esc(release + ".0.0"))
-                .replace("__DS_SCREEN_W__", Integer.toString(ConfigManager.getScreenWidth()))
-                .replace("__DS_SCREEN_H__", Integer.toString(ConfigManager.getScreenHeight()))
+                .replace("__DS_SCREEN_W__", "0")
+                .replace("__DS_SCREEN_H__", "0")
                 .replace("__DS_DPR__",
-                        Float.toString(ConfigManager.getScreenDensity() / 160.0f));
+                        // Resolution: NOT spoofed. Neutral 1 so WebView
+                        // uses the real Waydroid window, no zoom.
+                        Float.toString(1.0f));
     }
 
     private static String esc(String s) {

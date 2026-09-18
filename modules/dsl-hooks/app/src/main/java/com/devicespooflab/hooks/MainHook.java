@@ -9,7 +9,6 @@ import com.devicespooflab.hooks.hooks.AppSetIdHooks;
 import com.devicespooflab.hooks.hooks.BatteryHooks;
 import com.devicespooflab.hooks.hooks.BuildHooks;
 import com.devicespooflab.hooks.hooks.CameraHooks;
-import com.devicespooflab.hooks.hooks.DisplayHooks;
 import com.devicespooflab.hooks.hooks.EuiccHooks;
 import com.devicespooflab.hooks.hooks.GpuHooks;
 import com.devicespooflab.hooks.hooks.HardwareHooks;
@@ -213,16 +212,9 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": NetworkHooks failed: " + e.getMessage());
         }
 
-        if (!isOwnPackage) {
-            try {
-                DisplayHooks.hook(lpparam);
-                logInfo(verbose, TAG + ": DisplayHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": DisplayHooks failed: " + e.getMessage());
-            }
-        } else {
-            logInfo(verbose, TAG + ": DisplayHooks skipped for module process");
-        }
+        // DisplayHooks REMOVED: any Java display/resolution spoof breaks
+        // persist.waydroid.width/height. Waydroid owns the real res.
+        logInfo(verbose, TAG + ": DisplayHooks removed (Waydroid owns res)");
 
         try {
             SensorHooks.hook(lpparam);

@@ -407,7 +407,8 @@ public class ConfigManager {
         defaults.put("ro.product.cpu.abilist64", "arm64-v8a");
         defaults.put("ro.product.cpu.abilist32", "armeabi-v7a,armeabi");
         defaults.put("ro.arch", "arm64");
-        defaults.put("ro.sf.lcd_density", "512");
+        // Resolution: NOT spoofed. Any ro.sf.lcd_density / screen.* key
+        // breaks persist.waydroid.width/height. Waydroid owns the real res.
         defaults.put("ro.treble.enabled", "true");
 
         defaults.put("hardware.cpu.cores", "8");
@@ -429,9 +430,8 @@ public class ConfigManager {
         defaults.put("ro.soc.model", "SM8850");
         defaults.put("ro.soc.manufacturer", "Qualcomm");
 
-        defaults.put("screen.width", "1440");
-        defaults.put("screen.height", "3120");
-        defaults.put("screen.density", "512");
+        // Resolution: NOT spoofed (screen.* removed). Waydroid owns
+        // the real res via persist.waydroid.width/height.
 
         defaults.put("memory.total_kb", "12582912");
         defaults.put("memory.available_kb", "10485760");
@@ -624,14 +624,14 @@ public class ConfigManager {
                 "ro.boot.hardware", "ro.boot.hardware.vulkan", "ro.boot.hardware.gltransport",
                 "ro.boot.mode", "ro.product.cpu.abi", "ro.product.cpu.abilist",
                 "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.arch",
-                "ro.sf.lcd_density", "ro.treble.enabled", "ro.hardware.vulkan",
+                "ro.treble.enabled", "ro.hardware.vulkan",
                 "ro.hardware.gralloc", "ro.hardware.power", "ro.hardware.egl",
                 "hardware.cpu.cores", "cpuinfo.cores", "cpuinfo.bogomips",
                 "cpuinfo.features", "cpuinfo.implementer", "cpuinfo.architecture",
                 "cpuinfo.variants", "cpuinfo.parts", "cpuinfo.revisions",
                 "cpuinfo.hardware", "cpuinfo.revision", "memory.total_kb",
                 "memory.available_kb", "memory.class_mb", "memory.large_class_mb",
-                "native_heap.scale", "screen.width", "screen.height", "screen.density",
+                "native_heap.scale",
                 "dalvik.vm.heapsize", "dalvik.vm.heapgrowthlimit",
                 "dalvik.vm.heapmaxfree", "dalvik.vm.heapminfree",
                 "dalvik.vm.heapstartsize", "dalvik.vm.heaptargetutilization");
@@ -1157,15 +1157,18 @@ public class ConfigManager {
     }
 
     public static int getScreenWidth() {
-        return propIntDef("screen.width", 1440);
+        // Resolution: NOT spoofed. Kept only so WebView DPR math has a
+        // sane fallback; DisplayHooks is removed so nothing calls this
+        // to override the real Waydroid window.
+        return propIntDef("screen.width", 1920);
     }
 
     public static int getScreenHeight() {
-        return propIntDef("screen.height", 3120);
+        return propIntDef("screen.height", 1080);
     }
 
     public static int getScreenDensity() {
-        return propIntDef("screen.density", 512);
+        return propIntDef("screen.density", 225);
     }
 
     public static int getCpuCoreCount() {
