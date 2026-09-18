@@ -309,7 +309,7 @@ public class ConfigManager {
         defaults.put("ro.product.manufacturer", "samsung");
         defaults.put("ro.product.model", "SM-S948B");
         defaults.put("ro.product.name", "m3qxeea");
-        defaults.put("ro.product.device", "m3qxeea");
+        defaults.put("ro.product.device", "m3q");
         defaults.put("ro.product.board", "sm8850");
         defaults.put("ro.hardware", "m3q");
         defaults.put("ro.board.platform", "sm8850");
@@ -480,7 +480,7 @@ public class ConfigManager {
         defaults.put("battery.energy_counter_nwh", "16000000000");
 
         defaults.put("storage.total_bytes", "274877906944");
-        defaults.put("storage.available_bytes", "198000000000");
+        defaults.put("storage.available_bytes", "214748364800");
 
         defaults.put("kernel.osrelease", "5.15.148-android13-4-00003-gabcdef123456-ab11223344");
         defaults.put("kernel.version", "#1 SMP PREEMPT Wed May 22 18:00:00 UTC 2024");
@@ -1243,23 +1243,23 @@ public class ConfigManager {
     }
 
     public static long getBatteryCapacityUah() {
-        return propLongDef("battery.capacity_uah", 5050000L);
+        return propLongDef("battery.capacity_uah", 5000000L);
     }
 
     public static long getBatteryChargeCounterUah() {
-        return propLongDef("battery.charge_counter_uah", 3800000L);
+        return propLongDef("battery.charge_counter_uah", 4250000L);
     }
 
     public static long getBatteryEnergyCounterNwh() {
-        return propLongDef("battery.energy_counter_nwh", 14250000000L);
+        return propLongDef("battery.energy_counter_nwh", 16000000000L);
     }
 
     public static long getStorageTotalBytes() {
-        return propLongDef("storage.total_bytes", 137438953472L);
+        return propLongDef("storage.total_bytes", 274877906944L);
     }
 
     public static long getStorageAvailableBytes() {
-        return propLongDef("storage.available_bytes", 84296499200L);
+        return propLongDef("storage.available_bytes", 214748364800L);
     }
 
     public static String getKernelOsRelease() {
