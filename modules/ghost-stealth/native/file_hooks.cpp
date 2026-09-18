@@ -16,7 +16,7 @@ namespace {
 // lives at a world-readable path service.sh maintains.
 #define FAKE_MOUNTS "/data/local/tmp/gs_fake_mounts"
 
-bool (*orig_open)(const char*, int, ...) = nullptr;
+int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
 FILE* (*orig_fopen)(const char*, const char*) = nullptr;
 
@@ -32,36 +32,39 @@ const char* Redirect(const char* path) {
     return IsMountsPath(path) ? FAKE_MOUNTS : path;
 }
 
+// NOTE: orig_open/openat MUST be int-returning variadic pointers. An early
+// revision declared them `bool`, which truncated every fd to 1 and killed
+// every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
-    mode_t mode = 0;
-    if ((flags & O_CREAT) != 0) {
-        va_list ap;
-        va_start(ap, flags);
-        mode = va_arg(ap, mode_t);
-        va_end(ap);
-    }
     const char* eff = Redirect(path);
     if (eff != path) {
         // Read-only view: strip write/creat so apps can't corrupt the fake.
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-        return orig_open(eff, flags | O_RDONLY, mode);
+        return orig_open(eff, flags | O_RDONLY, (mode_t)0);
     }
-    return orig_open(path, flags, mode);
-}
-
-int my_openat(int dirfd, const char* path, int flags, ...) {
-    mode_t mode = 0;
     if ((flags & O_CREAT) != 0) {
         va_list ap;
         va_start(ap, flags);
-        mode = va_arg(ap, mode_t);
+        mode_t mode = va_arg(ap, mode_t);
         va_end(ap);
+        return orig_open(path, flags, mode);
     }
+    return orig_open(path, flags);
+}
+
+int my_openat(int dirfd, const char* path, int flags, ...) {
     if (dirfd == AT_FDCWD && IsMountsPath(path)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-        return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, mode);
+        return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
     }
-    return orig_openat(dirfd, path, flags, mode);
+    if ((flags & O_CREAT) != 0) {
+        va_list ap;
+        va_start(ap, flags);
+        mode_t mode = va_arg(ap, mode_t);
+        va_end(ap);
+        return orig_openat(dirfd, path, flags, mode);
+    }
+    return orig_openat(dirfd, path, flags);
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
@@ -99,12 +102,11 @@ void InstallFileHooks() {
                                 reinterpret_cast<void**>(&orig_openat));
     bool ok_fopen = HookExport("fopen", reinterpret_cast<void*>(&my_fopen),
                                reinterpret_cast<void**>(&orig_fopen));
-    // open64/openat64/fopen64 alias to the 64-bit variants on LP64; hook
-    // best-effort (missing symbols skipped, no crash).
-    bool ok_open64 = HookExport("open64", reinterpret_cast<void*>(&my_open),
-                                reinterpret_cast<void**>(&orig_open));
-    DS_LOGI("file hooks: open=%d openat=%d fopen=%d open64=%d",
-            ok_open, ok_openat, ok_fopen, ok_open64);
+    // NOTE: no open64/openat64 hook. On LP64 open==open64 (same address);
+    // hooking the alias second would chain-replace orig_open with my_open
+    // and recurse / corrupt fds.
+    DS_LOGI("file hooks: open=%d openat=%d fopen=%d",
+            ok_open, ok_openat, ok_fopen);
 }
 
 }  // namespace gs
