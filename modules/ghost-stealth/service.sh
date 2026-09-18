@@ -37,8 +37,11 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices; do
     chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
 done
 cp "$MODDIR"/assets/fake_mounts "$MODDIR/fake_mounts" 2>/dev/null || true
-mount -o bind "$MODDIR/fake_mounts" /proc/mounts 2>/dev/null || true
-mount -o bind "$MODDIR/fake_mounts" /proc/self/mountinfo 2>/dev/null || true
+# NOTE: NEVER bind /proc/mounts or /proc/self/mountinfo globally — Mesa
+# Gallium + Bionic cgroups need real mount paths; global bind crashes
+# SurfaceFlinger in primeCache() and deadlocks system_server (2026-09-18).
+# Mounts masking is per-process only via file_hooks.cpp open/openat/fopen
+# redirect serving /data/local/tmp/gs_fake_mounts.
 # Block mask: hide host nvme0n1 from /sys/block (Storage tab). Guarded:
 # only when the dir exists; dummy sda/mmcblk0 keep enumeration sane.
 if [ -d /sys/block ]; then
