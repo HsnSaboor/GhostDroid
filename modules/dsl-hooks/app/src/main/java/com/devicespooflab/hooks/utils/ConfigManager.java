@@ -1300,6 +1300,14 @@ public class ConfigManager {
         return propStringDef("gpu.renderer", "Adreno (TM) 840");
     }
 
+    public static String getGpuUnmaskedVendor() {
+        return propStringDef("gpu.unmasked_vendor", getGpuVendor());
+    }
+
+    public static String getGpuUnmaskedRenderer() {
+        return propStringDef("gpu.unmasked_renderer", getGpuRenderer());
+    }
+
     // 0 means "use a default seed".
     public static long getFingerprintSeed() {
         if (!isIdentifierEnabled("fingerprint_seed")) return 0L;

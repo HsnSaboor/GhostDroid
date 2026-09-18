@@ -11,6 +11,7 @@ import com.devicespooflab.hooks.hooks.BuildHooks;
 import com.devicespooflab.hooks.hooks.CameraHooks;
 import com.devicespooflab.hooks.hooks.DisplayHooks;
 import com.devicespooflab.hooks.hooks.EuiccHooks;
+import com.devicespooflab.hooks.hooks.GpuHooks;
 import com.devicespooflab.hooks.hooks.HardwareHooks;
 import com.devicespooflab.hooks.hooks.InputDeviceHooks;
 import com.devicespooflab.hooks.hooks.LocaleHooks;
@@ -228,6 +229,13 @@ public class MainHook implements IXposedHookLoadPackage {
             logInfo(verbose, TAG + ": SensorHooks loaded");
         } catch (Exception e) {
             XposedBridge.log(TAG + ": SensorHooks failed: " + e.getMessage());
+        }
+
+        try {
+            GpuHooks.hook(lpparam);
+            logInfo(verbose, TAG + ": GpuHooks loaded");
+        } catch (Exception e) {
+            XposedBridge.log(TAG + ": GpuHooks failed: " + e.getMessage());
         }
 
         try {
