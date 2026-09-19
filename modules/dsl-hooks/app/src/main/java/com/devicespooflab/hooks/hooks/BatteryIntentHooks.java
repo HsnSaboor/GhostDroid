@@ -38,8 +38,20 @@ public class BatteryIntentHooks {
             }
         };
         // registerReceiver overloads vary by SDK — hook all, not each one.
-        HookFramework.hookAllMethods(Context.class, "registerReceiver", rewrite);
-        HookFramework.hookAllMethods(Context.class, "registerReceiverAsUser", rewrite);
+        // Context itself is abstract (no body to hook); the concrete
+        // ContextWrapper/ContextImpl overrides carry the implementation.
+        Class<?> wrapper = Legacy.findClassIfExists(
+                "android.content.ContextWrapper", lpparam.classLoader);
+        if (wrapper != null) {
+            HookFramework.hookAllMethods(wrapper, "registerReceiver", rewrite);
+            HookFramework.hookAllMethods(wrapper, "registerReceiverAsUser", rewrite);
+        }
+        Class<?> impl = Legacy.findClassIfExists(
+                "android.app.ContextImpl", lpparam.classLoader);
+        if (impl != null) {
+            HookFramework.hookAllMethods(impl, "registerReceiver", rewrite);
+            HookFramework.hookAllMethods(impl, "registerReceiverAsUser", rewrite);
+        }
     }
 
     private static void hookStickyBroadcast(HookContext lpparam) {

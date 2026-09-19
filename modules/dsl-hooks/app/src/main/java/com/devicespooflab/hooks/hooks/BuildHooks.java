@@ -24,8 +24,6 @@ public class BuildHooks {
             spoofBuildFields(buildClass);
             hookGetSerial(buildClass);
             hookGetRadioVersion(buildClass);
-            hookBuildGetString(buildClass);
-            hookBuildGetLong(buildClass);
             hookPartitionMethods(lpparam.classLoader);
             spoofVersionFields(lpparam.classLoader);
 
@@ -171,49 +169,6 @@ public class BuildHooks {
         } catch (NoSuchMethodError ignored) {
         } catch (Exception e) {
             Legacy.log(TAG + ": Failed to hook getRadioVersion(): " + e.getMessage());
-        }
-    }
-
-    private static void hookBuildGetString(Class<?> buildClass) {
-        try {
-            Legacy.findAndHookMethod(buildClass, "getString",
-                    String.class,
-                    new HookFramework.BeforeHook() {@Override
-                        public void before(HookFramework.HookChain chain) throws Throwable {
-                            String key = (String) chain.arg(0, null);
-                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
-                            if (spoofedValue != null) {
-                                chain.replaceResult(spoofedValue);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook Build.getString(): " + e.getMessage());
-        }
-    }
-
-    private static void hookBuildGetLong(Class<?> buildClass) {
-        try {
-            Legacy.findAndHookMethod(buildClass, "getLong",
-                    String.class, long.class,
-                    new HookFramework.BeforeHook() {@Override
-                        public void before(HookFramework.HookChain chain) throws Throwable {
-                            String key = (String) chain.arg(0, null);
-                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
-                            if (spoofedValue == null) {
-                                return;
-                            }
-
-                            try {
-                                chain.replaceResult(Long.parseLong(spoofedValue));
-                            } catch (NumberFormatException ignored) {
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook Build.getLong(): " + e.getMessage());
         }
     }
 

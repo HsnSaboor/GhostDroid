@@ -48,29 +48,6 @@ public class SettingsHooks {
         } catch (NoSuchMethodError ignored) {
         }
 
-        try {
-            Legacy.findAndHookMethod(clazz, "getString",
-                    ContentResolver.class, String.class, String.class,
-                    new HookFramework.BeforeHook() {@Override
-                        public void before(HookFramework.HookChain chain) {
-                            String name = (String) chain.arg(1, null);
-                            applySpoof(chain, name, spoofFlags);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(clazz, "getStringForUser",
-                    ContentResolver.class, String.class, int.class,
-                    new HookFramework.BeforeHook() {@Override
-                        public void before(HookFramework.HookChain chain) {
-                            String name = (String) chain.arg(1, null);
-                            applySpoof(chain, name, spoofFlags);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
     }
 
     private static void applySpoof(HookFramework.HookChain chain, String name, int spoofFlags) {
