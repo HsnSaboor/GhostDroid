@@ -52,6 +52,66 @@ public class BatteryIntentHooks {
             HookFramework.hookAllMethods(impl, "registerReceiver", rewrite);
             HookFramework.hookAllMethods(impl, "registerReceiverAsUser", rewrite);
         }
+        // Async path: apps that register a NON-null receiver get the sticky
+        // via onReceive(), never via the registerReceiver return. Hook the
+        // Intent extras themselves so both delivery paths see spoofed values.
+        hookBatteryIntentExtras(lpparam);
+    }
+
+    // Rewrite ACTION_BATTERY_CHANGED extras at read time. Covers async
+    // onReceive delivery (DeviceInfoHW Battery tab: Status/Power source
+    // still leaked Charging/AC with only the registerReceiver hook).
+    private static void hookBatteryIntentExtras(HookContext lpparam) {
+        Class<?> intentClass = Legacy.findClassIfExists(
+                "android.content.Intent", lpparam.classLoader);
+        if (intentClass == null) return;
+        HookFramework.Hook intSpoof = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                Object self = chain.thisObject();
+                if (!(self instanceof Intent)) return;
+                Intent intent = (Intent) self;
+                if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
+                String key = (String) chain.arg(0, null);
+                Integer spoofed = spoofedIntExtra(key);
+                if (spoofed != null) chain.replaceResult(spoofed);
+            }
+        };
+        Legacy.safeHook(TAG, "Intent.getIntExtra", () -> {
+            Legacy.findAndHookMethod(intentClass, "getIntExtra",
+                    String.class, int.class, intSpoof);
+        });
+        HookFramework.Hook stringSpoof = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                Object self = chain.thisObject();
+                if (!(self instanceof Intent)) return;
+                Intent intent = (Intent) self;
+                if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
+                String key = (String) chain.arg(0, null);
+                if (BatteryManager.EXTRA_TECHNOLOGY.equals(key)) {
+                    chain.replaceResult("Li-ion");
+                }
+            }
+        };
+        Legacy.safeHook(TAG, "Intent.getStringExtra", () -> {
+            Legacy.findAndHookMethod(intentClass, "getStringExtra",
+                    String.class, stringSpoof);
+        });
+    }
+
+    private static Integer spoofedIntExtra(String key) {
+        if (key == null) return null;
+        if (BatteryManager.EXTRA_LEVEL.equals(key)) return 85;
+        if (BatteryManager.EXTRA_SCALE.equals(key)) return 100;
+        if (BatteryManager.EXTRA_STATUS.equals(key)) {
+            return BatteryManager.BATTERY_STATUS_DISCHARGING;
+        }
+        if (BatteryManager.EXTRA_HEALTH.equals(key)) {
+            return BatteryManager.BATTERY_HEALTH_GOOD;
+        }
+        if (BatteryManager.EXTRA_PLUGGED.equals(key)) return 0;
+        if (BatteryManager.EXTRA_TEMPERATURE.equals(key)) return 350;
+        if (BatteryManager.EXTRA_VOLTAGE.equals(key)) return 3600;
+        return null;
     }
 
     private static void hookStickyBroadcast(HookContext lpparam) {
