@@ -53,7 +53,7 @@ dependencies {
     // Service bridge MUST be packaged (implementation): it provides
     // XposedProvider + IXposedService binder used for RemotePreferences.
     // (Verified present in classes.dex; do NOT demote to compileOnly.)
-    implementation("io.github.libxposed:service:102.0.0")
+    implementation("io.github.libxposed:service:101.0.0")
     // lsplt REMOVED (Java-only): native hook dep would pull the
     // LSPlt runtime into the APK for zero benefit.
     implementation("androidx.appcompat:appcompat:1.7.0")
