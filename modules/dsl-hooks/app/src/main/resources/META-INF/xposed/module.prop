@@ -5,4 +5,4 @@ versionCode=5
 author=DeviceSpoofLabs
 description=Standalone LSPosed module for runtime device identifier spoofing.
 targetApiVersion=102
-minApiVersion=100
+minApiVersion=101

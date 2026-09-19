@@ -18,16 +18,15 @@ import android.webkit.WebViewClient;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class WebViewHooks {
 
     private static final String TAG = "DeviceSpoofLab-WebView";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
             hookWebSettings(lpparam);
             hookWebViewConstructor(lpparam);
@@ -35,49 +34,47 @@ public class WebViewHooks {
             hookGetWebViewClient(lpparam);
             hookLoadUrl(lpparam);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": init failed: " + t);
+            Legacy.log(TAG + ": init failed: " + t);
         }
     }
 
-    private static void hookWebSettings(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> webViewClass = XposedHelpers.findClassIfExists(
+    private static void hookWebSettings(HookContext lpparam) {
+        Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
         try {
-            XposedHelpers.findAndHookMethod(webViewClass, "getSettings",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Object settings = param.getResult();
+            Legacy.findAndHookMethod(webViewClass, "getSettings",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            Object settings = result;
                             if (settings == null) return;
                             String ua = ConfigManager.getWebViewUserAgent();
                             if (ua != null) {
                                 try {
-                                    XposedHelpers.callMethod(settings, "setUserAgentString", ua);
+                                    Legacy.callMethod(settings, "setUserAgentString", ua);
                                 } catch (Throwable ignored) {}
                             }
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook WebView.getSettings: " + t);
+            Legacy.log(TAG + ": failed to hook WebView.getSettings: " + t);
         }
     }
 
-    private static void hookWebViewConstructor(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> webViewClass = XposedHelpers.findClassIfExists(
+    private static void hookWebViewConstructor(HookContext lpparam) {
+        Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
-        XC_MethodHook setUaHook = new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
+        HookFramework.Hook setUaHook = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                 try {
-                    Object webView = param.thisObject;
-                    Object settings = XposedHelpers.callMethod(webView, "getSettings");
+                    Object webView = chain.thisObject();
+                    Object settings = Legacy.callMethod(webView, "getSettings");
                     String ua = ConfigManager.getWebViewUserAgent();
                     if (ua != null) {
-                        XposedHelpers.callMethod(settings, "setUserAgentString", ua);
+                        Legacy.callMethod(settings, "setUserAgentString", ua);
                     }
                     if (webView instanceof WebView) {
                         ((WebView) webView).setWebViewClient(new SpoofingWebViewClient(null));
@@ -86,55 +83,50 @@ public class WebViewHooks {
             }
         };
 
-        try {
-            XposedHelpers.findAndHookConstructor(webViewClass,
-                    Context.class, setUaHook);
-        } catch (Throwable t) { logFail("WebView(Context)", t); }
-
-        try {
-            XposedHelpers.findAndHookConstructor(webViewClass,
-                    Context.class, android.util.AttributeSet.class, setUaHook);
-        } catch (Throwable t) { logFail("WebView(Context,AttributeSet)", t); }
-
-        try {
-            XposedHelpers.findAndHookConstructor(webViewClass,
-                    Context.class, android.util.AttributeSet.class, int.class, setUaHook);
-        } catch (Throwable t) { logFail("WebView(Context,AttributeSet,int)", t); }
+        final HookFramework.Hook uaHook = setUaHook;
+        HookFramework.hookAllConstructors(webViewClass, new HookFramework.Hook() {
+            @Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                try {
+                    uaHook.after(chain, result, error);
+                } catch (Throwable ignored) {
+                }
+            }
+        });
     }
 
-    private static void hookSetWebViewClient(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> webViewClass = XposedHelpers.findClassIfExists(
+    private static void hookSetWebViewClient(HookContext lpparam) {
+        Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
-        try {
-            XposedHelpers.findAndHookMethod(webViewClass, "setWebViewClient",
+        Legacy.safeHook(TAG, "WebView.setWebViewClient", () -> {
+            Legacy.findAndHookMethod(webViewClass, "setWebViewClient",
                     WebViewClient.class,
-                    new XC_MethodHook() {
+                    new HookFramework.BeforeHook() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            WebViewClient orig = (WebViewClient) param.args[0];
+                        public void before(HookFramework.HookChain chain) {
+                            WebViewClient orig = (WebViewClient) chain.arg(0, null);
                             if (orig instanceof SpoofingWebViewClient) return;
-                            param.args[0] = new SpoofingWebViewClient(orig);
+                            chain.setArg(0, new SpoofingWebViewClient(orig));
                         }
                     });
-        } catch (Throwable t) { logFail("WebView.setWebViewClient", t); }
+        });
     }
 
-    private static void hookGetWebViewClient(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> webViewClass = XposedHelpers.findClassIfExists(
+    private static void hookGetWebViewClient(HookContext lpparam) {
+        Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
         try {
-            XposedHelpers.findAndHookMethod(webViewClass, "getWebViewClient",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Object res = param.getResult();
+            Legacy.findAndHookMethod(webViewClass, "getWebViewClient",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            Object res = result;
                             if (res instanceof SpoofingWebViewClient) {
                                 WebViewClient delegate = ((SpoofingWebViewClient) res).delegate;
-                                param.setResult(delegate != null ? delegate : new WebViewClient());
+                                chain.replaceResult(delegate != null ? delegate : new WebViewClient());
                             }
                         }
                     });
@@ -143,30 +135,29 @@ public class WebViewHooks {
         }
     }
 
-    private static void hookLoadUrl(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> webViewClass = XposedHelpers.findClassIfExists(
+    private static void hookLoadUrl(HookContext lpparam) {
+        Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
-        XC_MethodHook injectHook = new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                injectAsync(param.thisObject);
+        HookFramework.Hook injectHook = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                injectAsync(chain.thisObject());
             }
         };
 
-        try {
-            XposedHelpers.findAndHookMethod(webViewClass, "loadUrl",
+        Legacy.safeHook(TAG, "WebView.loadUrl(String)", () -> {
+            Legacy.findAndHookMethod(webViewClass, "loadUrl",
                     String.class, injectHook);
-        } catch (Throwable t) { logFail("WebView.loadUrl(String)", t); }
+        });
 
         try {
-            XposedHelpers.findAndHookMethod(webViewClass, "loadUrl",
+            Legacy.findAndHookMethod(webViewClass, "loadUrl",
                     String.class, java.util.Map.class, injectHook);
         } catch (Throwable t) { /* overload */ }
 
         try {
-            XposedHelpers.findAndHookMethod(webViewClass, "loadDataWithBaseURL",
+            Legacy.findAndHookMethod(webViewClass, "loadDataWithBaseURL",
                     String.class, String.class, String.class, String.class, String.class,
                     injectHook);
         } catch (Throwable t) { /* overload */ }
@@ -185,10 +176,6 @@ public class WebViewHooks {
                 }
             });
         } catch (Throwable ignored) {}
-    }
-
-    private static void logFail(String what, Throwable t) {
-        XposedBridge.log(TAG + ": failed to hook " + what + ": " + t);
     }
 
     // Forwards every WebViewClient callback to the original (or the platform

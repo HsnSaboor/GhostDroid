@@ -18,65 +18,32 @@ import android.os.BatteryManager;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class BatteryIntentHooks {
 
     private static final String TAG = "DeviceSpoofLab-BatteryIntent";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hookRegisterReceiver(lpparam);
         hookStickyBroadcast(lpparam);
     }
 
-    private static void hookRegisterReceiver(XC_LoadPackage.LoadPackageParam lpparam) {
-        try {
-            XposedHelpers.findAndHookMethod(Context.class, "registerReceiver",
-                    BroadcastReceiver.class, IntentFilter.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Intent intent = (Intent) param.getResult();
-                            rewriteBatteryIntent(intent);
-                        }
-                    });
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook Context.registerReceiver: " + t);
-        }
-        try {
-            XposedHelpers.findAndHookMethod(Context.class, "registerReceiver",
-                    BroadcastReceiver.class, IntentFilter.class, String.class,
-                    android.os.Handler.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Intent intent = (Intent) param.getResult();
-                            rewriteBatteryIntent(intent);
-                        }
-                    });
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook Context.registerReceiver(4-arg): " + t);
-        }
+    private static void hookRegisterReceiver(HookContext lpparam) {
+        HookFramework.Hook rewrite = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                rewriteBatteryIntent((Intent) result);
+            }
+        };
+        // registerReceiver overloads vary by SDK — hook all, not each one.
+        HookFramework.hookAllMethods(Context.class, "registerReceiver", rewrite);
+        HookFramework.hookAllMethods(Context.class, "registerReceiverAsUser", rewrite);
     }
 
-    private static void hookStickyBroadcast(XC_LoadPackage.LoadPackageParam lpparam) {
-        try {
-            XposedHelpers.findAndHookMethod(Context.class, "registerReceiverAsUser",
-                    BroadcastReceiver.class, android.os.UserHandle.class,
-                    IntentFilter.class, String.class, android.os.Handler.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Intent intent = (Intent) param.getResult();
-                            rewriteBatteryIntent(intent);
-                        }
-                    });
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook Context.registerReceiverAsUser: " + t);
-        }
+    private static void hookStickyBroadcast(HookContext lpparam) {
+        // Covered by hookAllMethods above (registerReceiverAsUser included).
     }
 
     static void rewriteBatteryIntent(Intent intent) {

@@ -6,10 +6,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class PackageManagerHooks {
 
@@ -107,9 +106,9 @@ public class PackageManagerHooks {
         "goldfish"
     ));
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
-            Class<?> appPackageManagerClass = XposedHelpers.findClassIfExists(
+            Class<?> appPackageManagerClass = Legacy.findClassIfExists(
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
 
             if (appPackageManagerClass != null) {
@@ -117,18 +116,17 @@ public class PackageManagerHooks {
                 hookGetSystemAvailableFeatures(appPackageManagerClass);
             }
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook PackageManager: " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook PackageManager: " + e.getMessage());
         }
     }
 
     private static void hookHasSystemFeature(Class<?> pmClass) {
         try {
-            XposedHelpers.findAndHookMethod(pmClass, "hasSystemFeature",
+            Legacy.findAndHookMethod(pmClass, "hasSystemFeature",
                 String.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String feature = (String) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String feature = (String) chain.arg(0, null);
 
                         if (feature == null) {
                             return;
@@ -136,27 +134,26 @@ public class PackageManagerHooks {
 
                         for (String denied : DENIED_FEATURES) {
                             if (feature.toLowerCase().contains(denied.toLowerCase())) {
-                                param.setResult(false);
+                                chain.replaceResult(false);
                                 return;
                             }
                         }
 
                         if (PIXEL_7_PRO_FEATURES.contains(feature)) {
-                            param.setResult(true);
+                            chain.replaceResult(true);
                         }
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook hasSystemFeature(String): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook hasSystemFeature(String): " + e.getMessage());
         }
 
         try {
-            XposedHelpers.findAndHookMethod(pmClass, "hasSystemFeature",
+            Legacy.findAndHookMethod(pmClass, "hasSystemFeature",
                 String.class, int.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String feature = (String) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String feature = (String) chain.arg(0, null);
 
                         if (feature == null) {
                             return;
@@ -164,28 +161,27 @@ public class PackageManagerHooks {
 
                         for (String denied : DENIED_FEATURES) {
                             if (feature.toLowerCase().contains(denied.toLowerCase())) {
-                                param.setResult(false);
+                                chain.replaceResult(false);
                                 return;
                             }
                         }
 
                         if (PIXEL_7_PRO_FEATURES.contains(feature)) {
-                            param.setResult(true);
+                            chain.replaceResult(true);
                         }
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook hasSystemFeature(String, int): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook hasSystemFeature(String, int): " + e.getMessage());
         }
     }
 
     private static void hookGetSystemAvailableFeatures(Class<?> pmClass) {
         try {
-            XposedHelpers.findAndHookMethod(pmClass, "getSystemAvailableFeatures",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        Object[] features = (Object[]) param.getResult();
+            Legacy.findAndHookMethod(pmClass, "getSystemAvailableFeatures",
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        Object[] features = (Object[]) result;
                         if (features == null) {
                             return;
                         }
@@ -195,7 +191,7 @@ public class PackageManagerHooks {
                         List<Object> filtered = new ArrayList<>();
                         for (Object feature : features) {
                             try {
-                                String name = (String) XposedHelpers.getObjectField(feature, "name");
+                                String name = (String) Legacy.getObjectField(feature, "name");
                                 if (name != null) {
                                     boolean isDenied = false;
                                     for (String denied : DENIED_FEATURES) {
@@ -220,11 +216,11 @@ public class PackageManagerHooks {
                         for (int i = 0; i < filtered.size(); i++) {
                             java.lang.reflect.Array.set(typedArray, i, filtered.get(i));
                         }
-                        param.setResult(typedArray);
+                        chain.replaceResult(typedArray);
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook getSystemAvailableFeatures(): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook getSystemAvailableFeatures(): " + e.getMessage());
         }
     }
 }

@@ -6,10 +6,9 @@ import android.hardware.SensorManager;
 import java.util.ArrayList;
 import java.util.List;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class SensorHooks {
 
@@ -23,47 +22,44 @@ public class SensorHooks {
     // SENSORS tab is fully populated. No fake data injected (values come
     // from the real HAL pass-through); only host-named entries filtered.
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
-            XposedHelpers.findAndHookMethod(SensorManager.class, "getSensorList",
+            Legacy.findAndHookMethod(SensorManager.class, "getSensorList",
                     int.class,
-                    new XC_MethodHook() {
-                        @Override
+                    new HookFramework.Hook() {@Override
                         @SuppressWarnings("unchecked")
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            List<Sensor> orig = (List<Sensor>) param.getResult();
-                            param.setResult(filter(orig));
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            List<Sensor> orig = (List<Sensor>) result;
+                            chain.replaceResult(filter(orig));
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook getSensorList: " + t);
+            Legacy.log(TAG + ": failed to hook getSensorList: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(SensorManager.class, "getDefaultSensor",
+            Legacy.findAndHookMethod(SensorManager.class, "getDefaultSensor",
                     int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Sensor s = (Sensor) param.getResult();
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            Sensor s = (Sensor) result;
                             if (s != null && isEmulatorSensor(s)) {
-                                param.setResult(null);
+                                chain.replaceResult(null);
                             }
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook getDefaultSensor: " + t);
+            Legacy.log(TAG + ": failed to hook getDefaultSensor: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(SensorManager.class, "getDefaultSensor",
+            Legacy.findAndHookMethod(SensorManager.class, "getDefaultSensor",
                     int.class, boolean.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Sensor s = (Sensor) param.getResult();
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            Sensor s = (Sensor) result;
                             if (s != null && isEmulatorSensor(s)) {
-                                param.setResult(null);
+                                chain.replaceResult(null);
                             }
                         }
                     });

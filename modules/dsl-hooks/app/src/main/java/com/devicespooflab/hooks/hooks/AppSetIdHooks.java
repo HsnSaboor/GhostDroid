@@ -17,10 +17,10 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class AppSetIdHooks {
 
@@ -30,11 +30,11 @@ public class AppSetIdHooks {
     private static final String IAPPSET_SERVICE_DESCRIPTOR =
             "com.google.android.gms.appset.internal.IAppSetService";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hook(lpparam, Build.VERSION.SDK_INT);
     }
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam, int realDeviceSdk) {
+    public static void hook(HookContext lpparam, int realDeviceSdk) {
         if (realDeviceSdk < MIN_SDK) {
             return;
         }
@@ -42,42 +42,40 @@ public class AppSetIdHooks {
         try {
             hookClientSide(lpparam);
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": client hook failed: " + e.getMessage());
+            Legacy.log(TAG + ": client hook failed: " + e.getMessage());
         }
 
         if ("com.google.android.gms".equals(lpparam.packageName)) {
             try {
                 hookGmsServerSide();
             } catch (Throwable t) {
-                XposedBridge.log(TAG + ": GMS hook failed: " + t.getMessage());
+                Legacy.log(TAG + ": GMS hook failed: " + t.getMessage());
             }
         }
     }
 
     // ---- Client-side substitution ----
 
-    private static void hookClientSide(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> appSetIdInfoClass = XposedHelpers.findClassIfExists(
+    private static void hookClientSide(HookContext lpparam) {
+        Class<?> appSetIdInfoClass = Legacy.findClassIfExists(
                 "com.google.android.gms.appset.AppSetIdInfo", lpparam.classLoader);
         if (appSetIdInfoClass != null) {
             try {
-                XposedHelpers.findAndHookMethod(appSetIdInfoClass, "getId",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
+                Legacy.findAndHookMethod(appSetIdInfoClass, "getId",
+                        new HookFramework.Hook() {@Override
+                            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                                 String v = ConfigManager.getAppSetId();
-                                if (v != null) param.setResult(v);
+                                if (v != null) chain.replaceResult(v);
                             }
                         });
             } catch (NoSuchMethodError ignored) {
             }
             try {
                 // Scope: 1 = APP (per-app id), 2 = DEVELOPER (shared).
-                XposedHelpers.findAndHookMethod(appSetIdInfoClass, "getScope",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                param.setResult(1);
+                Legacy.findAndHookMethod(appSetIdInfoClass, "getScope",
+                        new HookFramework.Hook() {@Override
+                            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                                chain.replaceResult(1);
                             }
                         });
             } catch (NoSuchMethodError ignored) {
@@ -85,14 +83,13 @@ public class AppSetIdHooks {
             // Rewrite constructor args so reflective field reads also see
             // the spoofed value.
             try {
-                XposedHelpers.findAndHookConstructor(appSetIdInfoClass,
+                Legacy.findAndHookConstructor(appSetIdInfoClass,
                         String.class, int.class,
-                        new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
+                        new HookFramework.BeforeHook() {@Override
+                            public void before(HookFramework.HookChain chain) {
                                 String v = ConfigManager.getAppSetId();
-                                if (v != null) param.args[0] = v;
-                                param.args[1] = 1;
+                                if (v != null) chain.setArg(0, v);
+                                chain.setArg(1, 1);
                             }
                         });
             } catch (NoSuchMethodError ignored) {
@@ -100,22 +97,21 @@ public class AppSetIdHooks {
         }
 
         // AIDL service proxy — for callers that bypass AppSetIdInfo entirely.
-        Class<?> appSetServiceStub = XposedHelpers.findClassIfExists(
+        Class<?> appSetServiceStub = Legacy.findClassIfExists(
                 "com.google.android.gms.appset.internal.IAppSetService$Stub$Proxy",
                 lpparam.classLoader);
         if (appSetServiceStub != null) {
             try {
-                XposedHelpers.findAndHookMethod(appSetServiceStub, "getAppSetIdInfo",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                Object info = param.getResult();
+                Legacy.findAndHookMethod(appSetServiceStub, "getAppSetIdInfo",
+                        new HookFramework.Hook() {@Override
+                            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                                Object info = result;
                                 if (info == null) return;
                                 String v = ConfigManager.getAppSetId();
                                 if (v == null) return;
                                 try {
-                                    XposedHelpers.setObjectField(info, "id", v);
-                                    XposedHelpers.setIntField(info, "scope", 1);
+                                    Legacy.setObjectField(info, "id", v);
+                                    Legacy.setIntField(info, "scope", 1);
                                 } catch (Throwable ignored) {
                                 }
                             }
@@ -127,26 +123,24 @@ public class AppSetIdHooks {
         // Android 14+ Privacy Sandbox AppSetId. The framework constructs this
         // from the IPC reply, so the constructor hook catches the value as it
         // crosses into app code.
-        Class<?> systemAppSetId = XposedHelpers.findClassIfExists(
+        Class<?> systemAppSetId = Legacy.findClassIfExists(
                 "android.adservices.appsetid.AppSetId", lpparam.classLoader);
         if (systemAppSetId != null) {
             try {
-                XposedHelpers.findAndHookMethod(systemAppSetId, "getId",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
+                Legacy.findAndHookMethod(systemAppSetId, "getId",
+                        new HookFramework.Hook() {@Override
+                            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                                 String v = ConfigManager.getAppSetId();
-                                if (v != null) param.setResult(v);
+                                if (v != null) chain.replaceResult(v);
                             }
                         });
             } catch (Throwable ignored) {
             }
             try {
-                XposedHelpers.findAndHookMethod(systemAppSetId, "getScope",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                param.setResult(1);
+                Legacy.findAndHookMethod(systemAppSetId, "getScope",
+                        new HookFramework.Hook() {@Override
+                            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                                chain.replaceResult(1);
                             }
                         });
             } catch (Throwable ignored) {
@@ -155,14 +149,13 @@ public class AppSetIdHooks {
                 Class<?>[] types = c.getParameterTypes();
                 if (types.length >= 1 && types[0] == String.class) {
                     try {
-                        XposedBridge.hookMethod(c, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
+                        Legacy.hookMethod(c, new HookFramework.BeforeHook() {@Override
+                            public void before(HookFramework.HookChain chain) {
                                 String v = ConfigManager.getAppSetId();
-                                if (v != null) param.args[0] = v;
-                                if (param.args.length > 1
-                                        && param.args[1] instanceof Integer) {
-                                    param.args[1] = 1;
+                                if (v != null) chain.setArg(0, v);
+                                if (chain.argCount() > 1
+                                        && chain.arg(1, null) instanceof Integer) {
+                                    chain.setArg(1, 1);
                                 }
                             }
                         });
@@ -186,12 +179,11 @@ public class AppSetIdHooks {
         // us a stable hook on the (renamed) AppSet Stub class without having
         // to chase chimera plumbing.
         try {
-            XposedHelpers.findAndHookMethod(android.os.Binder.class, "attachInterface",
-                    IInterface.class, String.class, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            if (!IAPPSET_SERVICE_DESCRIPTOR.equals(param.args[1])) return;
-                            Object stub = param.args[0];
+            Legacy.findAndHookMethod(android.os.Binder.class, "attachInterface",
+                    IInterface.class, String.class, new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            if (!IAPPSET_SERVICE_DESCRIPTOR.equals(chain.arg(1, null))) return;
+                            Object stub = chain.arg(0, null);
                             if (stub != null) {
                                 installAppSetStubHooks(stub.getClass());
                             }
@@ -199,7 +191,7 @@ public class AppSetIdHooks {
                     });
         } catch (Throwable t) {
             sAttachWatcherInstalled.set(false);
-            XposedBridge.log(TAG + ": attachInterface watcher failed: " + t.getMessage());
+            Legacy.log(TAG + ": attachInterface watcher failed: " + t.getMessage());
         }
     }
 
@@ -221,21 +213,21 @@ public class AppSetIdHooks {
                 continue;
             }
             try {
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                Legacy.hookMethod(m, new HookFramework.BeforeHook() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args == null) return;
-                        for (int i = 0; i < param.args.length; i++) {
-                            Object a = param.args[i];
+                    public void before(HookFramework.HookChain chain) {
+                        int count = chain.argCount();
+                        for (int i = 0; i < count; i++) {
+                            Object a = chain.arg(i, null);
                             if (a instanceof IInterface) {
                                 Object wrapped = wrapCallback(a);
-                                if (wrapped != null) param.args[i] = wrapped;
+                                if (wrapped != null) chain.setArg(i, wrapped);
                             }
                         }
                     }
                 });
             } catch (Throwable t) {
-                XposedBridge.log(TAG + ": hook " + stubClass.getSimpleName()
+                Legacy.log(TAG + ": hook " + stubClass.getSimpleName()
                         + "." + n + " failed: " + t.getMessage());
             }
         }
@@ -328,7 +320,7 @@ public class AppSetIdHooks {
         Field target = idField != null ? idField
                 : (stringFieldCount == 1 ? soleStringField : null);
         if (target == null) {
-            XposedBridge.log(TAG + ": " + n + " exposed no UUID-shaped id ("
+            Legacy.log(TAG + ": " + n + " exposed no UUID-shaped id ("
                     + stringFieldCount + " string fields); skipping rewrite");
             return;
         }
@@ -336,7 +328,7 @@ public class AppSetIdHooks {
             target.setAccessible(true);
             target.set(obj, spoof);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": id rewrite on " + n + " failed: " + t.getMessage());
+            Legacy.log(TAG + ": id rewrite on " + n + " failed: " + t.getMessage());
             return;
         }
 

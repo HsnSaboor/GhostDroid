@@ -4,7 +4,9 @@
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <link.h>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
@@ -122,6 +124,41 @@ bool IsMountsPath(const char* p) {
            strcmp(p, "/proc/mountinfo") == 0;
 }
 
+// Translator cloak (EmulatorDetection.cpp:108-132): the ARM bridge must
+// stay LOADABLE for games (PUBG runs translated code via Houdini) but
+// must be INVISIBLE to detectors. Any open/openat/fopen probe of the
+// translator footprint returns ENOENT so fileExists() reads false:
+//
+//   Houdini: /system/{lib,lib64}/libhoudini.so, /system/bin/{arm,arm64,
+//            houdini,houdini64}, /system/{lib,lib64}/{arm,arm64},
+//            /system/etc/{binfmt_misc,init/houdini.rc}
+//   NDK:     /system/{lib,lib64}/libndk*.so, ndk_translation runners,
+//            /system/etc/ld.config.arm{,64}.txt, init/ndk_translation.rc,
+//            cpuinfo.arm{,64}.txt
+//
+// Only the open-family is cloaked (dlopen/mmap of already-open fds still
+// works, so translated games keep running). Property side is cloaked in
+// spoof.conf (native.bridge=0, arm-only abilist, x86 isa hidden).
+bool IsTranslatorPath(const char* p) {
+    if (p == nullptr) return false;
+    if (strstr(p, "libhoudini") != nullptr) return true;
+    if (strstr(p, "libndk_translation") != nullptr) return true;
+    if (strstr(p, "ndk_translation") != nullptr) return true;
+    if (strstr(p, "libnb") != nullptr) return true;
+    if (strstr(p, "tango_translator") != nullptr) return true;
+    if (strstr(p, "/system/etc/ld.config.arm") != nullptr) return true;
+    if (strstr(p, "/system/etc/cpuinfo.arm") != nullptr) return true;
+    if (PathStartsWith(p, "/system/bin/arm")) return true;
+    if (strcmp(p, "/system/bin/houdini") == 0 ||
+        strcmp(p, "/system/bin/houdini64") == 0) return true;
+    if (PathStartsWith(p, "/system/lib/arm")) return true;
+    if (PathStartsWith(p, "/system/lib64/arm64")) return true;
+    if (PathStartsWith(p, "/system/etc/binfmt_misc")) return true;
+    if (strcmp(p, "/system/etc/init/houdini.rc") == 0 ||
+        strcmp(p, "/system/etc/init/ndk_translation.rc") == 0) return true;
+    return false;
+}
+
 const char* Redirect(const char* path) {
     if (IsMountsPath(path)) return FAKE_MOUNTS;
     // DRIVERS tab: /proc/modules lists host-only modules (snd_hda_intel,
@@ -199,6 +236,10 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
+    if (IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return -1;
+    }
     const char* eff = Redirect(path);
     if (eff != path) {
         // Read-only view: strip write/creat so apps can't corrupt the fake.
@@ -216,6 +257,10 @@ int my_open(const char* path, int flags, ...) {
 }
 
 int my_openat(int dirfd, const char* path, int flags, ...) {
+    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return -1;
+    }
     if (dirfd == AT_FDCWD && IsMountsPath(path)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
@@ -239,6 +284,10 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
+    if (IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return nullptr;
+    }
     const char* eff = Redirect(path);
     if (eff != path) {
         // Force read mode; fake mounts are a read-only view.
@@ -305,6 +354,13 @@ void UnregisterFakeDir(DIR* d) {
 }
 
 DIR* my_opendir(const char* path) {
+    // Translator dirs (/system/lib/arm, /system/lib64/arm64, binfmt_misc)
+    // enumerate as EMPTY so listFilesInDirectory() finds no bridge files.
+    // The loader already has the real fds, so games keep running.
+    if (IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return nullptr;
+    }
     // Genuine dirs inside a masked tree (e.g. .../drivers/usb/usb1) must
     // NOT be faked: readers open node dirs then read attribute files we
     // redirect by content. Only the exact masked roots get synthesis.
@@ -433,6 +489,69 @@ int my_dirfd(DIR* d) {
     return -1;
 }
 
+// --- stat/fstatat/access path: fileExists() in detectors uses fopen,
+// but hardened checks use access()/stat(). In Bionic, stat()/lstat()/
+// access() all route through fstatat()/faccessat(), so cloaking those
+// two covers every existence probe with ENOENT.
+int (*orig_fstatat)(int, const char*, struct stat*, int) = nullptr;
+int (*orig_faccessat)(int, const char*, int, int) = nullptr;
+
+int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
+    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return -1;
+    }
+    if (orig_fstatat != nullptr)
+        return orig_fstatat(dirfd, path, buf, flags);
+    errno = ENOSYS;
+    return -1;
+}
+
+int my_faccessat(int dirfd, const char* path, int mode, int flags) {
+    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+        errno = ENOENT;
+        return -1;
+    }
+    if (orig_faccessat != nullptr)
+        return orig_faccessat(dirfd, path, mode, flags);
+    errno = ENOSYS;
+    return -1;
+}
+
+// --- dl_iterate_phdr filter: EmulatorDetection.cpp:108-115 walks loaded
+// modules via dl_phdr_info looking for a "libhoudini.so" substring.
+// Filter translator entries out of the enumeration so the check sees a
+// clean module list. The libraries stay mapped (games keep running);
+// only this process's *view* of the list is filtered.
+int (*orig_dl_iterate_phdr)(
+        int (*)(struct dl_phdr_info*, size_t, void*), void*) = nullptr;
+
+int my_dl_iterate_phdr(int (*cb)(struct dl_phdr_info*, size_t, void*),
+        void* data) {
+    if (cb == nullptr) {
+        if (orig_dl_iterate_phdr != nullptr)
+            return orig_dl_iterate_phdr(cb, data);
+        return 0;
+    }
+    struct FilterCtx {
+        int (*cb)(struct dl_phdr_info*, size_t, void*);
+        void* data;
+    };
+    FilterCtx ctx{cb, data};
+    auto filtered = [](struct dl_phdr_info* info, size_t size,
+            void* vctx) -> int {
+        auto* c = reinterpret_cast<FilterCtx*>(vctx);
+        if (info != nullptr && info->dlpi_name != nullptr &&
+            IsTranslatorPath(info->dlpi_name)) {
+            return 0;  // skip: hide translator module from detectors
+        }
+        return c->cb(info, size, c->data);
+    };
+    if (orig_dl_iterate_phdr != nullptr)
+        return orig_dl_iterate_phdr(filtered, &ctx);
+    return 0;
+}
+
 // --- execve redirect ------------------------------------------------------
 // `sh -c "ls <masked>"` / `"cat <masked node>"` fallbacks (t1/a, P0/a).
 // Rewrite argv to `cat <fake list>` so shell probes see the synthetic view.
@@ -532,10 +651,22 @@ void InstallFileHooks() {
     // rewrite masked ls/cat to serve fake lists.
     bool ok_execve = HookExport("execve", reinterpret_cast<void*>(&my_execve),
                                 reinterpret_cast<void**>(&orig_execve));
-    DS_LOGI("file hooks: open=%d openat=%d fopen=%d opendir=%d readdir=%d closedir=%d rewinddir=%d telldir=%d seekdir=%d dirfd=%d execve=%d",
+    bool ok_fstatat = HookExport("fstatat",
+                                  reinterpret_cast<void*>(&my_fstatat),
+                                  reinterpret_cast<void**>(&orig_fstatat));
+    bool ok_faccessat = HookExport("faccessat",
+                                   reinterpret_cast<void*>(&my_faccessat),
+                                   reinterpret_cast<void**>(&orig_faccessat));
+    // Loaded-module enumeration (dl_phdr_info substring "libhoudini.so"):
+    // filter translator entries so checkArmTranslation sees a clean list.
+    bool ok_phdr = HookExport("dl_iterate_phdr",
+                              reinterpret_cast<void*>(&my_dl_iterate_phdr),
+                              reinterpret_cast<void**>(&orig_dl_iterate_phdr));
+    DS_LOGI("file hooks: open=%d openat=%d fopen=%d opendir=%d readdir=%d closedir=%d rewinddir=%d telldir=%d seekdir=%d dirfd=%d execve=%d fstatat=%d faccessat=%d phdr=%d",
             ok_open, ok_openat, ok_fopen,
             ok_opendir, ok_readdir, ok_closedir,
-            ok_rewinddir, ok_telldir, ok_seekdir, ok_dirfd, ok_execve);
+            ok_rewinddir, ok_telldir, ok_seekdir, ok_dirfd, ok_execve,
+            ok_fstatat, ok_faccessat, ok_phdr);
 }
 
 }  // namespace gs

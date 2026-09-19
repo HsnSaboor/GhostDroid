@@ -6,10 +6,9 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class SystemPropertiesHooks {
 
@@ -18,7 +17,7 @@ public class SystemPropertiesHooks {
     private static final Set<Class<?>> HOOKED_CLASSES =
             Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
             hookSystemProperties(lpparam.classLoader);
 
@@ -30,12 +29,12 @@ public class SystemPropertiesHooks {
             } catch (Exception ignored) {
             }
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook SystemProperties: " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook SystemProperties: " + e.getMessage());
         }
     }
 
     private static void hookSystemProperties(ClassLoader classLoader) {
-        Class<?> sysPropClass = XposedHelpers.findClassIfExists(SYSTEM_PROPERTIES_CLASS, classLoader);
+        Class<?> sysPropClass = Legacy.findClassIfExists(SYSTEM_PROPERTIES_CLASS, classLoader);
 
         if (sysPropClass == null) {
             return;
@@ -46,58 +45,55 @@ public class SystemPropertiesHooks {
 
         // Hook get(String key)
         try {
-            XposedHelpers.findAndHookMethod(sysPropClass, "get",
+            Legacy.findAndHookMethod(sysPropClass, "get",
                 String.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String key = (String) param.args[0];
-                        String originalValue = (String) param.getResult();
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String key = (String) chain.arg(0, null);
+                        String originalValue = (String) result;
                         String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
                         if (spoofedValue != null) {
-                            param.setResult(spoofedValue);
+                            chain.replaceResult(spoofedValue);
                         }
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook get(String): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook get(String): " + e.getMessage());
         }
 
         // Hook get(String key, String def)
         try {
-            XposedHelpers.findAndHookMethod(sysPropClass, "get",
+            Legacy.findAndHookMethod(sysPropClass, "get",
                 String.class, String.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String key = (String) param.args[0];
-                        String defaultValue = (String) param.args[1];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String key = (String) chain.arg(0, null);
+                        String defaultValue = (String) chain.arg(1, null);
                         String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
                         if (spoofedValue != null) {
-                            param.setResult(spoofedValue);
+                            chain.replaceResult(spoofedValue);
                         }
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook get(String, String): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook get(String, String): " + e.getMessage());
         }
 
         // Hook getInt(String key, int def)
         try {
-            XposedHelpers.findAndHookMethod(sysPropClass, "getInt",
+            Legacy.findAndHookMethod(sysPropClass, "getInt",
                 String.class, int.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String key = (String) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String key = (String) chain.arg(0, null);
                         String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
                         if (spoofedValue != null) {
                             try {
                                 int intValue = Integer.parseInt(spoofedValue);
-                                param.setResult(intValue);
+                                chain.replaceResult(intValue);
                             } catch (NumberFormatException e) {
                                 // Invalid int value, keep original
                             }
@@ -105,45 +101,43 @@ public class SystemPropertiesHooks {
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook getInt(String, int): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook getInt(String, int): " + e.getMessage());
         }
 
         // Hook getBoolean(String key, boolean def)
         try {
-            XposedHelpers.findAndHookMethod(sysPropClass, "getBoolean",
+            Legacy.findAndHookMethod(sysPropClass, "getBoolean",
                 String.class, boolean.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String key = (String) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String key = (String) chain.arg(0, null);
                         String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
                         if (spoofedValue != null) {
                             // Handle both "true"/"false" and "1"/"0"
                             boolean boolValue = spoofedValue.equals("1") ||
                                               spoofedValue.equalsIgnoreCase("true");
-                            param.setResult(boolValue);
+                            chain.replaceResult(boolValue);
                         }
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook getBoolean(String, boolean): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook getBoolean(String, boolean): " + e.getMessage());
         }
 
         // Hook getLong(String key, long def)
         try {
-            XposedHelpers.findAndHookMethod(sysPropClass, "getLong",
+            Legacy.findAndHookMethod(sysPropClass, "getLong",
                 String.class, long.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        String key = (String) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        String key = (String) chain.arg(0, null);
                         String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
                         if (spoofedValue != null) {
                             try {
                                 long longValue = Long.parseLong(spoofedValue);
-                                param.setResult(longValue);
+                                chain.replaceResult(longValue);
                             } catch (NumberFormatException e) {
                                 // Invalid long value, keep original
                             }
@@ -151,7 +145,7 @@ public class SystemPropertiesHooks {
                     }
                 });
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook getLong(String, long): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook getLong(String, long): " + e.getMessage());
         }
     }
 }

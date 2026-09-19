@@ -2,14 +2,14 @@ package com.devicespooflab.hooks.hooks;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class TelephonyHooks {
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> telephonyManager = XposedHelpers.findClassIfExists(
+    public static void hook(HookContext lpparam) {
+        Class<?> telephonyManager = Legacy.findClassIfExists(
                 "android.telephony.TelephonyManager",
                 lpparam.classLoader
         );
@@ -19,144 +19,132 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getDeviceId",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getDeviceId",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMEI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getDeviceId", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getDeviceId", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMEI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getImei",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getImei",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMEI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getImei", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getImei", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMEI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getMeid",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getMeid",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getMEID();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getMeid", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getMeid", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getMEID();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSubscriberId",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSubscriberId",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMSI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSubscriberId", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSubscriberId", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getIMSI();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSimSerialNumber",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSimSerialNumber",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getICCID();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSimSerialNumber", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSimSerialNumber", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getICCID();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getLine1Number",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getLine1Number",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getPhoneNumber();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getLine1Number", int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getLine1Number", int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getPhoneNumber();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
@@ -164,13 +152,12 @@ public class TelephonyHooks {
 
         // Hook network operator methods (MCC/MNC)
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getNetworkOperator",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getNetworkOperator",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String mccMnc = ConfigManager.getSystemProperty("gsm.operator.numeric", null);
                             if (mccMnc != null) {
-                                param.setResult(mccMnc);
+                                chain.replaceResult(mccMnc);
                             }
                         }
                     });
@@ -178,13 +165,12 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getNetworkOperatorName",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getNetworkOperatorName",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String operatorName = ConfigManager.getSystemProperty("gsm.operator.alpha", null);
                             if (operatorName != null) {
-                                param.setResult(operatorName);
+                                chain.replaceResult(operatorName);
                             }
                         }
                     });
@@ -192,13 +178,12 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSimOperator",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSimOperator",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String simMccMnc = ConfigManager.getSystemProperty("gsm.sim.operator.numeric", null);
                             if (simMccMnc != null) {
-                                param.setResult(simMccMnc);
+                                chain.replaceResult(simMccMnc);
                             }
                         }
                     });
@@ -206,13 +191,12 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSimOperatorName",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSimOperatorName",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String simOperatorName = ConfigManager.getSystemProperty("gsm.sim.operator.alpha", null);
                             if (simOperatorName != null) {
-                                param.setResult(simOperatorName);
+                                chain.replaceResult(simOperatorName);
                             }
                         }
                     });
@@ -220,13 +204,12 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getSimCountryIso",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getSimCountryIso",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String simCountry = ConfigManager.getSystemProperty("gsm.sim.operator.iso-country", null);
                             if (simCountry != null) {
-                                param.setResult(simCountry);
+                                chain.replaceResult(simCountry);
                             }
                         }
                     });
@@ -234,13 +217,12 @@ public class TelephonyHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(telephonyManager, "getNetworkCountryIso",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(telephonyManager, "getNetworkCountryIso",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String networkCountry = ConfigManager.getSystemProperty("gsm.operator.iso-country", null);
                             if (networkCountry != null) {
-                                param.setResult(networkCountry);
+                                chain.replaceResult(networkCountry);
                             }
                         }
                     });
@@ -249,23 +231,23 @@ public class TelephonyHooks {
 
         // Android 13+ replaced TelephonyManager.getLine1Number() with
         // SubscriptionManager.getPhoneNumber(int) and getPhoneNumber(int, int).
-        Class<?> subscriptionManager = XposedHelpers.findClassIfExists(
+        Class<?> subscriptionManager = Legacy.findClassIfExists(
                 "android.telephony.SubscriptionManager", lpparam.classLoader);
         if (subscriptionManager != null) {
-            XC_MethodHook phoneNumberHook = new XC_MethodHook() {
+            HookFramework.Hook phoneNumberHook = new HookFramework.Hook() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                     String v = ConfigManager.getPhoneNumber();
-                    if (v != null) param.setResult(v);
+                    if (v != null) chain.replaceResult(v);
                 }
             };
             try {
-                XposedHelpers.findAndHookMethod(subscriptionManager, "getPhoneNumber",
+                Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
                         int.class, phoneNumberHook);
             } catch (NoSuchMethodError ignored) {
             }
             try {
-                XposedHelpers.findAndHookMethod(subscriptionManager, "getPhoneNumber",
+                Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
                         int.class, int.class, phoneNumberHook);
             } catch (NoSuchMethodError ignored) {
             }

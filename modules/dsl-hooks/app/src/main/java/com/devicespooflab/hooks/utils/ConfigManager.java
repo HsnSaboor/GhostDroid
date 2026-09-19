@@ -58,10 +58,7 @@ public class ConfigManager {
         // in a process. Re-running init would clobber a live config that the
         // Application.attach hook has already pulled from RemotePreferences.
         if (allProperties != null) return;
-        Map<String, String> loaded = readXSharedPreferences();
-        if (loaded == null || loaded.isEmpty()) {
-            loaded = readConfigFile();
-        }
+        Map<String, String> loaded = readConfigFile();
         Map<String, String> defaults = getEmbeddedDefaults();
         for (Map.Entry<String, String> e : defaults.entrySet()) {
             if (!loaded.containsKey(e.getKey())) {
@@ -70,47 +67,6 @@ public class ConfigManager {
         }
         resetCaches();
         allProperties = Collections.unmodifiableMap(new HashMap<>(loaded));
-    }
-
-    // Bridge classes live on the XposedBridge classloader, not the module
-    // classloader, when loaded by Vector's zygisk path. Resolve through the
-    // bridge's loader so XSharedPreferences is actually found.
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> readXSharedPreferences() {
-        try {
-            ClassLoader bridgeLoader = de.robv.android.xposed.XposedBridge.class.getClassLoader();
-            Class<?> xprefsClass = bridgeLoader == null
-                    ? Class.forName("de.robv.android.xposed.XSharedPreferences")
-                    : Class.forName("de.robv.android.xposed.XSharedPreferences", true, bridgeLoader);
-            Object prefs = xprefsClass
-                    .getConstructor(String.class, String.class)
-                    .newInstance("com.devicespooflab.hooks", "config");
-            try {
-                xprefsClass.getMethod("makeWorldReadable").invoke(prefs);
-            } catch (Throwable ignored) {
-            }
-            try {
-                xprefsClass.getMethod("reload").invoke(prefs);
-            } catch (Throwable ignored) {
-            }
-            Map<String, ?> raw = (Map<String, ?>) xprefsClass
-                    .getMethod("getAll").invoke(prefs);
-            int size = raw == null ? 0 : raw.size();
-            android.util.Log.i("DeviceSpoofLab",
-                    "XSharedPreferences raw size=" + size);
-            if (raw == null || raw.isEmpty()) return null;
-            Map<String, String> out = new HashMap<>(raw.size());
-            for (Map.Entry<String, ?> e : raw.entrySet()) {
-                Object v = e.getValue();
-                out.put(e.getKey(), v == null ? "" : v.toString());
-            }
-            return out;
-        } catch (Throwable t) {
-            android.util.Log.w("DeviceSpoofLab",
-                    "XSharedPreferences failed: " + t.getClass().getSimpleName()
-                            + ": " + t.getMessage());
-            return null;
-        }
     }
 
     public static Map<String, String> getRawProperties() {
@@ -901,6 +857,7 @@ public class ConfigManager {
         for (Map.Entry<String, String> e : props.entrySet()) {
             String key = e.getKey();
             String v = e.getValue();
+            if (REMOTE_GENERATION_KEY.equals(key)) continue;
             if (v == null || v.isEmpty()) continue;
             if (key.startsWith("enabled.") || key.startsWith("identifier.")) continue;
             String identifier = IdentifierRegistry.identifierForKey(key);
@@ -1411,10 +1368,7 @@ public class ConfigManager {
     }
 
     public static synchronized void reload() {
-        Map<String, String> loaded = readXSharedPreferences();
-        if (loaded == null || loaded.isEmpty()) {
-            loaded = readConfigFile();
-        }
+        Map<String, String> loaded = readConfigFile();
         Map<String, String> defaults = getEmbeddedDefaults();
         for (Map.Entry<String, String> e : defaults.entrySet()) {
             if (!loaded.containsKey(e.getKey())) {

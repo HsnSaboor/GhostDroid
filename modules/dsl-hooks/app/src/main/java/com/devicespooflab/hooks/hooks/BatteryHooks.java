@@ -4,50 +4,43 @@ import android.os.BatteryManager;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 // Live charge level is passthrough; only the design counters are overridden.
 public class BatteryHooks {
 
     private static final String TAG = "DeviceSpoofLab-Battery";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
-        try {
-            XposedHelpers.findAndHookMethod(BatteryManager.class, "getIntProperty",
+    public static void hook(HookContext lpparam) {
+        Legacy.safeHook(TAG, "BatteryManager.getIntProperty", () -> {
+            Legacy.findAndHookMethod(BatteryManager.class, "getIntProperty",
                     int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            int id = (int) param.args[0];
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            int id = chain.arg(0, -1);
                             if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
                                 long capUah = ConfigManager.getBatteryChargeCounterUah();
-                                param.setResult((int) Math.min(Integer.MAX_VALUE, capUah));
+                                chain.replaceResult((int) Math.min(Integer.MAX_VALUE, capUah));
                             }
                         }
                     });
-        } catch (Throwable t) { logFail("getIntProperty", t); }
+        });
 
-        try {
-            XposedHelpers.findAndHookMethod(BatteryManager.class, "getLongProperty",
+        Legacy.safeHook(TAG, "BatteryManager.getLongProperty", () -> {
+            Legacy.findAndHookMethod(BatteryManager.class, "getLongProperty",
                     int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            int id = (int) param.args[0];
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            int id = chain.arg(0, -1);
                             if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
-                                param.setResult(ConfigManager.getBatteryChargeCounterUah());
+                                chain.replaceResult(ConfigManager.getBatteryChargeCounterUah());
                             } else if (id == BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER) {
-                                param.setResult(ConfigManager.getBatteryEnergyCounterNwh());
+                                chain.replaceResult(ConfigManager.getBatteryEnergyCounterNwh());
                             }
                         }
                     });
-        } catch (Throwable t) { logFail("getLongProperty", t); }
-    }
-
-    private static void logFail(String what, Throwable t) {
-        XposedBridge.log(TAG + ": failed to hook BatteryManager." + what + ": " + t);
+        });
     }
 }

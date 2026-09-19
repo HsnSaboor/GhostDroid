@@ -1,25 +1,23 @@
 package com.devicespooflab.hooks.hooks;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class CameraHooks {
 
     private static final String TAG = "DeviceSpoofLab-Camera";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> cm = XposedHelpers.findClassIfExists(
+    public static void hook(HookContext lpparam) {
+        Class<?> cm = Legacy.findClassIfExists(
                 "android.hardware.camera2.CameraManager", lpparam.classLoader);
         if (cm == null) return;
 
         try {
-            XposedHelpers.findAndHookMethod(cm, "getCameraIdList",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            String[] ids = (String[]) param.getResult();
+            Legacy.findAndHookMethod(cm, "getCameraIdList",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            String[] ids = (String[]) result;
                             if (ids == null) return;
                             int kept = 0;
                             for (String id : ids) {
@@ -30,12 +28,12 @@ public class CameraHooks {
                             if (kept != ids.length) {
                                 String[] trimmed = new String[kept];
                                 System.arraycopy(ids, 0, trimmed, 0, kept);
-                                param.setResult(trimmed);
+                                chain.replaceResult(trimmed);
                             }
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook getCameraIdList: " + t);
+            Legacy.log(TAG + ": failed to hook getCameraIdList: " + t);
         }
     }
 }

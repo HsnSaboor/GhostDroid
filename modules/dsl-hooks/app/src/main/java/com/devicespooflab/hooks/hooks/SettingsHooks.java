@@ -4,9 +4,9 @@ import android.content.ContentResolver;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class SettingsHooks {
 
@@ -21,7 +21,7 @@ public class SettingsHooks {
     private static final String BLUETOOTH_NAME = "bluetooth_name";
     private static final String DEVICE_NAME = "device_name";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hookClass(lpparam, "android.provider.Settings$Secure",
                 SPOOF_ANDROID_ID | SPOOF_GSF_ID | SPOOF_BLUETOOTH_ADDRESS | SPOOF_DEVICE_NAMES);
         hookClass(lpparam, "android.provider.Settings$System",
@@ -30,77 +30,74 @@ public class SettingsHooks {
                 SPOOF_BLUETOOTH_ADDRESS | SPOOF_DEVICE_NAMES);
     }
 
-    private static void hookClass(XC_LoadPackage.LoadPackageParam lpparam,
+    private static void hookClass(HookContext lpparam,
                                   String className,
                                   int spoofFlags) {
-        Class<?> clazz = XposedHelpers.findClassIfExists(className, lpparam.classLoader);
+        Class<?> clazz = Legacy.findClassIfExists(className, lpparam.classLoader);
         if (clazz == null) return;
 
         try {
-            XposedHelpers.findAndHookMethod(clazz, "getString",
+            Legacy.findAndHookMethod(clazz, "getString",
                     ContentResolver.class, String.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            String name = (String) param.args[1];
-                            applySpoof(param, name, spoofFlags);
+                    new HookFramework.BeforeHook() {@Override
+                        public void before(HookFramework.HookChain chain) {
+                            String name = (String) chain.arg(1, null);
+                            applySpoof(chain, name, spoofFlags);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(clazz, "getString",
+            Legacy.findAndHookMethod(clazz, "getString",
                     ContentResolver.class, String.class, String.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            String name = (String) param.args[1];
-                            applySpoof(param, name, spoofFlags);
+                    new HookFramework.BeforeHook() {@Override
+                        public void before(HookFramework.HookChain chain) {
+                            String name = (String) chain.arg(1, null);
+                            applySpoof(chain, name, spoofFlags);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(clazz, "getStringForUser",
+            Legacy.findAndHookMethod(clazz, "getStringForUser",
                     ContentResolver.class, String.class, int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            String name = (String) param.args[1];
-                            applySpoof(param, name, spoofFlags);
+                    new HookFramework.BeforeHook() {@Override
+                        public void before(HookFramework.HookChain chain) {
+                            String name = (String) chain.arg(1, null);
+                            applySpoof(chain, name, spoofFlags);
                         }
                     });
         } catch (NoSuchMethodError ignored) {
         }
     }
 
-    private static void applySpoof(XC_MethodHook.MethodHookParam param, String name, int spoofFlags) {
+    private static void applySpoof(HookFramework.HookChain chain, String name, int spoofFlags) {
         if (name == null) return;
 
         if ((spoofFlags & SPOOF_ANDROID_ID) != 0 && ANDROID_ID.equals(name)) {
             String v = ConfigManager.getAndroidId();
-            if (v != null) param.setResult(v);
+            if (v != null) chain.replaceResult(v);
             return;
         }
 
         if ((spoofFlags & SPOOF_GSF_ID) != 0 && GSF_ID.equals(name)) {
             String v = ConfigManager.getGSFId();
-            if (v != null) param.setResult(v);
+            if (v != null) chain.replaceResult(v);
             return;
         }
 
         if ((spoofFlags & SPOOF_BLUETOOTH_ADDRESS) != 0 && BLUETOOTH_ADDRESS.equals(name)) {
             String mac = ConfigManager.getBluetoothMacAddress();
-            if (mac != null) param.setResult(mac.toUpperCase());
+            if (mac != null) chain.replaceResult(mac.toUpperCase());
             return;
         }
 
         if ((spoofFlags & SPOOF_DEVICE_NAMES) != 0
                 && (BLUETOOTH_NAME.equals(name) || DEVICE_NAME.equals(name))) {
             String model = ConfigManager.getBuildModel();
-            if (model != null) param.setResult(model);
+            if (model != null) chain.replaceResult(model);
         }
     }
 }

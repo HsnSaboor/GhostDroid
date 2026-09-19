@@ -46,9 +46,14 @@ android {
 }
 
 dependencies {
-    compileOnly("de.robv.android.xposed:api:82")
+    // Pure libxposed API 102: zero de.robv references (Vector blocks
+    // de.robv.* in target processes when targetApiVersion >= 102).
+    // Stub is compileOnly (Vector injects the real runtime into targets).
     compileOnly(files("libs/libxposed-api-stub.jar"))
-    implementation("io.github.libxposed:service:101.0.0")
+    // Service bridge MUST be packaged (implementation): it provides
+    // XposedProvider + IXposedService binder used for RemotePreferences.
+    // (Verified present in classes.dex; do NOT demote to compileOnly.)
+    implementation("io.github.libxposed:service:102.0.0")
     // lsplt REMOVED (Java-only): native hook dep would pull the
     // LSPlt runtime into the APK for zero benefit.
     implementation("androidx.appcompat:appcompat:1.7.0")

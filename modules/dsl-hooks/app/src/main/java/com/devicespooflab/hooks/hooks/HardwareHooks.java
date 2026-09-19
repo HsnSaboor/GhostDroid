@@ -10,10 +10,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class HardwareHooks {
 
@@ -23,16 +22,16 @@ public class HardwareHooks {
     private static final Set<Class<?>> HOOKED_ACTIVITY_MANAGER_CLASSES =
             Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
             hookRuntimeCores();
             hookActivityManagerMemory(lpparam);
             hookDebugMemory();
             if (ConfigManager.isVerboseLoggingEnabled()) {
-                XposedBridge.log(TAG + ": Successfully hooked hardware specs");
+                Legacy.log(TAG + ": Successfully hooked hardware specs");
             }
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook hardware: " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook hardware: " + e.getMessage());
         }
     }
 
@@ -41,22 +40,21 @@ public class HardwareHooks {
             return;
         }
         try {
-            XposedHelpers.findAndHookMethod(Runtime.class, "availableProcessors",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        param.setResult(ConfigManager.getCpuCoreCount());
+            Legacy.findAndHookMethod(Runtime.class, "availableProcessors",
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        chain.replaceResult(ConfigManager.getCpuCoreCount());
                     }
                 });
         } catch (Exception e) {
             RUNTIME_CORES_HOOKED.set(false);
-            XposedBridge.log(TAG + ": Failed to hook Runtime.availableProcessors(): " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook Runtime.availableProcessors(): " + e.getMessage());
         }
     }
 
-    private static void hookActivityManagerMemory(XC_LoadPackage.LoadPackageParam lpparam) {
+    private static void hookActivityManagerMemory(HookContext lpparam) {
         try {
-            Class<?> activityManagerClass = XposedHelpers.findClassIfExists(
+            Class<?> activityManagerClass = Legacy.findClassIfExists(
                 "android.app.ActivityManager", lpparam.classLoader);
 
             if (activityManagerClass == null) {
@@ -66,12 +64,11 @@ public class HardwareHooks {
                 return;
             }
 
-            XposedHelpers.findAndHookMethod(activityManagerClass, "getMemoryInfo",
+            Legacy.findAndHookMethod(activityManagerClass, "getMemoryInfo",
                 ActivityManager.MemoryInfo.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        ActivityManager.MemoryInfo memInfo = (ActivityManager.MemoryInfo) param.args[0];
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        ActivityManager.MemoryInfo memInfo = (ActivityManager.MemoryInfo) chain.arg(0, null);
                         if (memInfo != null) {
                             long originalTotal = memInfo.totalMem;
                             long configuredTotal = Math.max(0L, ConfigManager.getMemoryTotalBytes());
@@ -90,24 +87,22 @@ public class HardwareHooks {
                     }
                 });
 
-            XposedHelpers.findAndHookMethod(activityManagerClass, "getMemoryClass",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        param.setResult(ConfigManager.getMemoryClassMb());
+            Legacy.findAndHookMethod(activityManagerClass, "getMemoryClass",
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        chain.replaceResult(ConfigManager.getMemoryClassMb());
                     }
                 });
 
-            XposedHelpers.findAndHookMethod(activityManagerClass, "getLargeMemoryClass",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        param.setResult(ConfigManager.getLargeMemoryClassMb());
+            Legacy.findAndHookMethod(activityManagerClass, "getLargeMemoryClass",
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        chain.replaceResult(ConfigManager.getLargeMemoryClassMb());
                     }
                 });
 
         } catch (Exception e) {
-            XposedBridge.log(TAG + ": Failed to hook ActivityManager memory: " + e.getMessage());
+            Legacy.log(TAG + ": Failed to hook ActivityManager memory: " + e.getMessage());
         }
     }
 
@@ -116,12 +111,11 @@ public class HardwareHooks {
             return;
         }
         try {
-            XposedHelpers.findAndHookMethod(Debug.class, "getNativeHeapSize",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        long originalSize = (Long) param.getResult();
-                        param.setResult(originalSize * Math.max(1, ConfigManager.getNativeHeapScale()));
+            Legacy.findAndHookMethod(Debug.class, "getNativeHeapSize",
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
+                        long originalSize = (Long) result;
+                        chain.replaceResult(originalSize * Math.max(1, ConfigManager.getNativeHeapScale()));
                     }
                 });
         } catch (Exception e) {

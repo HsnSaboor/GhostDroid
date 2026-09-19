@@ -72,14 +72,42 @@ void InstallForProcess(const std::vector<char> &conf) {
     // Loaded dynamically to keep this TU dependency-free.
     // libgs_native links libdobby.so (DT_NEEDED, same dir) but the loader
     // does not resolve same-dir deps for absolute-path dlopen, so preload
-    // libdobby first from the same directory.
+    // libdobby first from the same directory. Probe the NATIVE process ABI
+    // first (armeabi first on ARM devices would spam EM_AARCH64 errors on
+    // x86_64 Waydroid before falling through); fall back to the rest.
+#if defined(__x86_64__)
     const char *dirs[] = {
-        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
         "/data/adb/modules/ghost-stealth/zygisk/x86_64",
         "/data/adb/modules/ghost-stealth/zygisk/x86",
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
         "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a",
         nullptr,
     };
+#elif defined(__i386__)
+    const char *dirs[] = {
+        "/data/adb/modules/ghost-stealth/zygisk/x86",
+        "/data/adb/modules/ghost-stealth/zygisk/x86_64",
+        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a",
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
+        nullptr,
+    };
+#elif defined(__aarch64__)
+    const char *dirs[] = {
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
+        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a",
+        "/data/adb/modules/ghost-stealth/zygisk/x86_64",
+        "/data/adb/modules/ghost-stealth/zygisk/x86",
+        nullptr,
+    };
+#else
+    const char *dirs[] = {
+        "/data/adb/modules/ghost-stealth/zygisk/armeabi-v7a",
+        "/data/adb/modules/ghost-stealth/zygisk/arm64-v8a",
+        "/data/adb/modules/ghost-stealth/zygisk/x86",
+        "/data/adb/modules/ghost-stealth/zygisk/x86_64",
+        nullptr,
+    };
+#endif
     typedef int (*InstallFn)(const char *, size_t);
     char dep[256], lib[256];
     for (const char **d = dirs; *d != nullptr; d++) {
@@ -87,7 +115,8 @@ void InstallForProcess(const std::vector<char> &conf) {
         snprintf(lib, sizeof(lib), "%s/libgs_native.so", *d);
         void *dep_h = dlopen(dep, RTLD_NOW | RTLD_GLOBAL);
         if (dep_h == nullptr) {
-            GS_LOGE("dlopen %s failed: %s", dep, dlerror());
+            // Wrong-ABI dirs fail here (EM_AARCH64 on x86_64); try next dir
+            // silently — the error is expected, not a fault.
             continue;
         }
         void *h = dlopen(lib, RTLD_NOW | RTLD_LOCAL);

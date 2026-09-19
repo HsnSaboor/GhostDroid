@@ -9,123 +9,115 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class NetworkHooks {
 
     private static final String TAG = "DeviceSpoofLab-Network";
     private static final byte[] EMPTY_MAC = new byte[0];
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hookWifiInfo(lpparam);
         hookWifiManager(lpparam);
         hookBluetoothAdapter(lpparam);
         hookNetworkInterface();
     }
 
-    private static void hookWifiInfo(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> wifiInfo = XposedHelpers.findClassIfExists(
+    private static void hookWifiInfo(HookContext lpparam) {
+        Class<?> wifiInfo = Legacy.findClassIfExists(
                 "android.net.wifi.WifiInfo", lpparam.classLoader);
         if (wifiInfo == null) return;
 
-        try {
-            XposedHelpers.findAndHookMethod(wifiInfo, "getMacAddress",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+        Legacy.safeHook(TAG, "WifiInfo.getMacAddress", () -> {
+            Legacy.findAndHookMethod(wifiInfo, "getMacAddress",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getWifiMacAddress();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
-        } catch (Throwable t) { logFail("WifiInfo.getMacAddress", t); }
+        });
 
-        try {
-            XposedHelpers.findAndHookMethod(wifiInfo, "getBSSID",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+        Legacy.safeHook(TAG, "WifiInfo.getBSSID", () -> {
+            Legacy.findAndHookMethod(wifiInfo, "getBSSID",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String v = ConfigManager.getWifiBssid();
-                            if (v != null) param.setResult(v);
+                            if (v != null) chain.replaceResult(v);
                         }
                     });
-        } catch (Throwable t) { logFail("WifiInfo.getBSSID", t); }
+        });
 
-        try {
-            XposedHelpers.findAndHookMethod(wifiInfo, "getSSID",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult("\"" + ConfigManager.getWifiSsid() + "\"");
+        Legacy.safeHook(TAG, "WifiInfo.getSSID", () -> {
+            Legacy.findAndHookMethod(wifiInfo, "getSSID",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult("\"" + ConfigManager.getWifiSsid() + "\"");
                         }
                     });
-        } catch (Throwable t) { logFail("WifiInfo.getSSID", t); }
+        });
     }
 
-    private static void hookWifiManager(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> wm = XposedHelpers.findClassIfExists(
+    private static void hookWifiManager(HookContext lpparam) {
+        Class<?> wm = Legacy.findClassIfExists(
                 "android.net.wifi.WifiManager", lpparam.classLoader);
         if (wm == null) return;
 
-        try {
-            XposedHelpers.findAndHookMethod(wm, "getScanResults",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+        Legacy.safeHook(TAG, "WifiManager.getScanResults", () -> {
+            Legacy.findAndHookMethod(wm, "getScanResults",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             // Scan-result MAC addresses are equally fingerprintable;
                             // empty list is the safest spoof.
-                            param.setResult(Collections.emptyList());
+                            chain.replaceResult(Collections.emptyList());
                         }
                     });
-        } catch (Throwable t) { logFail("WifiManager.getScanResults", t); }
+        });
 
         // Some apps reach into WifiManager.getCurrentNetwork().getSSID() — those go
         // through WifiInfo, already covered.
     }
 
-    private static void hookBluetoothAdapter(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> ba = XposedHelpers.findClassIfExists(
+    private static void hookBluetoothAdapter(HookContext lpparam) {
+        Class<?> ba = Legacy.findClassIfExists(
                 "android.bluetooth.BluetoothAdapter", lpparam.classLoader);
         if (ba == null) return;
 
-        try {
-            XposedHelpers.findAndHookMethod(ba, "getAddress",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+        Legacy.safeHook(TAG, "BluetoothAdapter.getAddress", () -> {
+            Legacy.findAndHookMethod(ba, "getAddress",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String mac = ConfigManager.getBluetoothMacAddress();
-                            if (mac != null) param.setResult(mac.toUpperCase());
+                            if (mac != null) chain.replaceResult(mac.toUpperCase());
                         }
                     });
-        } catch (Throwable t) { logFail("BluetoothAdapter.getAddress", t); }
+        });
 
-        try {
-            XposedHelpers.findAndHookMethod(ba, "getName",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(ConfigManager.getBluetoothName());
+        Legacy.safeHook(TAG, "BluetoothAdapter.getName", () -> {
+            Legacy.findAndHookMethod(ba, "getName",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(ConfigManager.getBluetoothName());
                         }
                     });
-        } catch (Throwable t) { logFail("BluetoothAdapter.getName", t); }
+        });
 
         // Settings.Secure.bluetooth_address path — settings hook handles strings,
         // but BluetoothAdapter.getAddress hides the well-known reflection too.
     }
 
     private static void hookNetworkInterface() {
-        try {
-            XposedHelpers.findAndHookMethod(NetworkInterface.class, "getHardwareAddress",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            NetworkInterface ni = (NetworkInterface) param.thisObject;
+        Legacy.safeHook(TAG, "NetworkInterface.getHardwareAddress", () -> {
+            Legacy.findAndHookMethod(NetworkInterface.class, "getHardwareAddress",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            NetworkInterface ni = (NetworkInterface) chain.thisObject();
                             String name = (ni == null) ? null : ni.getName();
                             if (name == null) return;
                             // Loopback and dummy interfaces have no MAC; preserve null.
-                            byte[] original = (byte[]) param.getResult();
+                            byte[] original = (byte[]) result;
                             if (original == null) return;
 
                             String mac;
@@ -135,23 +127,22 @@ public class NetworkHooks {
                                 mac = ConfigManager.getBluetoothMacAddress();
                             } else {
                                 // Other interfaces: zero them out rather than leak.
-                                param.setResult(new byte[]{0, 0, 0, 0, 0, 0});
+                                chain.replaceResult(new byte[]{0, 0, 0, 0, 0, 0});
                                 return;
                             }
                             if (mac == null) return;
-                            param.setResult(macStringToBytes(mac));
+                            chain.replaceResult(macStringToBytes(mac));
                         }
                     });
-        } catch (Throwable t) { logFail("NetworkInterface.getHardwareAddress", t); }
+        });
 
-        try {
-            XposedHelpers.findAndHookMethod(NetworkInterface.class, "getNetworkInterfaces",
-                    new XC_MethodHook() {
-                        @Override
+        Legacy.safeHook(TAG, "NetworkInterface.getNetworkInterfaces", () -> {
+            Legacy.findAndHookMethod(NetworkInterface.class, "getNetworkInterfaces",
+                    new HookFramework.Hook() {@Override
                         @SuppressWarnings("unchecked")
-                        protected void afterHookedMethod(MethodHookParam param) {
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             Enumeration<NetworkInterface> orig =
-                                    (Enumeration<NetworkInterface>) param.getResult();
+                                    (Enumeration<NetworkInterface>) result;
                             if (orig == null) return;
 
                             // Filter out interfaces named "rmnet*" / "ccmni*" / "p2p*"
@@ -167,10 +158,10 @@ public class NetworkHooks {
                                 }
                                 kept.add(ni);
                             }
-                            param.setResult(Collections.enumeration(kept));
+                            chain.replaceResult(Collections.enumeration(kept));
                         }
                     });
-        } catch (Throwable t) { logFail("NetworkInterface.getNetworkInterfaces", t); }
+        });
     }
 
     private static byte[] macStringToBytes(String mac) {
@@ -186,9 +177,5 @@ public class NetworkHooks {
             return EMPTY_MAC;
         }
         return out;
-    }
-
-    private static void logFail(String what, Throwable t) {
-        XposedBridge.log(TAG + ": failed to hook " + what + ": " + t);
     }
 }

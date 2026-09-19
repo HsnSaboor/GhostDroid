@@ -29,23 +29,20 @@ import com.devicespooflab.hooks.hooks.WebViewHooks;
 import com.devicespooflab.hooks.utils.ConfigManager;
 import com.devicespooflab.hooks.utils.XposedServiceBridge;
 
-import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
-public class MainHook implements IXposedHookLoadPackage {
+public class MainHook {
 
     private static final String TAG = "DeviceSpoofLab";
 
-    @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+    public void handleLoadPackage(HookContext lpparam) {
         try {
             ConfigManager.init();
         } catch (Exception e) {
             Log.e(TAG, "Failed to init config: " + e.getMessage(), e);
-            XposedBridge.log(TAG + ": Failed to init config: " + e.getMessage());
+            Legacy.log(TAG + ": Failed to init config: " + e.getMessage());
             return;
         }
 
@@ -92,14 +89,13 @@ public class MainHook implements IXposedHookLoadPackage {
         };
 
         try {
-            XposedHelpers.findAndHookMethod("android.app.Application",
+            Legacy.findAndHookMethod("android.app.Application",
                     lpparam.classLoader, "attach",
-                    android.content.Context.class, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+                    android.content.Context.class, new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
                                 android.content.Context ctx =
-                                        (android.content.Context) param.args[0];
+                                        (android.content.Context) chain.arg(0, null);
                                 XposedServiceBridge.init(ctx, onBinderReady);
                                 // The own UI process is no longer in scope, so it
                                 // never reaches here; it publishes directly from
@@ -127,217 +123,98 @@ public class MainHook implements IXposedHookLoadPackage {
             Log.w(TAG, "Failed to hook Application.attach: " + t.getMessage());
         }
 
-        // BuildHooks first so direct Build.* reads pick up spoofed values.
-        try {
-            BuildHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": BuildHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": BuildHooks failed: " + e.getMessage());
-        }
-
-        // Skip SystemProperties / Locale / Display / Native in our own process so
-        // MainActivity (the config editor) reads the real host values instead of
-        // looping back its own spoof.
-        if (!isOwnPackage) {
-            try {
-                SystemPropertiesHooks.hook(lpparam);
-                logInfo(verbose, TAG + ": SystemPropertiesHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": SystemPropertiesHooks failed: " + e.getMessage());
-            }
-        } else {
-            logInfo(verbose, TAG + ": SystemPropertiesHooks skipped for module process");
-        }
-
-        try {
-            HardwareHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": HardwareHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": HardwareHooks failed: " + e.getMessage());
-        }
-
-        try {
-            TelephonyHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": TelephonyHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": TelephonyHooks failed: " + e.getMessage());
-        }
-
-        try {
-            SettingsHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": SettingsHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": SettingsHooks failed: " + e.getMessage());
-        }
-
-        try {
-            AdvertisingIdHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": AdvertisingIdHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": AdvertisingIdHooks failed: " + e.getMessage());
-        }
-
-        if (realDeviceSdk >= 30) {
-            try {
-                AppSetIdHooks.hook(lpparam, realDeviceSdk);
-                logInfo(verbose, TAG + ": AppSetIdHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": AppSetIdHooks failed: " + e.getMessage());
-            }
-        }
-
-        try {
-            MediaDrmHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": MediaDrmHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": MediaDrmHooks failed: " + e.getMessage());
-        }
-
-        try {
-            WebViewHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": WebViewHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": WebViewHooks failed: " + e.getMessage());
-        }
-
-        try {
-            PackageManagerHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": PackageManagerHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": PackageManagerHooks failed: " + e.getMessage());
-        }
-
-        try {
-            NetworkHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": NetworkHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": NetworkHooks failed: " + e.getMessage());
-        }
-
-        // DisplayHooks REMOVED: any Java display/resolution spoof breaks
-        // persist.waydroid.width/height. Waydroid owns the real res.
-        logInfo(verbose, TAG + ": DisplayHooks removed (Waydroid owns res)");
-
-        try {
-            SensorHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": SensorHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": SensorHooks failed: " + e.getMessage());
-        }
-
-        try {
-            GpuHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": GpuHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": GpuHooks failed: " + e.getMessage());
-        }
-
-        // File.listFiles/list sysfs enumeration (USB/DRIVERS tabs): Java
-        // opendir/getdents bypasses libc open hooks, so mask listings here
-        // (single Qualcomm node). PCI sysfs dirs stay real for minigbm.
-        try {
-            SysfsListHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": SysfsListHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": SysfsListHooks failed: " + e.getMessage());
-        }
-
-        try {
-            CameraHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": CameraHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": CameraHooks failed: " + e.getMessage());
-        }
-
-        try {
-            StorageHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": StorageHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": StorageHooks failed: " + e.getMessage());
-        }
-
-        if (!isOwnPackage) {
-            try {
-                LocaleHooks.hook(lpparam);
-                logInfo(verbose, TAG + ": LocaleHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": LocaleHooks failed: " + e.getMessage());
-            }
-        } else {
-            logInfo(verbose, TAG + ": LocaleHooks skipped for module process");
-        }
-
-        if (ConfigManager.isHideAccountsEnabled()) {
-            try {
-                AccountHooks.hook(lpparam);
-                logInfo(verbose, TAG + ": AccountHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": AccountHooks failed: " + e.getMessage());
-            }
-        } else {
-            logInfo(verbose, TAG + ": AccountHooks skipped (hooks.hide_accounts=0)");
-        }
-
-        try {
-            PackageInfoHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": PackageInfoHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": PackageInfoHooks failed: " + e.getMessage());
-        }
-
-        try {
-            BatteryHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": BatteryHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": BatteryHooks failed: " + e.getMessage());
-        }
-
-        // Sticky ACTION_BATTERY_CHANGED broadcast: Level/Status/Health/
-        // Power source/Technology/Temperature/Voltage rows. Rewritten to
-        // S26 Ultra discharging values (BatteryManager counters alone
-        // don't cover the broadcast path).
-        try {
-            BatteryIntentHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": BatteryIntentHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": BatteryIntentHooks failed: " + e.getMessage());
-        }
-
-        if (realDeviceSdk >= 28) {
-            try {
-                EuiccHooks.hook(lpparam, realDeviceSdk);
-                logInfo(verbose, TAG + ": EuiccHooks loaded");
-            } catch (Exception e) {
-                XposedBridge.log(TAG + ": EuiccHooks failed: " + e.getMessage());
-            }
-        }
-
-        try {
-            InputDeviceHooks.hook(lpparam);
-            logInfo(verbose, TAG + ": InputDeviceHooks loaded");
-        } catch (Exception e) {
-            XposedBridge.log(TAG + ": InputDeviceHooks failed: " + e.getMessage());
-        }
-
-        if (!isOwnPackage) {
-            try {
-                boolean ok = NativeHooks.tryInstall(ConfigManager.getAllSpoofedProperties());
-                logInfo(verbose, TAG + (ok
-                        ? ": NativeHooks loaded"
-                        : ": NativeHooks unavailable (Java-only spoofing active)"));
-            } catch (Throwable t) {
-                XposedBridge.log(TAG + ": NativeHooks failed: " + t.getMessage());
-            }
-        } else {
-            logInfo(verbose, TAG + ": NativeHooks skipped for module process");
-        }
+        // Table-driven dispatch: {name, hook, minSdk, skipInOwnProcess}.
+        // Replaces ~20 repetitive try/catch + logInfo blocks.
+        installAll(lpparam, verbose, realDeviceSdk, isOwnPackage);
 
         logInfo(verbose, TAG + ": All hooks initialized for " + lpparam.packageName);
     }
 
+    interface SubHook {
+        void apply(HookContext ctx) throws Throwable;
+    }
+
+    static final class Entry {
+        final String name;
+        final SubHook hook;
+        final int minSdk;
+        final boolean skipInOwnProcess;
+
+        Entry(String name, SubHook hook, int minSdk, boolean skipInOwnProcess) {
+            this.name = name;
+            this.hook = hook;
+            this.minSdk = minSdk;
+            this.skipInOwnProcess = skipInOwnProcess;
+        }
+    }
+
+    private static void installAll(HookContext ctx, boolean verbose,
+            int realDeviceSdk, boolean isOwnPackage) {
+        Entry[] entries = {
+            // BuildHooks first so direct Build.* reads pick up spoofed values.
+            new Entry("BuildHooks", BuildHooks::hook, 0, false),
+            new Entry("SystemPropertiesHooks", SystemPropertiesHooks::hook, 0, true),
+            new Entry("HardwareHooks", HardwareHooks::hook, 0, false),
+            new Entry("TelephonyHooks", TelephonyHooks::hook, 0, false),
+            new Entry("SettingsHooks", SettingsHooks::hook, 0, false),
+            new Entry("AdvertisingIdHooks", AdvertisingIdHooks::hook, 0, false),
+            new Entry("AppSetIdHooks", c -> AppSetIdHooks.hook(c, realDeviceSdk), 30, false),
+            new Entry("MediaDrmHooks", MediaDrmHooks::hook, 0, false),
+            new Entry("WebViewHooks", WebViewHooks::hook, 0, false),
+            new Entry("PackageManagerHooks", PackageManagerHooks::hook, 0, false),
+            new Entry("NetworkHooks", NetworkHooks::hook, 0, false),
+            new Entry("SensorHooks", SensorHooks::hook, 0, false),
+            new Entry("GpuHooks", GpuHooks::hook, 0, false),
+            // File.listFiles/list sysfs enumeration (USB/DRIVERS tabs): Java
+            // opendir/getdents bypasses libc open hooks, so mask listings here
+            // (single Qualcomm node). PCI sysfs dirs stay real for minigbm.
+            new Entry("SysfsListHooks", SysfsListHooks::hook, 0, false),
+            new Entry("CameraHooks", CameraHooks::hook, 0, false),
+            new Entry("StorageHooks", StorageHooks::hook, 0, false),
+            new Entry("AccountHooks", AccountHooks::hook, 0, false),
+            new Entry("LocaleHooks", LocaleHooks::hook, 0, true),
+            new Entry("PackageInfoHooks", PackageInfoHooks::hook, 0, false),
+            new Entry("BatteryHooks", BatteryHooks::hook, 0, false),
+            // Sticky ACTION_BATTERY_CHANGED broadcast: Level/Status/Health/
+            // Power source/Technology/Temperature/Voltage rows. Rewritten to
+            // S26 Ultra discharging values (BatteryManager counters alone
+            // don't cover the broadcast path).
+            new Entry("BatteryIntentHooks", BatteryIntentHooks::hook, 0, false),
+            new Entry("EuiccHooks", c -> EuiccHooks.hook(c, realDeviceSdk), 28, false),
+            new Entry("InputDeviceHooks", InputDeviceHooks::hook, 0, false),
+        };
+        // DisplayHooks REMOVED: any Java display/resolution spoof breaks
+        // persist.waydroid.width/height. Waydroid owns the real res.
+        logInfo(verbose, TAG + ": DisplayHooks removed (Waydroid owns res)");
+        for (Entry e : entries) {
+            if (realDeviceSdk < e.minSdk) continue;
+            if (e.skipInOwnProcess && isOwnPackage) {
+                logInfo(verbose, TAG + ": " + e.name + " skipped for module process");
+                continue;
+            }
+            if ("AccountHooks".equals(e.name) && !ConfigManager.isHideAccountsEnabled()) {
+                logInfo(verbose, TAG + ": AccountHooks skipped (hooks.hide_accounts=0)");
+                continue;
+            }
+            try {
+                e.hook.apply(ctx);
+                logInfo(verbose, TAG + ": " + e.name + " loaded");
+            } catch (Throwable t) {
+                Log.w(TAG, e.name + " failed: " + t.getMessage());
+            }
+        }
+        if (!isOwnPackage) {
+            // Java-only: NativeHooks.tryInstall always returns false
+            // (ghost-stealth owns native libc via Dobby). Log once.
+            logInfo(verbose, TAG + ": NativeHooks unavailable (Java-only spoofing active)");
+        } else {
+            logInfo(verbose, TAG + ": NativeHooks skipped for module process");
+        }
+    }
+
     private static void logInfo(boolean verbose, String message) {
         if (verbose) {
-            XposedBridge.log(message);
+            Legacy.log(message);
         }
     }
 

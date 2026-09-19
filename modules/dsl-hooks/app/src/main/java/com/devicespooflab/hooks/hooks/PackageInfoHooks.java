@@ -5,10 +5,9 @@ import android.content.pm.PackageInfo;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 // Install times reported as 60-120 days ago, derived from android_id so the
 // per-install value stays stable across reads.
@@ -17,64 +16,62 @@ public class PackageInfoHooks {
     private static final String TAG = "DeviceSpoofLab-PackageInfo";
     private static final long DAY_MS = 86_400_000L;
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hookPackageInfoFields(lpparam);
         hookGetInstallerPackageName(lpparam);
         hookGetInstallSourceInfo(lpparam);
     }
 
-    private static void hookPackageInfoFields(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> appPm = XposedHelpers.findClassIfExists(
+    private static void hookPackageInfoFields(HookContext lpparam) {
+        Class<?> appPm = Legacy.findClassIfExists(
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
         if (appPm == null) return;
 
-        XC_MethodHook patcher = new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                Object result = param.getResult();
-                if (result instanceof PackageInfo) {
+        HookFramework.Hook patcher = new HookFramework.Hook() {@Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                                if (result instanceof PackageInfo) {
                     patch((PackageInfo) result);
                 }
             }
         };
 
         // getPackageInfo(String, int) and getPackageInfo(String, PackageInfoFlags)
-        try {
-            XposedHelpers.findAndHookMethod(appPm, "getPackageInfo",
+        Legacy.safeHook(TAG, "getPackageInfo(String,int)", () -> {
+            Legacy.findAndHookMethod(appPm, "getPackageInfo",
                     String.class, int.class, patcher);
-        } catch (Throwable t) { logFail("getPackageInfo(String,int)", t); }
+        });
 
         try {
-            Class<?> flags = XposedHelpers.findClassIfExists(
+            Class<?> flags = Legacy.findClassIfExists(
                     "android.content.pm.PackageManager$PackageInfoFlags", lpparam.classLoader);
             if (flags != null) {
-                XposedHelpers.findAndHookMethod(appPm, "getPackageInfo",
+                Legacy.findAndHookMethod(appPm, "getPackageInfo",
                         String.class, flags, patcher);
             }
         } catch (Throwable t) { /* Android 13+ overload */ }
     }
 
-    private static void hookGetInstallerPackageName(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> appPm = XposedHelpers.findClassIfExists(
+    private static void hookGetInstallerPackageName(HookContext lpparam) {
+        Class<?> appPm = Legacy.findClassIfExists(
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
         if (appPm == null) return;
 
-        try {
-            XposedHelpers.findAndHookMethod(appPm, "getInstallerPackageName",
+        Legacy.safeHook(TAG, "getInstallerPackageName", () -> {
+            Legacy.findAndHookMethod(appPm, "getInstallerPackageName",
                     String.class,
-                    new XC_MethodHook() {
+                    new HookFramework.Hook() {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            String packageName = (String) param.args[0];
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            String packageName = (String) chain.arg(0, null);
                             if (shouldSpoofInstaller(lpparam, packageName)) {
-                                param.setResult(ConfigManager.getInstallerPackage());
+                                chain.replaceResult(ConfigManager.getInstallerPackage());
                             }
                         }
                     });
-        } catch (Throwable t) { logFail("getInstallerPackageName", t); }
+        });
     }
 
-    private static boolean shouldSpoofInstaller(XC_LoadPackage.LoadPackageParam lpparam,
+    private static boolean shouldSpoofInstaller(HookContext lpparam,
                                                 String packageName) {
         if (packageName == null || lpparam.packageName == null) {
             return false;
@@ -92,20 +89,20 @@ public class PackageInfoHooks {
         return (lpparam.appInfo.flags & systemFlags) == 0;
     }
 
-    private static void hookGetInstallSourceInfo(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> appPm = XposedHelpers.findClassIfExists(
+    private static void hookGetInstallSourceInfo(HookContext lpparam) {
+        Class<?> appPm = Legacy.findClassIfExists(
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
         if (appPm == null) return;
 
-        Class<?> sourceInfo = XposedHelpers.findClassIfExists(
+        Class<?> sourceInfo = Legacy.findClassIfExists(
                 "android.content.pm.InstallSourceInfo", lpparam.classLoader);
         if (sourceInfo == null) return;
 
         // InstallSourceInfo getters — hook each accessor to return Play Store.
-        XC_MethodHook playStoreHook = new XC_MethodHook() {
+        HookFramework.Hook playStoreHook = new HookFramework.Hook() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                param.setResult(ConfigManager.getInstallerPackage());
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                chain.replaceResult(ConfigManager.getInstallerPackage());
             }
         };
 
@@ -115,7 +112,7 @@ public class PackageInfoHooks {
                 "getOriginatingPackageName"
         }) {
             try {
-                XposedHelpers.findAndHookMethod(sourceInfo, getter, playStoreHook);
+                Legacy.findAndHookMethod(sourceInfo, getter, playStoreHook);
             } catch (Throwable t) { /* getter may be absent on older Android */ }
         }
     }
@@ -143,9 +140,5 @@ public class PackageInfoHooks {
             h *= 1099511628211L;
         }
         return h;
-    }
-
-    private static void logFail(String what, Throwable t) {
-        XposedBridge.log(TAG + ": failed to hook " + what + ": " + t);
     }
 }

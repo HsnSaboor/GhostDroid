@@ -2,16 +2,16 @@ package com.devicespooflab.hooks.hooks;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
+import com.devicespooflab.hooks.bridge.Legacy;
 
 public class MediaDrmHooks {
 
     private static final String DEVICE_UNIQUE_ID = "deviceUniqueId";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> mediaDrmClass = XposedHelpers.findClassIfExists(
+    public static void hook(HookContext lpparam) {
+        Class<?> mediaDrmClass = Legacy.findClassIfExists(
                 "android.media.MediaDrm",
                 lpparam.classLoader
         );
@@ -21,16 +21,15 @@ public class MediaDrmHooks {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(mediaDrmClass, "getPropertyByteArray",
+            Legacy.findAndHookMethod(mediaDrmClass, "getPropertyByteArray",
                     String.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            String propertyName = (String) param.args[0];
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            String propertyName = (String) chain.arg(0, null);
 
                             if (DEVICE_UNIQUE_ID.equals(propertyName)) {
                                 byte[] v = ConfigManager.getMediaDrmId();
-                                if (v != null) param.setResult(v);
+                                if (v != null) chain.replaceResult(v);
                             }
                         }
                     });

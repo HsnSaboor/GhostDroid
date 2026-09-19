@@ -2,45 +2,42 @@ package com.devicespooflab.hooks.hooks;
 
 import android.view.InputDevice;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class InputDeviceHooks {
 
     private static final String TAG = "DeviceSpoofLab-InputDevice";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         try {
-            XposedHelpers.findAndHookMethod(InputDevice.class, "getName",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            String name = (String) param.getResult();
+            Legacy.findAndHookMethod(InputDevice.class, "getName",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            String name = (String) result;
                             if (name != null && isEmulator(name)) {
-                                param.setResult("Touch");
+                                chain.replaceResult("Touch");
                             } else if (name != null) {
                                 String clean = sanitizeDeviceLabel(name);
-                                if (!clean.equals(name)) param.setResult(clean);
+                                if (!clean.equals(name)) chain.replaceResult(clean);
                             }
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook InputDevice.getName: " + t);
+            Legacy.log(TAG + ": failed to hook InputDevice.getName: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(InputDevice.class, "getDescriptor",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            String desc = (String) param.getResult();
+            Legacy.findAndHookMethod(InputDevice.class, "getDescriptor",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            String desc = (String) result;
                             if (desc != null && isEmulator(desc)) {
-                                param.setResult("0");
+                                chain.replaceResult("0");
                             } else if (desc != null) {
                                 String clean = sanitizeDeviceLabel(desc);
-                                if (!clean.equals(desc)) param.setResult(clean);
+                                if (!clean.equals(desc)) chain.replaceResult(clean);
                             }
                         }
                     });

@@ -165,6 +165,8 @@ public final class XposedServiceBridge {
             }
         }
         if (sNewApiAvailable.get()) {
+            // New-API getRemotePreferences always round-trips to the daemon
+            // (no client-side memo to evict), so a fresh fetch IS fresh.
             return XposedModuleImpl.fetchRemotePreferences(groupName);
         }
         return null;

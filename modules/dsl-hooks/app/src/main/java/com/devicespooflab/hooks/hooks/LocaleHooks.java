@@ -8,16 +8,15 @@ import com.devicespooflab.hooks.utils.ConfigManager;
 import java.util.Locale;
 import java.util.TimeZone;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 public class LocaleHooks {
 
     private static final String TAG = "DeviceSpoofLab-Locale";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         hookTimeZone();
         hookLocale();
         if (Build.VERSION.SDK_INT >= 24) {
@@ -27,42 +26,39 @@ public class LocaleHooks {
 
     private static void hookTimeZone() {
         try {
-            XposedHelpers.findAndHookMethod(TimeZone.class, "getDefault",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+            Legacy.findAndHookMethod(TimeZone.class, "getDefault",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             String tz = ConfigManager.getSystemProperty(
                                     "persist.sys.timezone", "America/Los_Angeles");
                             if (tz != null && !tz.isEmpty()) {
-                                param.setResult(TimeZone.getTimeZone(tz));
+                                chain.replaceResult(TimeZone.getTimeZone(tz));
                             }
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook TimeZone.getDefault: " + t);
+            Legacy.log(TAG + ": failed to hook TimeZone.getDefault: " + t);
         }
     }
 
     private static void hookLocale() {
         try {
-            XposedHelpers.findAndHookMethod(Locale.class, "getDefault",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(buildLocale());
+            Legacy.findAndHookMethod(Locale.class, "getDefault",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(buildLocale());
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook Locale.getDefault: " + t);
+            Legacy.log(TAG + ": failed to hook Locale.getDefault: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(Locale.class, "getDefault",
+            Legacy.findAndHookMethod(Locale.class, "getDefault",
                     Locale.Category.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(buildLocale());
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(buildLocale());
                         }
                     });
         } catch (Throwable t) { /* Category overload is API 24+ */ }
@@ -70,23 +66,21 @@ public class LocaleHooks {
 
     private static void hookLocaleList() {
         try {
-            XposedHelpers.findAndHookMethod(LocaleList.class, "getDefault",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(new LocaleList(buildLocale()));
+            Legacy.findAndHookMethod(LocaleList.class, "getDefault",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(new LocaleList(buildLocale()));
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook LocaleList.getDefault: " + t);
+            Legacy.log(TAG + ": failed to hook LocaleList.getDefault: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(LocaleList.class, "getAdjustedDefault",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(new LocaleList(buildLocale()));
+            Legacy.findAndHookMethod(LocaleList.class, "getAdjustedDefault",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(new LocaleList(buildLocale()));
                         }
                     });
         } catch (Throwable t) { /* may be missing on some forks */ }

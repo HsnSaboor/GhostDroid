@@ -4,44 +4,41 @@ import android.accounts.Account;
 
 import com.devicespooflab.hooks.utils.ConfigManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.devicespooflab.hooks.bridge.Legacy;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.HookContext;
 
 // AccountManager.getAccounts is hooked; getAccountsByType is intentionally not.
 public class AccountHooks {
 
     private static final String TAG = "DeviceSpoofLab-Account";
 
-    public static void hook(XC_LoadPackage.LoadPackageParam lpparam) {
+    public static void hook(HookContext lpparam) {
         if (!ConfigManager.isHideAccountsEnabled()) {
             return;
         }
 
-        Class<?> am = XposedHelpers.findClassIfExists(
+        Class<?> am = Legacy.findClassIfExists(
                 "android.accounts.AccountManager", lpparam.classLoader);
         if (am == null) return;
 
         try {
-            XposedHelpers.findAndHookMethod(am, "getAccounts",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(new Account[0]);
+            Legacy.findAndHookMethod(am, "getAccounts",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(new Account[0]);
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to hook getAccounts: " + t);
+            Legacy.log(TAG + ": failed to hook getAccounts: " + t);
         }
 
         try {
-            XposedHelpers.findAndHookMethod(am, "getAccountsAsUser",
+            Legacy.findAndHookMethod(am, "getAccountsAsUser",
                     int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(new Account[0]);
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(new Account[0]);
                         }
                     });
         } catch (Throwable t) { /* hidden API; may be missing */ }
