@@ -80,12 +80,13 @@ impl ShellView {
         self.state.push_log(format!("launch: {pkg}"));
         cx.notify();
         cx.spawn(async move |view, cx| {
+            let pkg_for_msg = pkg.clone();
             let out = cx
                 .background_spawn(async move { crate::sync::launch_game(&pkg) })
                 .await;
             let line = match out {
-                Ok(()) => format!("launch ok: {pkg}"),
-                Err(err) => format!("launch failed: {pkg} ({err})"),
+                Ok(()) => format!("launch ok: {pkg_for_msg}"),
+                Err(err) => format!("launch failed: {pkg_for_msg} ({err})"),
             };
             let _ = view.update(cx, |this, cx| {
                 this.state.push_log(line);
