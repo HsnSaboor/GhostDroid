@@ -1,6 +1,6 @@
 # gs_native: Dobby export-side inline hooks (get/find/read/read_callback,
-# uname, gethostname, getifaddrs). Export-side patching covers libraries
-# loaded after install (e.g. libemulatordetector.so via System.loadLibrary);
+# uname, gethostname, getifaddrs, open-family + maps-content filter).
+# Export-side patching covers libraries
 # LSPlt PLT-patching only covered already-loaded callers, so reveny still
 # saw real abilist/native.bridge values.
 # Pins (2026-09): NDK r26+ (DSL uses 26.3.11579264), cmake 3.22.1,

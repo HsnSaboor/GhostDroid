@@ -124,6 +124,9 @@ bool IsMountsPath(const char* p) {
            strcmp(p, "/proc/mountinfo") == 0;
 }
 
+// Forward: translator predicate (defined below) reused by the maps filter.
+bool IsTranslatorPath(const char* p);
+
 // Translator cloak (EmulatorDetection.cpp:108-132): the ARM bridge must
 // stay LOADABLE for games (PUBG runs translated code via Houdini) but
 // must be INVISIBLE to detectors. Any open/openat/fopen probe of the
@@ -139,6 +142,114 @@ bool IsMountsPath(const char* p) {
 // Only the open-family is cloaked (dlopen/mmap of already-open fds still
 // works, so translated games keep running). Property side is cloaked in
 // spoof.conf (native.bridge=0, arm-only abilist, x86 isa hidden).
+// Maps-content views (/proc/self/maps et al.) are filtered separately in
+// OpenFilteredMaps: ACE parses maps text, which dl_iterate_phdr can't cover.
+
+bool IsMapsPath(const char* p) {
+    if (p == nullptr) return false;
+    if (strcmp(p, "/proc/self/maps") == 0 ||
+        strcmp(p, "/proc/self/smaps") == 0 ||
+        strcmp(p, "/proc/self/smaps_rollup") == 0)
+        return true;
+    // /proc/self/task/<tid>/{maps,smaps,smaps_rollup}
+    static const char kTask[] = "/proc/self/task/";
+    if (strncmp(p, kTask, sizeof(kTask) - 1) == 0) {
+        const char* slash = strchr(p + sizeof(kTask) - 1, '/');
+        if (slash != nullptr && (strcmp(slash, "/maps") == 0 ||
+                                 strcmp(slash, "/smaps") == 0 ||
+                                 strcmp(slash, "/smaps_rollup") == 0))
+            return true;
+    }
+    // /proc/<pid>/{maps,smaps,smaps_rollup} only when pid == self
+    // (detectors build the path via getpid()).
+    static const char kProc[] = "/proc/";
+    if (strncmp(p, kProc, sizeof(kProc) - 1) == 0) {
+        const char* rest = p + sizeof(kProc) - 1;
+        long pid = 0;
+        size_t i = 0;
+        while (rest[i] >= '0' && rest[i] <= '9') {
+            pid = pid * 10 + (rest[i] - '0');
+            i++;
+        }
+        if (i > 0 && pid == (long)::getpid()) {
+            const char* tail = rest + i;
+            if (strcmp(tail, "/maps") == 0 || strcmp(tail, "/smaps") == 0 ||
+                strcmp(tail, "/smaps_rollup") == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+// Max maps bytes filtered inline (1 MiB pipe). Larger -> fail open (real
+// fd) so the game never breaks; detectors just see truth in that case.
+#define MAPS_FILTER_MAX (1u << 20)
+
+// Open real maps, strip translator lines, serve via pipe. Returns the
+// read-end fd, or -1 to fall back to the real open. Single write into a
+// pre-grown pipe buffer, so the caller never blocks with no reader yet.
+int OpenFilteredMaps(const char* path, int flags) {
+    // Read-only views only; writers / O_PATH / O_TMPFILE fall through real.
+    if ((flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND |
+                  O_PATH | O_TMPFILE)) != 0)
+        return -1;
+    if (orig_open == nullptr) return -1;
+    int real = orig_open(path, O_RDONLY | O_CLOEXEC, (mode_t)0);
+    if (real < 0) return -1;
+    std::string data;
+    data.reserve(1u << 18);
+    char buf[32768];
+    size_t total = 0;
+    for (;;) {
+        ssize_t n = ::read(real, buf, sizeof(buf));
+        if (n < 0) {
+            ::close(real);
+            return -1;
+        }
+        if (n == 0) break;
+        if (total + (size_t)n > MAPS_FILTER_MAX) {
+            ::close(real);
+            return -1;
+        }
+        data.append(buf, (size_t)n);
+        total += (size_t)n;
+    }
+    ::close(real);
+    std::string out;
+    out.reserve(data.size());
+    size_t pos = 0;
+    while (pos < data.size()) {
+        size_t eol = data.find('\n', pos);
+        size_t len = (eol == std::string::npos) ? data.size() - pos
+                                                : eol - pos + 1;
+        std::string line = data.substr(pos, len);
+        // Whole-line substring scan: maps lines carry the mapped pathname,
+        // so the dl_phdr predicate applies (libraries stay mapped).
+        if (!IsTranslatorPath(line.c_str())) out += line;
+        pos += len;
+    }
+    int fds[2];
+    if (::pipe(fds) != 0) return -1;
+    ::fcntl(fds[0], F_SETPIPE_SZ, (int)MAPS_FILTER_MAX);
+    size_t written = 0;
+    while (written < out.size()) {
+        ssize_t n = ::write(fds[1], out.data() + written, out.size() - written);
+        if (n <= 0) {
+            ::close(fds[0]);
+            ::close(fds[1]);
+            return -1;
+        }
+        written += (size_t)n;
+    }
+    ::close(fds[1]);
+    if ((flags & O_CLOEXEC) != 0) ::fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    if ((flags & O_NONBLOCK) != 0) {
+        int fl = ::fcntl(fds[0], F_GETFL, 0);
+        ::fcntl(fds[0], F_SETFL, fl | O_NONBLOCK);
+    }
+    return fds[0];
+}
+
 bool IsTranslatorPath(const char* p) {
     if (p == nullptr) return false;
     if (strstr(p, "libhoudini") != nullptr) return true;
@@ -240,6 +351,12 @@ int my_open(const char* path, int flags, ...) {
         errno = ENOENT;
         return -1;
     }
+    // ACE parses /proc/self/maps text for translator .so names (dl_phdr
+    // hook alone can't cover it). Serve the filtered pipe view.
+    if (IsMapsPath(path)) {
+        int fd = OpenFilteredMaps(path, flags);
+        if (fd >= 0) return fd;
+    }
     const char* eff = Redirect(path);
     if (eff != path) {
         // Read-only view: strip write/creat so apps can't corrupt the fake.
@@ -265,6 +382,10 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
     }
+    if (dirfd == AT_FDCWD && IsMapsPath(path)) {
+        int fd = OpenFilteredMaps(path, flags);
+        if (fd >= 0) return fd;
+    }
     if (dirfd == AT_FDCWD && path != nullptr) {
         // Same fake-file treatment for the extended redirect table.
         const char* eff = Redirect(path);
@@ -287,6 +408,17 @@ FILE* my_fopen(const char* path, const char* mode) {
     if (IsTranslatorPath(path)) {
         errno = ENOENT;
         return nullptr;
+    }
+    // Same filtered view for stdio readers of maps (fscanf/fgets loops).
+    if (IsMapsPath(path) && mode != nullptr && strchr(mode, 'r') != nullptr &&
+        strchr(mode, 'w') == nullptr && strchr(mode, 'a') == nullptr &&
+        strchr(mode, '+') == nullptr) {
+        int fd = OpenFilteredMaps(path, O_RDONLY);
+        if (fd >= 0) {
+            FILE* f = ::fdopen(fd, mode);
+            if (f != nullptr) return f;
+            ::close(fd);
+        }
     }
     const char* eff = Redirect(path);
     if (eff != path) {
