@@ -57,5 +57,21 @@ public class BatteryHooks {
                         }
                     });
         });
+
+        // DeviceInfoHW "Power profile" row reads the static design capacity
+        // from com.android.internal.os.PowerProfile (power_profile.xml),
+        // not from BatteryManager. Report the 5000mAh S26 Ultra cell.
+        Legacy.safeHook(TAG, "PowerProfile.getBatteryCapacity", () -> {
+            Class<?> profile = Legacy.findClassIfExists(
+                    "com.android.internal.os.PowerProfile",
+                    lpparam.classLoader);
+            if (profile == null) return;
+            HookFramework.hookAllMethods(profile, "getBatteryCapacity",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            chain.replaceResult(5000.0);
+                        }
+                    });
+        });
     }
 }
