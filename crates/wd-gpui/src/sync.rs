@@ -12,6 +12,10 @@ use wd_waydroid::{AppRow, Status, boot_args, parse_app_list, parse_status, run_w
 
 /// Per-call timeout for `status` / `app list`.
 const QUICK_MS: u64 = 10_000;
+/// Budget for first-frame wait after `app launch` (UE4 splash is slow).
+const LAUNCH_WAIT_MS: u64 = 180_000;
+/// Gap between visibility polls.
+const LAUNCH_GAP_MS: u64 = 2_000;
 /// Timeout for `session start` (first boot can be slow).
 const BOOT_MS: u64 = 90_000;
 /// Budget for polling `status` after boot.
@@ -163,15 +167,32 @@ pub fn device_action(action: DeviceAction) -> wd_core::Result<(DeviceState, Stri
 
 /// Launch one app via `waydroid app launch <pkg>` (Library card button).
 ///
+/// Fires the intent, then polls `adb dumpsys` until the task flips
+/// `visible=true` (first frame). Heavy games boot translucent for minutes
+/// under translation — the report says "booting" instead of fake success.
+///
 /// # Errors
 ///
 /// Returns the spawn error when `waydroid` is missing or launch fails.
-pub fn launch_game(pkg: &str) -> wd_core::Result<()> {
+pub fn launch_game(pkg: &str) -> wd_core::Result<LaunchReport> {
     tracing::info!(pkg, "sync: launch game");
     let args = wd_waydroid::launch_args(&Pkg(pkg.to_owned()));
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
     run_waydroid(&args_ref, QUICK_MS)?;
-    Ok(())
+    let frame = wd_waydroid::wait_first_frame(pkg, LAUNCH_WAIT_MS, LAUNCH_GAP_MS);
+    Ok(LaunchReport {
+        visible: frame.visible,
+        waited_secs: frame.waited_ms / 1_000,
+    })
+}
+
+/// Honest outcome of [`launch_game`]: first frame seen or still booting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LaunchReport {
+    /// Task flipped `visible=true` inside the budget.
+    pub visible: bool,
+    /// Whole seconds waited for the first frame.
+    pub waited_secs: u64,
 }
 
 // --- Spoof catalog: compile-time-embedded canonical TOMLs -----------------

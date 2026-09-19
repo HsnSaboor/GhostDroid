@@ -85,7 +85,13 @@ impl ShellView {
                 .background_spawn(async move { crate::sync::launch_game(&pkg) })
                 .await;
             let line = match out {
-                Ok(()) => format!("launch ok: {pkg_for_msg}"),
+                Ok(report) if report.visible => {
+                    format!("launch ok: {pkg_for_msg} (first frame {}s)", report.waited_secs)
+                }
+                Ok(report) => format!(
+                    "launch sent: {pkg_for_msg} (still booting after {}s, splash translucent — wait or relaunch)",
+                    report.waited_secs
+                ),
                 Err(err) => format!("launch failed: {pkg_for_msg} ({err})"),
             };
             let _ = view.update(cx, |this, cx| {

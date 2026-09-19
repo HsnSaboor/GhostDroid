@@ -1,4 +1,6 @@
-//! Frame builders. LE per `ANDROID_SOCKET_PROTOCOL.md:139`.
+//! Frame builders.
+//!
+//! LE per `ANDROID_SOCKET_PROTOCOL.md:139`.
 //! `DOWN/MOVE [tag,slot,x LE,y LE]=10B`, `UP [tag,slot]=2B`,
 //! `CANCEL [tag]=1B` (server `cancelAll`, no slot), `PING=1B`.
 //! Matches `java/PhantomServer.java` + vendor

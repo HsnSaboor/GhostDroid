@@ -241,19 +241,37 @@ fn list_live() -> serde_json::Value {
     }
 }
 
-/// `app.start`: live `waydroid app launch <pkg>`.
+/// `app.start`: live `waydroid app launch <pkg>` + first-frame wait.
+///
+/// Fires the intent, then polls task visibility so callers learn whether
+/// the first frame landed or the app is still booting translucent.
+/// Optional `wait_s` caps the poll (default 180, 0 = fire and return).
 fn app_start_live(params: &serde_json::Value) -> serde_json::Value {
     tracing::info!("call: app.start live in");
     let Some(pkg) = str_param(params, "pkg", 0).or_else(|| str_param(params, "package", 0)) else {
         return need("app.start", "pkg");
     };
+    let wait_s: u64 = params
+        .get("wait_s")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(180);
     let argv = wd_waydroid::launch_args(&wd_core::Pkg(pkg.clone()));
-    match run(&argv, 30_000) {
-        Ok(_) => serde_json::json!({"ok": true, "tool": "app.start", "pkg": pkg}),
-        Err(e) => {
-            spawn_out("app.start", &argv, Err(e)).unwrap_or_else(|| serde_json::json!({"ok": true}))
-        }
+    if let Err(e) = run(&argv, 30_000) {
+        return spawn_out("app.start", &argv, Err(e))
+            .unwrap_or_else(|| serde_json::json!({"ok": true}));
     }
+    if wait_s == 0 {
+        return serde_json::json!({"ok": true, "tool": "app.start", "pkg": pkg, "visible": false, "booting": true});
+    }
+    let frame = wd_waydroid::wait_first_frame(&pkg, wait_s.saturating_mul(1_000), 2_000);
+    serde_json::json!({
+        "ok": true,
+        "tool": "app.start",
+        "pkg": pkg,
+        "visible": frame.visible,
+        "booting": !frame.visible,
+        "waited_s": frame.waited_ms / 1_000,
+    })
 }
 
 /// `app.stop`: live `waydroid shell am force-stop <pkg>`.

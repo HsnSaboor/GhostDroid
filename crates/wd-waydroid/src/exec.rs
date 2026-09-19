@@ -50,7 +50,81 @@ fn drain_capped(pipe: impl std::io::Read + Send + 'static) -> std::thread::JoinH
 /// [`wd_core::WdError::Internal`] on non-zero exit.
 pub fn run_waydroid(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
     tracing::info!(?args, timeout_ms, "exec: run in");
-    let mut cmd = std::process::Command::new("waydroid");
+    run_bin("waydroid", args, timeout_ms)
+}
+
+/// Run `adb <args>` with a timeout, return stdout.
+///
+/// Same supervisor as [`run_waydroid`]; `adb` works as the session user
+/// (unlike `waydroid shell`, which needs euid 0), so GUI/CLI callers use
+/// this for device-side polls (`pidof`, `dumpsys`).
+///
+/// # Errors
+///
+/// Same variants as [`run_waydroid`].
+pub fn run_adb(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
+    tracing::info!(?args, timeout_ms, "exec: adb run in");
+    run_bin("adb", args, timeout_ms)
+}
+
+/// First-frame wait outcome for one package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WaitFrame {
+    /// Task flipped `visible=true` inside the budget.
+    pub visible: bool,
+    /// Last task snapshot still `translucent=true` (splash theme).
+    pub translucent: bool,
+    /// Process answered `pidof` on the last poll.
+    pub alive: bool,
+    /// Milliseconds waited before returning.
+    pub waited_ms: u64,
+}
+
+/// Poll `adb` until `pkg`'s task flips visible or `budget_ms` lapses.
+///
+/// One `pidof` + one `dumpsys` per round, `gap_ms` between rounds.
+/// Returns the last snapshot on expiry — callers report "still booting"
+/// instead of fake success. Sleeps on the caller thread; run off-UI.
+#[must_use]
+pub fn wait_first_frame(pkg: &str, budget_ms: u64, gap_ms: u64) -> WaitFrame {
+    use crate::focus::{dumpsys_args, parse_task_visibility, pidof_args};
+    tracing::info!(pkg, budget_ms, "exec: wait first frame");
+    let start = Instant::now();
+    let budget = Duration::from_millis(budget_ms);
+    let gap = Duration::from_millis(gap_ms);
+    let mut out = WaitFrame {
+        visible: false,
+        translucent: true,
+        alive: false,
+        waited_ms: 0,
+    };
+    loop {
+        let pid_argv = pidof_args(pkg);
+        let pid_ref: Vec<&str> = pid_argv.iter().map(String::as_str).collect();
+        out.alive = run_adb(&pid_ref, QUICK_POLL_MS).is_ok_and(|s| !s.trim().is_empty());
+        let dump_argv = dumpsys_args();
+        let dump_ref: Vec<&str> = dump_argv.iter().map(String::as_str).collect();
+        if let Ok(dump) = run_adb(&dump_ref, QUICK_POLL_MS)
+            && let Some(vis) = parse_task_visibility(&dump, pkg)
+        {
+            out.visible = vis.visible;
+            out.translucent = vis.translucent;
+        }
+        out.waited_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        if out.visible || start.elapsed() >= budget {
+            break;
+        }
+        std::thread::sleep(gap);
+    }
+    tracing::info!(?out, "exec: wait first frame out");
+    out
+}
+
+/// Per-poll timeout for `pidof`/`dumpsys` inside [`wait_first_frame`].
+const QUICK_POLL_MS: u64 = 10_000;
+
+fn run_bin(binary: &str, args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
+    let mut cmd = std::process::Command::new(binary);
     cmd.args(args);
     // No bus forwarding: Waydroid's session bus rejects foreign uids, so
     // sudo'd app verbs can never see the user session. Split instead:
@@ -71,11 +145,11 @@ pub fn run_waydroid(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
             break exit;
         }
         if start.elapsed() >= budget {
-            tracing::warn!(?args, timeout_ms, "exec: timeout, killing waydroid");
+            tracing::warn!(binary, ?args, timeout_ms, "exec: timeout, killing child");
             let _ = child.kill();
             let _ = child.wait();
             return Err(wd_core::WdError::Timeout(format!(
-                "waydroid {} timed out",
+                "{binary} {} timed out",
                 args.join(" ")
             )));
         }
@@ -93,9 +167,9 @@ pub fn run_waydroid(args: &[&str], timeout_ms: u64) -> wd_core::Result<String> {
         Ok(stdout_text)
     } else {
         let detail = String::from_utf8_lossy(&stderr_bytes).trim().to_owned();
-        tracing::warn!(?args, %detail, "exec: non-zero exit");
+        tracing::warn!(binary, ?args, %detail, "exec: non-zero exit");
         Err(wd_core::WdError::Internal(format!(
-            "waydroid {} failed: {detail}",
+            "{binary} {} failed: {detail}",
             args.join(" ")
         )))
     }

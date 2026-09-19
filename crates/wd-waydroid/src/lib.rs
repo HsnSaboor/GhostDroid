@@ -1,6 +1,7 @@
 //! wd-waydroid: session/props/apps over stock Waydroid 1.6.3.
 //!
-//! Arg builders plus parsers only. No spawn, no sleep, no D-Bus.
+//! Arg builders plus parsers, supervised spawns (`exec`), and the
+//! first-frame wait poll. No shell strings, no D-Bus.
 //! Refs: `.devdocs/waydroid/tools/actions/`,
 //! `.devdocs/waydroid-mcp/src/waydroid_mcp/adb.py:39-51`.
 #![deny(missing_docs)]
@@ -8,6 +9,7 @@
 pub mod android_server;
 pub mod apps;
 pub mod exec;
+pub mod focus;
 pub mod idc;
 pub mod props;
 pub mod ready;
@@ -21,7 +23,8 @@ pub use android_server::{
 pub use apps::{
     AppRow, install_args, intent_args, launch_args, list_args, parse_app_list, remove_args,
 };
-pub use exec::{is_app_verb, run_waydroid};
+pub use exec::{WaitFrame, is_app_verb, run_adb, run_waydroid, wait_first_frame};
+pub use focus::{TaskVis, dumpsys_args, parse_task_visibility, pidof_args};
 pub use idc::{
     DEVICE_NAME as IDC_DEVICE_NAME, IDC_TEXT as PHANTOM_IDC_TEXT, PRODUCT_ID as IDC_PRODUCT_ID,
     VENDOR_ID as IDC_VENDOR_ID, device_filename as idc_device_filename,
