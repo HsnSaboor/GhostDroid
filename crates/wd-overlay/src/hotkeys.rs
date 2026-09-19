@@ -25,6 +25,42 @@ pub enum HotkeyAction {
     EditorXt,
     /// `Ctrl+S`: save profile (`XtMapper` parity).
     SaveXt,
+    /// `F12`: toggle HUD visibility.
+    Visibility,
+    /// Alt/Ctrl edge: toggle pointer grab.
+    GrabToggle,
+}
+
+/// True for the F12 visibility key.
+#[must_use]
+pub fn is_visibility_key(key: &str) -> bool {
+    tracing::trace!(key, "wd-overlay: visibility key check");
+    key.eq_ignore_ascii_case("f12")
+}
+
+/// Full resolver with Alt state (Alt/Ctrl rising edge → grab toggle).
+///
+/// Backward-compatible level wrapper: treats the previous poll as released,
+/// so a single call with Alt/Ctrl held reports the toggle. Polling callers
+/// should use [`action_for_full_edge`] with the real previous state.
+#[must_use]
+pub fn action_for_full(key: &str, ctrl: bool, alt: bool) -> Option<HotkeyAction> {
+    action_for_full_edge(key, ctrl, alt, false, false)
+}
+
+/// Edge-triggered resolver: modifier-only events fire on the press transition.
+#[must_use]
+pub fn action_for_full_edge(
+    key: &str,
+    ctrl: bool,
+    alt: bool,
+    prev_alt: bool,
+    prev_ctrl: bool,
+) -> Option<HotkeyAction> {
+    if wd_input::grab_rising_edge(alt, ctrl, prev_alt, prev_ctrl) && key.trim().is_empty() {
+        return Some(HotkeyAction::GrabToggle);
+    }
+    action_for(key, ctrl)
 }
 
 /// Resolve a key press (+ctrl) to an action. `None` = not a hotkey.
@@ -45,6 +81,7 @@ pub fn action_for(key: &str, ctrl: bool) -> Option<HotkeyAction> {
             "F9" => Some(HotkeyAction::Pause),
             "F10" => Some(HotkeyAction::Preview),
             "F2" => Some(HotkeyAction::Shutdown),
+            "F12" => Some(HotkeyAction::Visibility),
             _ => None,
         }
     };

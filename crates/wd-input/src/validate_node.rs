@@ -47,6 +47,7 @@ pub fn validate_node(node: &Node) -> Result<()> {
             a.activation,
             a.activation_key.as_deref(),
             a.region,
+            a.deadzone,
         )?,
         Node::Wheel(w) => shape::wheel(id, w.up_pos, w.down_pos, w.up_slot, w.down_slot)?,
         Node::Macro(m) => shape::check_macro(id, &m.key, &m.sequence)?,

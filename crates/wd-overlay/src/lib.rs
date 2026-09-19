@@ -9,6 +9,7 @@
 pub mod canvas;
 pub mod capture;
 pub mod hotkeys;
+pub mod hud;
 pub mod layout;
 pub mod modes;
 pub mod osd;
@@ -17,7 +18,11 @@ pub mod widgets;
 
 pub use canvas::EditorCanvas;
 pub use capture::{MOUSE_BUTTONS, capturable, normalize_capture};
-pub use hotkeys::{HotkeyAction, action_for, defaults, dup_free};
+pub use hotkeys::{
+    HotkeyAction, action_for, action_for_full, action_for_full_edge, defaults, dup_free,
+    is_visibility_key,
+};
+pub use hud::{BindRow, HudState, TouchDot};
 pub use layout::{LAYOUT_VERSION, LayoutRow, OverlayLayout};
 pub use modes::{EditorMode, switch_on_key};
 pub use osd::{OsdState, TOAST_FRAMES};

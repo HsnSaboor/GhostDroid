@@ -36,14 +36,18 @@ pub fn dispatch(method: &str, params: &serde_json::Value) -> serde_json::Value {
         "input.key" => input_live(params, "input.key"),
         "input.text" => input_live(params, "input.text"),
         "vision.screenshot" => screenshot_live(),
-        "vision.stream_start" | "vision.stream_stop" | "logcat.start" | "logcat.stop" => {
-            argv_preview(method, params)
-        }
         "ui.dump" => ui_dump_live(params),
         "ui.find" => ui_find_live(params),
         "logcat.dump" => logcat_live(params),
+        "shell.exec" => shell_live(params),
+        "file.push" => push_live(params),
+        "file.pull" => pull_live(params),
+        "prop.get" => prop_get_live(params),
+        "prop.set" => prop_set_live(params),
+        "keymap.load" => keymap_load_live(params),
+        "spoof.load" => spoof_load_live(params),
         _ => {
-            serde_json::json!({"ok": true, "tool": method, "params": params, "structuredContent": {"source": "adb"}})
+            serde_json::json!({"ok": false, "error": format!("unhandled tool {method}"), "isError": true})
         }
     };
     tracing::info!(
@@ -58,6 +62,66 @@ pub fn dispatch(method: &str, params: &serde_json::Value) -> serde_json::Value {
 fn run(argv: &[String], timeout_ms: u64) -> Result<String, wd_core::WdError> {
     let refs: Vec<&str> = argv.iter().map(String::as_str).collect();
     wd_waydroid::run_waydroid(&refs, timeout_ms)
+}
+
+/// Run an arbitrary binary (`adb` for file verbs) with timeout kill.
+/// Binary + argv only, never a shell. `Io` surfaces missing binaries
+/// so callers can fall back to argv preview on CI.
+fn run_bin(binary: &str, argv: &[String], timeout_ms: u64) -> Result<String, wd_core::WdError> {
+    use std::io::Read as _;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    tracing::info!(binary, ?argv, timeout_ms, "call: run_bin in");
+    let mut child = std::process::Command::new(binary)
+        .args(argv)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(wd_core::WdError::Io)?;
+    let stdout_take = child.stdout.take();
+    let stderr_take = child.stderr.take();
+    let out_handle = stdout_take.map(|p| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = p.take(262_144).read_to_end(&mut buf);
+            buf.truncate(262_144);
+            buf
+        })
+    });
+    let err_handle = stderr_take.map(|p| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = p.take(262_144).read_to_end(&mut buf);
+            buf.truncate(262_144);
+            buf
+        })
+    });
+    let start = Instant::now();
+    let budget = Duration::from_millis(timeout_ms);
+    let status = loop {
+        if let Some(exit) = child.try_wait().map_err(wd_core::WdError::Io)? {
+            break exit;
+        }
+        if start.elapsed() >= budget {
+            tracing::warn!(binary, "call: run_bin timeout, killing");
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(wd_core::WdError::Timeout(format!("{binary} timed out")));
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let stdout_bytes = out_handle.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stderr_bytes = err_handle.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stdout_text = String::from_utf8_lossy(&stdout_bytes).into_owned();
+    if status.success() {
+        Ok(stdout_text)
+    } else {
+        let detail = String::from_utf8_lossy(&stderr_bytes).trim().to_owned();
+        Err(wd_core::WdError::Internal(format!(
+            "{binary} failed: {detail}"
+        )))
+    }
 }
 
 /// Missing-binary fallback: argv preview (CI has no waydroid).
@@ -408,7 +472,14 @@ fn screenshot_live() -> serde_json::Value {
         Ok(out) => {
             let image: String = out.split_whitespace().collect();
             tracing::info!(b64_len = image.len(), "call: screenshot b64 joined");
-            serde_json::json!({"ok": true, "tool": "vision.screenshot", "source": "waydroid", "remote": remote, "image_base64": image, "frame": crate::screenshot::FRAME_RESOURCE})
+            match crate::screenshot::clean_png_b64(&image) {
+                Ok(clean) => {
+                    serde_json::json!({"ok": true, "tool": "vision.screenshot", "source": "waydroid", "remote": remote, "image_base64": clean, "frame": crate::screenshot::FRAME_RESOURCE})
+                }
+                Err(msg) => {
+                    serde_json::json!({"ok": false, "error": format!("vision.screenshot: {msg}"), "isError": true})
+                }
+            }
         }
         Err(wd_core::WdError::Io(_)) => argv_fallback("vision.screenshot", &cap),
         Err(err) => {
@@ -537,16 +608,165 @@ fn logcat_live(params: &serde_json::Value) -> serde_json::Value {
     }
 }
 
-/// Bg/stream verbs: no spawn in lib (bins own processes) — argv preview.
-fn argv_preview(tool: &str, params: &serde_json::Value) -> serde_json::Value {
-    tracing::info!(tool, "call: argv preview (caller spawns)");
-    let argv: Vec<String> = match tool {
-        "logcat.start" => crate::logcat::start_args(params.get("buffers").and_then(|v| v.as_str())),
-        "logcat.stop" => vec!["logcat".to_owned(), "-c".to_owned()],
-        "vision.stream_start" => vec!["stream".to_owned(), "start".to_owned()],
-        _ => vec!["stream".to_owned(), "stop".to_owned()],
+/// Two path params: named keys first, then positional `args[0..1]`.
+/// Shared by `file.push` / `file.pull` so both verbs parse one way (DRY).
+fn path_pair(
+    params: &serde_json::Value,
+    tool: &str,
+    first_keys: &[&str],
+    second_keys: &[&str],
+) -> Result<(String, String), serde_json::Value> {
+    let first = first_keys
+        .iter()
+        .find_map(|k| str_param(params, k, 0))
+        .filter(|s| !s.is_empty());
+    let second = second_keys
+        .iter()
+        .find_map(|k| str_param(params, k, 1))
+        .filter(|s| !s.is_empty());
+    match (first, second) {
+        (Some(a), Some(b)) => Ok((a, b)),
+        _ => Err(need(tool, "src dst")),
+    }
+}
+
+/// `shell.exec`: live `waydroid shell -- sh -c <cmd>`.
+/// `{"cmd"|"command"|"script": "..."}` wins, else `args` joined.
+fn shell_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: shell.exec live in");
+    let cmd = str_param(params, "cmd", 0)
+        .or_else(|| str_param(params, "command", 0))
+        .or_else(|| str_param(params, "script", 0))
+        .or_else(|| {
+            params
+                .get("args")
+                .and_then(|a| a.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .filter(|s| !s.trim().is_empty())
+        });
+    let Some(cmd) = cmd.filter(|s| !s.trim().is_empty()) else {
+        return need("shell.exec", "cmd");
     };
-    serde_json::json!({"ok": true, "tool": tool, "argv": argv})
+    let argv = vec![
+        "shell".to_owned(),
+        "--".to_owned(),
+        "sh".to_owned(),
+        "-c".to_owned(),
+        cmd.clone(),
+    ];
+    match run(&argv, 30_000) {
+        Ok(out) => serde_json::json!({"ok": true, "tool": "shell.exec", "output": out}),
+        Err(e) => spawn_out("shell.exec", &argv, Err(e))
+            .unwrap_or_else(|| serde_json::json!({"ok": true, "tool": "shell.exec"})),
+    }
+}
+
+/// `file.push`: live `adb push <src> <dst>` (Waydroid shares the adb
+/// transport; `waydroid shell` cannot transfer bytes).
+fn push_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: file.push live in");
+    let (src, dst) = match path_pair(
+        params,
+        "file.push",
+        &["src", "local", "host", "path"],
+        &["dst", "remote", "device", "dest"],
+    ) {
+        Ok(pair) => pair,
+        Err(e) => return e,
+    };
+    let argv = vec!["push".to_owned(), src.clone(), dst.clone()];
+    match run_bin("adb", &argv, 120_000) {
+        Ok(out) => {
+            serde_json::json!({"ok": true, "tool": "file.push", "src": src, "dst": dst, "output": out.lines().last().unwrap_or("")})
+        }
+        Err(wd_core::WdError::Io(_)) => argv_fallback("file.push", &argv),
+        Err(err) => serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}),
+    }
+}
+
+/// `file.pull`: live `adb pull <src> <dst>`.
+fn pull_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: file.pull live in");
+    let (src, dst) = match path_pair(
+        params,
+        "file.pull",
+        &["src", "remote", "device", "path"],
+        &["dst", "local", "host", "dest"],
+    ) {
+        Ok(pair) => pair,
+        Err(e) => return e,
+    };
+    let argv = vec!["pull".to_owned(), src.clone(), dst.clone()];
+    match run_bin("adb", &argv, 120_000) {
+        Ok(out) => {
+            serde_json::json!({"ok": true, "tool": "file.pull", "src": src, "dst": dst, "output": out.lines().last().unwrap_or("")})
+        }
+        Err(wd_core::WdError::Io(_)) => argv_fallback("file.pull", &argv),
+        Err(err) => serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}),
+    }
+}
+
+/// `prop.get`: live `waydroid prop get <key>` via `wd-waydroid` args.
+fn prop_get_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: prop.get live in");
+    let Some(key) = str_param(params, "key", 0).or_else(|| str_param(params, "name", 0)) else {
+        return need("prop.get", "key");
+    };
+    let argv = wd_waydroid::get_args(&key);
+    match run(&argv, 10_000) {
+        Ok(out) => {
+            serde_json::json!({"ok": true, "tool": "prop.get", "key": key, "value": out.trim()})
+        }
+        Err(e) => spawn_out("prop.get", &argv, Err(e))
+            .unwrap_or_else(|| serde_json::json!({"ok": true, "tool": "prop.get"})),
+    }
+}
+
+/// `prop.set`: live `waydroid prop set <key> <value>` via `wd-waydroid` args.
+fn prop_set_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: prop.set live in");
+    let key = str_param(params, "key", 0).or_else(|| str_param(params, "name", 0));
+    let value = str_param(params, "value", 1);
+    let (Some(key), Some(value)) = (key, value) else {
+        return need("prop.set", "key value");
+    };
+    let argv = wd_waydroid::set_args(&key, &value);
+    match run(&argv, 10_000) {
+        Ok(_) => serde_json::json!({"ok": true, "tool": "prop.set", "key": key, "value": value}),
+        Err(e) => spawn_out("prop.set", &argv, Err(e))
+            .unwrap_or_else(|| serde_json::json!({"ok": true, "tool": "prop.set"})),
+    }
+}
+
+/// `keymap.load` dispatch arm: `{"path": "..."}` validated via `wd-input`.
+fn keymap_load_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: keymap.load live in");
+    let Some(path) = str_param(params, "path", 0).or_else(|| str_param(params, "profile", 0))
+    else {
+        return need("keymap.load", "path");
+    };
+    match keymap_load(std::path::Path::new(&path)) {
+        Ok(out) => out,
+        Err(err) => serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}),
+    }
+}
+
+/// `spoof.load` dispatch arm: `{"path": "..."}` validated via `wd-spoof`.
+fn spoof_load_live(params: &serde_json::Value) -> serde_json::Value {
+    tracing::info!("call: spoof.load live in");
+    let Some(path) = str_param(params, "path", 0).or_else(|| str_param(params, "profile", 0))
+    else {
+        return need("spoof.load", "path");
+    };
+    match spoof_load(std::path::Path::new(&path)) {
+        Ok(out) => out,
+        Err(err) => serde_json::json!({"ok": false, "error": err.to_string(), "isError": true}),
+    }
 }
 
 /// `keymap.load` helper: validates via `wd-input`, never duplicates schema.
@@ -673,6 +893,45 @@ mod tests {
     fn find_hits() {
         assert_eq!(find_in_dump("<node text=\"Play\"/>", "Play"), Some(12));
         assert!(find_in_dump("<node/>", "Play").is_none());
+    }
+
+    #[test]
+    fn new_tools_live_or_param_error() {
+        // prop.get/set need params; missing → isError (never panic/unknown).
+        assert!(
+            dispatch("prop.get", &serde_json::Value::Null)
+                .get("isError")
+                .is_some()
+        );
+        assert!(
+            dispatch("prop.set", &serde_json::json!({"key": "k"}))
+                .get("isError")
+                .is_some()
+        );
+        assert!(
+            dispatch("keymap.load", &serde_json::Value::Null)
+                .get("isError")
+                .is_some()
+        );
+        assert!(
+            dispatch("spoof.load", &serde_json::Value::Null)
+                .get("isError")
+                .is_some()
+        );
+        // Removed stubs stay unknown.
+        for stub in [
+            "vision.stream_start",
+            "vision.stream_stop",
+            "logcat.start",
+            "logcat.stop",
+        ] {
+            let r = dispatch(stub, &serde_json::Value::Null);
+            assert_eq!(r["ok"], serde_json::Value::Bool(false), "{stub}");
+        }
+        // Bad paths surface isError, never ok.
+        let bad = serde_json::json!({"path": "/nonexistent/keymap.json"});
+        assert!(dispatch("keymap.load", &bad).get("isError").is_some());
+        assert!(dispatch("spoof.load", &bad).get("isError").is_some());
     }
 
     #[test]

@@ -69,6 +69,105 @@ pub fn strip_png_warn(data: &[u8]) -> &[u8] {
     data
 }
 
+/// Base64 alphabet value, or 255 when not in the alphabet.
+fn b64_val(byte: u8) -> u8 {
+    match byte {
+        b'A'..=b'Z' => byte - b'A',
+        b'a'..=b'z' => byte - b'a' + 26,
+        b'0'..=b'9' => byte - b'0' + 52,
+        b'+' => 62,
+        b'/' => 63,
+        _ => 255,
+    }
+}
+
+/// Decode base64 (whitespace-tolerant, std-only, no new dep).
+/// Returns raw bytes or an error string for callers to surface.
+pub fn decode_b64(text: &str) -> Result<Vec<u8>, String> {
+    let clean: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    if clean.is_empty() || clean.len() % 4 != 0 {
+        return Err("empty/invalid base64".to_owned());
+    }
+    let mut out = Vec::with_capacity(clean.len() / 4 * 3);
+    let mut i = 0;
+    while i < clean.len() {
+        let mut sextets = [0u8; 4];
+        let mut pad = 0usize;
+        for (j, chunk) in sextets.iter_mut().enumerate() {
+            let byte = clean[i + j];
+            if byte == b'=' {
+                pad += 1;
+            } else {
+                let val = b64_val(byte);
+                if val == 255 {
+                    return Err("invalid base64 char".to_owned());
+                }
+                *chunk = val;
+            }
+        }
+        let triple = (u32::from(sextets[0]) << 18)
+            | (u32::from(sextets[1]) << 12)
+            | (u32::from(sextets[2]) << 6)
+            | u32::from(sextets[3]);
+        out.push((triple >> 16) as u8);
+        if pad < 2 {
+            out.push((triple >> 8) as u8);
+        }
+        if pad < 1 {
+            out.push(triple as u8);
+        }
+        i += 4;
+    }
+    Ok(out)
+}
+
+/// Encode raw bytes as base64 (std-only, mirrors [`decode_b64`]).
+#[must_use]
+pub fn encode_b64(data: &[u8]) -> String {
+    const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    let mut i = 0;
+    while i < data.len() {
+        let a = data[i];
+        let b = if i + 1 < data.len() { data[i + 1] } else { 0 };
+        let c = if i + 2 < data.len() { data[i + 2] } else { 0 };
+        let triple = (u32::from(a) << 16) | (u32::from(b) << 8) | u32::from(c);
+        out.push(ALPHA[((triple >> 18) & 63) as usize] as char);
+        out.push(ALPHA[((triple >> 12) & 63) as usize] as char);
+        if i + 1 < data.len() {
+            out.push(ALPHA[((triple >> 6) & 63) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if i + 2 < data.len() {
+            out.push(ALPHA[(triple & 63) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        i += 3;
+    }
+    out
+}
+
+/// Clean a `base64` screenshot: decode → cut warn prefix → CRLF
+/// repair → require PNG magic → re-encode canonical (no whitespace).
+/// Guarantees callers never forward warn text or CRLF-mangled PNGs.
+///
+/// # Errors
+/// Returns a message string when the payload is not a decodable PNG.
+pub fn clean_png_b64(b64: &str) -> Result<String, String> {
+    tracing::debug!(len = b64.len(), "screenshot: clean in");
+    let raw = decode_b64(b64)?;
+    let stripped = strip_png_warn(&raw);
+    let repaired = repair_crlf(stripped.to_vec());
+    if !repaired.starts_with(PNG_MAGIC) {
+        return Err("screenshot is not a PNG".to_owned());
+    }
+    let clean = encode_b64(&repaired);
+    tracing::info!(bytes = clean.len(), "screenshot: clean out");
+    Ok(clean)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +186,19 @@ mod tests {
             broken.push(*b);
         }
         assert!(repair_crlf(broken).starts_with(PNG_MAGIC));
+    }
+
+    #[test]
+    fn b64_roundtrip_and_clean() {
+        let mut raw = b"WARN ".to_vec();
+        raw.extend_from_slice(PNG_MAGIC);
+        raw.extend_from_slice(b"DATA");
+        let b64 = encode_b64(&raw);
+        assert_eq!(decode_b64(&b64).unwrap(), raw);
+        let clean = clean_png_b64(&b64).unwrap();
+        let back = decode_b64(&clean).unwrap();
+        assert!(back.starts_with(PNG_MAGIC));
+        assert!(clean_png_b64("!!!").is_err());
+        assert!(clean_png_b64(&encode_b64(b"nope")).is_err());
     }
 }

@@ -89,6 +89,17 @@ pub struct JoystickKeys {
     pub right: String,
 }
 
+/// Joystick stick mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JoystickMode {
+    /// Fixed stick (default).
+    #[default]
+    Fixed,
+    /// Follow finger.
+    Follow,
+}
+
 /// Legacy aim region (consumed by `normalized`).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Region {

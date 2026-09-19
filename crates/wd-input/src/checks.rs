@@ -21,9 +21,13 @@ pub fn dup_keys(p: &crate::schema::Profile) -> Vec<String> {
             if key == "MouseMove" || key == "WheelUp" || key == "WheelDown" {
                 continue;
             }
-            let norm = key.trim().to_ascii_uppercase();
+            let norm = crate::keys::canonical(&key).unwrap_or_else(|| key.clone());
+            let norm = norm.trim().to_ascii_uppercase();
             if let Some(prev) = seen.get(&norm) {
-                out.push(format!("dup key {key}: {prev} vs {}", n.id()));
+                out.push(format!(
+                    "dup key {key} (informational: key reuse allowed): {prev} vs {}",
+                    n.id()
+                ));
             } else {
                 seen.insert(norm, n.id().to_string());
             }

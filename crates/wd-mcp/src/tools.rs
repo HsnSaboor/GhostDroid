@@ -1,8 +1,9 @@
 //! Tool registry: the ONE tool list CLI+MCP share.
 //!
 //! 24 names. YAGNI cut holds: 24 vs adb-mcp 90 vs scrcpy-mcp 39.
-//! `prop.get/set`, `keymap.load`, `spoof.load` ride as `shell.exec`
-//! / `file.push` params, not separate tools — one list, no drift.
+//! `vision.stream_*` / `logcat.start|stop` stay out: caller-spawned
+//! stubs with no live impl. `prop.get/set`, `keymap.load`,
+//! `spoof.load` are live tools with impls in `call.rs`.
 //!
 //! Refs: `.devdocs/adb-mcp/adb_mcp/tools/` (90-tool bloat we cut),
 //! `.devdocs/scrcpy-mcp/src/tools/` (39), `us/src/config.ts`
@@ -24,16 +25,16 @@ pub const TOOLS: &[&str] = &[
     "input.key",
     "input.text",
     "vision.screenshot",
-    "vision.stream_start",
-    "vision.stream_stop",
     "ui.dump",
     "ui.find",
     "shell.exec",
     "file.push",
     "file.pull",
     "logcat.dump",
-    "logcat.start",
-    "logcat.stop",
+    "prop.get",
+    "prop.set",
+    "keymap.load",
+    "spoof.load",
 ];
 
 /// Number of registered tools.
@@ -75,8 +76,20 @@ mod tests {
             "shell.exec",
             "vision.screenshot",
             "logcat.dump",
+            "prop.get",
+            "prop.set",
+            "keymap.load",
+            "spoof.load",
         ] {
             assert!(has_tool(t), "missing {t}");
+        }
+        for t in [
+            "vision.stream_start",
+            "vision.stream_stop",
+            "logcat.start",
+            "logcat.stop",
+        ] {
+            assert!(!has_tool(t), "stub {t} must stay out");
         }
         assert_eq!(tool_count(), 24);
     }

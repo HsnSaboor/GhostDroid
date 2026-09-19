@@ -3,7 +3,7 @@
 
 use wd_core::RelPos;
 
-use crate::types::JoystickKeys;
+use crate::types::{JoystickKeys, JoystickMode};
 
 /// Tap node fields.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -35,6 +35,9 @@ pub struct JoyNode {
     pub pos: RelPos,
     /// Radius (0,1].
     pub radius: f64,
+    /// Stick mode (default fixed; `follow` tracks the finger).
+    #[serde(default)]
+    pub mode: JoystickMode,
     /// Keys.
     pub keys: JoystickKeys,
 }

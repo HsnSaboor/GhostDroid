@@ -71,6 +71,103 @@ impl ShellView {
         self.state.clear_logs();
         cx.notify();
     }
+
+    /// Launch one app (`waydroid app launch <pkg>`). Blocking spawn runs on
+    /// the background executor; the result lands in Logs via weak-entity
+    /// `update` (never blocks the UI thread).
+    pub fn launch_pkg(&mut self, pkg: String, cx: &mut Context<Self>) {
+        tracing::info!(%pkg, "shell: launch pkg");
+        self.state.push_log(format!("launch: {pkg}"));
+        cx.notify();
+        cx.spawn(async move |view, cx| {
+            let out = cx
+                .background_spawn(async move { crate::sync::launch_game(&pkg) })
+                .await;
+            let line = match out {
+                Ok(()) => format!("launch ok: {pkg}"),
+                Err(err) => format!("launch failed: {pkg} ({err})"),
+            };
+            let _ = view.update(cx, |this, cx| {
+                this.state.push_log(line);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Run a container power action, then refresh the snapshot.
+    pub fn device_request(&mut self, action: crate::sync::DeviceAction, cx: &mut Context<Self>) {
+        tracing::info!(?action, "shell: device request");
+        self.state.set_busy(true);
+        self.state
+            .push_log(format!("device: {}", action.label().to_lowercase()));
+        cx.notify();
+        cx.spawn(async move |view, cx| {
+            let out = cx
+                .background_spawn(async move { crate::sync::device_action(action) })
+                .await;
+            let _ = view.update(cx, |this, cx| {
+                match out {
+                    Ok((dev, ip)) => {
+                        this.state.set_device_snapshot(dev, ip);
+                        this.state.push_log("device: refreshed".to_owned());
+                    }
+                    Err(err) => {
+                        this.state.set_busy(false);
+                        this.state.push_log(format!("device failed: {err}"));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Re-poll `fetch_device` (Devices Scan button).
+    pub fn refresh_device(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("shell: refresh device");
+        self.state.set_busy(true);
+        cx.notify();
+        cx.spawn(async move |view, cx| {
+            let out = cx
+                .background_spawn(async { crate::sync::fetch_device() })
+                .await;
+            let _ = view.update(cx, |this, cx| {
+                match out {
+                    Ok((dev, ip)) => {
+                        this.state.set_device_snapshot(dev, ip);
+                        this.state.push_log("scan: device refreshed".to_owned());
+                    }
+                    Err(err) => {
+                        this.state.set_busy(false);
+                        this.state.push_log(format!("scan failed: {err}"));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Pull one tail from the live daemon socket into Logs.
+    pub fn refresh_logs(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("shell: refresh logs");
+        cx.spawn(async move |view, cx| {
+            let lines = cx
+                .background_spawn(async { crate::sync::tail_socket_logs() })
+                .await;
+            if lines.is_empty() {
+                return;
+            }
+            let _ = view.update(cx, |this, cx| {
+                for line in lines {
+                    this.state.push_log(line);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
 }
 
 impl ShellView {
@@ -96,6 +193,12 @@ impl ShellView {
                 .background_spawn(async { crate::sync::fetch_device() })
                 .await
                 .ok();
+            let (profile, fire, nodes) = cx
+                .background_spawn(async { crate::sync::keymap_summary() })
+                .await;
+            let sock_lines = cx
+                .background_spawn(async { crate::sync::tail_socket_logs() })
+                .await;
             tracing::info!(games = games.len(), "sync: loaded");
             let _ = view.update(cx, |this, cx| {
                 if !games.is_empty() {
@@ -103,7 +206,13 @@ impl ShellView {
                 }
                 if let Some((dev, ip)) = device {
                     this.state.device = dev;
-                    this.state.ip = ip;
+                    if !ip.is_empty() {
+                        this.state.ip = ip;
+                    }
+                }
+                this.state.set_keymap_summary(profile, fire, nodes);
+                for line in sock_lines {
+                    this.state.push_log(line);
                 }
                 cx.notify();
             });

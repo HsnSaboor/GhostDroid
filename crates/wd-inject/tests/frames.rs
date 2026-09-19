@@ -13,7 +13,7 @@ fn frames_layout() {
     let m = move_frame(3, 960, 540);
     assert_eq!((m[0], m[1]), (0x01, 3));
     assert_eq!(up_frame(3), [0x02, 3]);
-    assert_eq!(cancel_frame(3), [0x03, 3]);
+    assert_eq!(cancel_frame(), [0x03]);
     assert_eq!(ping_frame(), [0x7f]);
 }
 

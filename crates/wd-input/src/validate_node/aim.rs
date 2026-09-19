@@ -14,6 +14,7 @@ pub(super) fn check(
     activation: crate::types::Activation,
     activation_key: Option<&str>,
     region: Option<crate::types::Region>,
+    deadzone: Option<f32>,
 ) -> Result<()> {
     super::shape::pos_ok(anchor, &field(id, "anchor"))?;
     if reach <= 0.0 || reach > 0.45 {
@@ -24,6 +25,12 @@ pub(super) fn check(
             &field(id, "sensitivity"),
             "sensitivity must be positive",
         ));
+    }
+    if let Some(d) = deadzone {
+        let d = f64::from(d);
+        if !(0.0..1.0).contains(&d) {
+            return Err(err(&field(id, "deadzone"), "deadzone must be in [0, 1)"));
+        }
     }
     if let Some(rect) = region {
         if rect.w <= 0.0 || rect.h <= 0.0 {

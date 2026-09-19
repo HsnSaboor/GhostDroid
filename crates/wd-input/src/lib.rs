@@ -16,23 +16,31 @@ pub mod audit;
 pub mod basic;
 pub mod bindings;
 pub mod checks;
+pub mod engine;
 pub mod import;
 pub mod keys;
 pub mod nodes;
 pub mod qt;
 pub mod qt_nodes;
 pub mod schema;
+pub mod slots;
 pub mod types;
 pub mod validate;
 pub mod validate_node;
 
 pub use audit::{AuditReport, audit, audit_screen};
 pub use checks::{dup_keys, list, slot_clashes};
+pub use engine::{
+    GrabState, StickInput, apply_curve, apply_deadzone, clamp_reach, dir_vector,
+    effective_deadzone, grab_edge, grab_rising_edge, shape_delta, stick_pos,
+};
 pub use import::import_qt;
 pub use nodes::{Node, default_anchor, default_reach, default_sens};
 pub use schema::{Profile, Screen};
+pub use slots::{MAX_PHYSICAL_SLOTS, SlotAllocator};
 pub use types::{
-    Activation, AimCurve, JoystickKeys, LayerMode, MacroAction, MacroMode, MacroStep, Region,
+    Activation, AimCurve, JoystickKeys, JoystickMode, LayerMode, MacroAction, MacroMode, MacroStep,
+    Region,
 };
 pub use validate::{load, normalized, validate};
 

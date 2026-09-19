@@ -16,7 +16,7 @@ use gpui_kit::component::{
 use gpui_kit::{AnyElement, IntoElement, ParentElement as _, Styled as _, px};
 use wd_shell::GameRow;
 
-use crate::shared::{empty_state, game_card};
+use crate::shared::{empty_state, game_card, section_title};
 use crate::state::AppState;
 
 /// Segmented filter labels. Index mirrors `AppState::filter_index`.
@@ -105,6 +105,32 @@ fn toolbar(view: &gpui_kit::Entity<crate::app::ShellView>) -> impl IntoElement {
         }))
 }
 
+/// One game row + live Launch button (`waydroid app launch <pkg>` via
+/// `ShellView::launch_pkg`; result lands in Logs, never a dead button).
+fn game_row_live(
+    view: &gpui_kit::Entity<crate::app::ShellView>,
+    game: &GameRow,
+) -> impl IntoElement {
+    let view = view.clone();
+    let pkg = game.pkg.clone();
+    h_flex()
+        .gap(px(8.))
+        .items_center()
+        .justify_between()
+        .child(v_flex().flex_1().child(game_card(game)))
+        .child(
+            Button::new(format!("lib-launch-{}", game.pkg))
+                .small()
+                .label("Launch")
+                .on_click(move |_, _, cx| {
+                    let pkg = pkg.clone();
+                    view.update(cx, |this, cx| {
+                        this.launch_pkg(pkg, cx);
+                    });
+                }),
+        )
+}
+
 /// Library grid body. Takes the view entity for click wiring (nav pattern).
 pub fn render_library(
     view: &gpui_kit::Entity<crate::app::ShellView>,
@@ -117,16 +143,22 @@ pub fn render_library(
         "render library"
     );
     let rows = visible(state);
+    let count = Label::new(format!(
+        "{} apps · live via `waydroid app list`",
+        rows.len()
+    ));
     let body: AnyElement = if rows.is_empty() {
         empty_state("No games found", "Scan to add games to the library.").into_any_element()
     } else {
         v_flex()
             .gap(px(8.))
-            .children(rows.iter().map(|g| game_card(g)))
+            .children(rows.iter().map(|g| game_row_live(view, g)))
             .into_any_element()
     };
     v_flex()
         .gap(px(8.))
+        .child(section_title("Library"))
+        .child(count)
         .child(search_box(state))
         .child(filter_row(view, state))
         .child(body)

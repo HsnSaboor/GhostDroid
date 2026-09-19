@@ -1,5 +1,9 @@
 //! Frame builders. LE per `ANDROID_SOCKET_PROTOCOL.md:139`.
-//! `DOWN/MOVE [tag,slot,x LE,y LE]=10B`, `UP/CANCEL [tag,slot]=2B`, `PING=1B`.
+//! `DOWN/MOVE [tag,slot,x LE,y LE]=10B`, `UP [tag,slot]=2B`,
+//! `CANCEL [tag]=1B` (server `cancelAll`, no slot), `PING=1B`.
+//! Matches `java/PhantomServer.java` + vendor
+//! `contrib/android-server/.../PhantomServer.java` (`case CMD_TOUCH_CANCEL:
+//! injector.cancelAll()` reads no payload byte).
 #![deny(missing_docs)]
 
 use crate::{TAG_CANCEL, TAG_DOWN, TAG_MOVE, TAG_PING, TAG_UP};
@@ -34,11 +38,11 @@ pub fn up_frame(slot: u8) -> [u8; 2] {
     [TAG_UP, slot]
 }
 
-/// Build CANCEL frame.
+/// Build CANCEL frame (no slot: server runs `cancelAll`).
 #[must_use]
-pub fn cancel_frame(slot: u8) -> [u8; 2] {
-    tracing::trace!(slot, "wd-inject: cancel frame");
-    [TAG_CANCEL, slot]
+pub fn cancel_frame() -> [u8; 1] {
+    tracing::trace!("wd-inject: cancel frame");
+    [TAG_CANCEL]
 }
 
 /// Build PING frame.

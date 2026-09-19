@@ -6,7 +6,8 @@
 #![deny(missing_docs)]
 
 use crate::capture::normalize_capture;
-use crate::hotkeys::{HotkeyAction, action_for};
+use crate::hotkeys::{HotkeyAction, action_for, is_visibility_key};
+use crate::hud::HudState;
 use crate::modes::{EditorMode, switch_on_key};
 use crate::osd::OsdState;
 use crate::widgets::{WidgetKind, WidgetRect};
@@ -24,6 +25,10 @@ pub struct EditorCanvas {
     pub screen: (u32, u32),
     /// F12 transparency flag.
     pub transparent: bool,
+    /// F12 HUD visibility (starts shown).
+    pub visible: bool,
+    /// Transparent HUD state (dots + binds + grab).
+    pub hud: HudState,
     /// OSD state.
     pub osd: OsdState,
 }
@@ -35,6 +40,8 @@ impl EditorCanvas {
         tracing::info!(w = screen.0, h = screen.1, "wd-overlay: canvas new");
         Self {
             screen,
+            visible: true,
+            hud: HudState::new(),
             ..Self::default()
         }
     }
@@ -114,11 +121,36 @@ impl EditorCanvas {
             self.transparent = !self.transparent;
             tracing::info!(transparent = self.transparent, "wd-overlay: transparency");
         }
+        if is_visibility_key(key) && !ctrl {
+            self.visible = !self.visible;
+            self.hud.visible = self.visible;
+            tracing::info!(visible = self.visible, "wd-overlay: visibility");
+        }
         let action = action_for(key, ctrl);
         if action == Some(HotkeyAction::Pause) || action == Some(HotkeyAction::PauseXt) {
             self.osd.set_paused(!self.osd.paused);
         }
         action
+    }
+
+    /// Alt/Ctrl rising edge toggles pointer grab (delegates to HUD).
+    pub fn on_modifier(&mut self, alt: bool, ctrl: bool) -> bool {
+        let grabbed = self.hud.on_modifier(alt, ctrl);
+        tracing::debug!(grabbed, "wd-overlay: canvas grab");
+        grabbed
+    }
+
+    /// Edge variant with explicit previous state.
+    pub fn on_modifier_edge(
+        &mut self,
+        alt: bool,
+        ctrl: bool,
+        prev_alt: bool,
+        prev_ctrl: bool,
+    ) -> bool {
+        let grabbed = self.hud.on_modifier_edge(alt, ctrl, prev_alt, prev_ctrl);
+        tracing::debug!(grabbed, "wd-overlay: canvas grab");
+        grabbed
     }
 
     /// Grab guard: Edit never grabs even with widgets present.

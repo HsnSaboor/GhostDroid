@@ -36,9 +36,34 @@ pub struct AimNode {
     /// Invert Y.
     #[serde(default)]
     pub invert_y: bool,
+    /// Deadzone override (0-1); `None` = [`DEFAULT`](crate::engine::DEFAULT_DEADZONE).
+    #[serde(default)]
+    pub deadzone: Option<f32>,
     /// Legacy region (consumed by `normalized`).
     #[serde(default, skip_serializing)]
     pub region: Option<Region>,
+}
+
+impl AimNode {
+    /// Effective deadzone: explicit value or engine default.
+    #[must_use]
+    pub fn effective_deadzone(&self) -> f64 {
+        crate::engine::effective_deadzone(self.deadzone)
+    }
+
+    /// Shape a raw mouse delta with this node's curve/deadzone/sensitivity.
+    #[must_use]
+    pub fn shape_delta(&self, dx: f64, dy: f64, global: f64) -> (f64, f64) {
+        crate::engine::shape_delta(
+            dx,
+            dy,
+            self.sensitivity,
+            global,
+            self.curve,
+            self.effective_deadzone(),
+            self.invert_y,
+        )
+    }
 }
 
 /// Repeat-tap node fields.

@@ -7562,6 +7562,8 @@ dependencies = [
  "serde_json",
  "tracing",
  "wd-core",
+ "wd-inject",
+ "wd-mcp",
  "wd-waydroid",
 ]
 

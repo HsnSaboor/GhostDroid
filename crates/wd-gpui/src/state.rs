@@ -109,16 +109,12 @@ impl Default for AppState {
             busy: false,
             spoof: SpoofProfile {
                 id: "s26-ultra".to_owned(),
-                ids: vec![
-                    "s26-ultra".to_owned(),
-                    "gaming-full".to_owned(),
-                    "gaming-basic".to_owned(),
-                ],
+                ids: crate::sync::SPOOF_IDS
+                    .iter()
+                    .map(|s| (*s).to_owned())
+                    .collect(),
                 selected: 0,
-                props: vec![
-                    ("model".to_owned(), "SM-S948B (m3q)".to_owned()),
-                    ("stack".to_owned(), "full".to_owned()),
-                ],
+                props: crate::sync::spoof_props("s26-ultra"),
             },
             keymap: KeymapState {
                 profile: "pubg".to_owned(),
@@ -126,7 +122,7 @@ impl Default for AppState {
                 tab_index: 0,
                 node_count: 21,
             },
-            ip: String::new(),
+            ip: "192.168.240.112".to_owned(),
             logs,
         }
     }
@@ -176,6 +172,8 @@ impl AppState {
     }
 
     /// Pick a spoof profile; clamps out-of-range to the current selection.
+    /// Refreshes prop rows from the embedded catalog so the diff viewer
+    /// follows the picker with no extra round-trip.
     pub fn set_spoof(&mut self, index: i32) {
         tracing::debug!(index, "spoof pick");
         let max = i32::try_from(self.spoof.ids.len()).unwrap_or(0);
@@ -183,6 +181,7 @@ impl AppState {
             self.spoof.selected = index;
             if let Some(id) = self.spoof.ids.get(usize::try_from(index).unwrap_or(0)) {
                 self.spoof.id = id.clone();
+                self.spoof.props = crate::sync::spoof_props(id);
             }
         }
     }
@@ -193,6 +192,25 @@ impl AppState {
         if (0..3).contains(&index) {
             self.keymap.tab_index = index;
         }
+    }
+
+    /// Replace the device snapshot from a live `fetch_device` poll.
+    /// Empty IP keeps the previous value (never blanks the Devices page).
+    pub fn set_device_snapshot(&mut self, device: wd_shell::DeviceState, ip: String) {
+        tracing::debug!(ready = device.ready, frozen = device.frozen, %ip, "device set");
+        self.device = device;
+        if !ip.is_empty() {
+            self.ip = ip;
+        }
+        self.busy = false;
+    }
+
+    /// Replace the keymap summary from the embedded `pubg.json`.
+    pub fn set_keymap_summary(&mut self, profile: String, fire_key: String, nodes: usize) {
+        tracing::debug!(%profile, %fire_key, nodes, "keymap set");
+        self.keymap.profile = profile;
+        self.keymap.fire_key = fire_key;
+        self.keymap.node_count = nodes;
     }
 
     /// Games matching the current query (title or package, case-insensitive).

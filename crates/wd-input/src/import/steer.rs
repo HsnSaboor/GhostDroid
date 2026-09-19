@@ -27,6 +27,7 @@ pub fn steer_node(
         slot: slots.take(),
         pos: *at,
         radius: 0.1,
+        mode: crate::types::JoystickMode::default(),
         keys: JoystickKeys {
             up: opt_key(up, idx, "up")?,
             down: opt_key(down, idx, "down")?,
@@ -64,6 +65,7 @@ pub fn aim_node(
         activation: Activation::AlwaysOn,
         activation_key: None,
         invert_y: false,
+        deadzone: None,
         region: None,
     })
 }

@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 wd-core = { workspace = true }
+wd-inject.workspace = true
+wd-mcp = { path = "../wd-mcp" }
 wd-waydroid = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
