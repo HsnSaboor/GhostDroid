@@ -231,6 +231,14 @@ int OpenFilteredMaps(const char* path, int flags) {
     int fds[2];
     if (::pipe(fds) != 0) return -1;
     ::fcntl(fds[0], F_SETPIPE_SZ, (int)MAPS_FILTER_MAX);
+    // Never hand out a pipe the payload can't fit: a blocking write past
+    // the buffer with no reader yet would wedge the caller mid-startup.
+    long cap = ::fcntl(fds[0], F_GETPIPE_SZ);
+    if (cap <= 0 || out.size() > (size_t)cap) {
+        ::close(fds[0]);
+        ::close(fds[1]);
+        return -1;
+    }
     size_t written = 0;
     while (written < out.size()) {
         ssize_t n = ::write(fds[1], out.data() + written, out.size() - written);
