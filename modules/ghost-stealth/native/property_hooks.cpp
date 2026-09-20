@@ -24,6 +24,24 @@ void (*orig_sp_read_callback)(
         void (*)(void*, const char*, const char*, uint32_t),
         void*) = nullptr;
 
+int (*orig_sp_foreach)(void (*)(const prop_info*, void*), void*) = nullptr;
+
+const prop_info* (*orig_sp_find_nth)(unsigned) = nullptr;
+
+// Container tell deny-list: key NAMES alone betray Waydroid even when
+// values are spoofed (probe log: 600x waydroid.host.uid). These read as
+// unset in target processes. persist.waydroid.fake_wifi is exempt: the
+// platform FakeWifi hook needs it and it carries no device signal.
+// ro.arch needs no rule (real phones also return empty for it).
+bool IsDeniedProp(const char* name) {
+    if (name == nullptr) return false;
+    if (strncmp(name, "waydroid.", 9) == 0) return true;
+    if (strncmp(name, "persist.waydroid.", 17) == 0 &&
+        strcmp(name, "persist.waydroid.fake_wifi") != 0)
+        return true;
+    return false;
+}
+
 // Opaque prop_info* we return from __system_property_find for spoofed keys.
 // The real layout is libc-internal; our read hook recognises these pointers
 // and short-circuits before they reach the real read code.
@@ -65,6 +83,10 @@ const prop_info* MakeSynthetic(const char* name) {
 
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
+    if (IsDeniedProp(name)) {
+        if (value != nullptr) value[0] = '\0';
+        return 0;
+    }
     std::string spoofed;
     if (LookupProperty(name, spoofed)) {
         size_t n = spoofed.size();
@@ -81,6 +103,7 @@ int my_sp_get(const char* name, char* value) {
 
 const prop_info* my_sp_find(const char* name) {
     TraceProbeProp(name);
+    if (IsDeniedProp(name)) return nullptr;
     if (name != nullptr) {
         std::string spoofed;
         if (LookupProperty(name, spoofed)) {
@@ -178,6 +201,57 @@ void my_sp_read_callback(const prop_info* pi,
     }
 }
 
+// Enumeration filter: __system_property_foreach hands out raw prop_info
+// pointers, so denied key NAMES would leak even though get/find spoof
+// values. Re-read each name via the ORIGINAL read and skip denied keys;
+// spoofed values still flow through the user's callback via our read hook.
+struct ForeachCtx {
+    void (*user)(const prop_info*, void*);
+    void* cookie;
+};
+
+void ForeachTrampoline(const prop_info* pi, void* vctx) {
+    auto* c = reinterpret_cast<ForeachCtx*>(vctx);
+    if (c == nullptr || c->user == nullptr) return;
+    char name[PROP_NAME_MAX];
+    if (orig_sp_read != nullptr) {
+        orig_sp_read(pi, name, nullptr);
+    } else {
+        c->user(pi, c->cookie);
+        return;
+    }
+    if (IsDeniedProp(name)) return;
+    c->user(pi, c->cookie);
+}
+
+int my_sp_foreach(void (*propfn)(const prop_info*, void*), void* cookie) {
+    if (propfn == nullptr || orig_sp_foreach == nullptr) {
+        if (orig_sp_foreach != nullptr) return orig_sp_foreach(propfn, cookie);
+        return -1;
+    }
+    ForeachCtx ctx{propfn, cookie};
+    return orig_sp_foreach(ForeachTrampoline, &ctx);
+}
+
+// Indexed enumeration (seen in ACE imports as __system_property_find_nth):
+// remap logical indices past denied keys so numbering stays dense.
+const prop_info* my_sp_find_nth(unsigned n) {
+    if (orig_sp_find_nth == nullptr) return nullptr;
+    unsigned seen = 0;
+    for (unsigned i = 0; i < 8192; i++) {
+        const prop_info* pi = orig_sp_find_nth(i);
+        if (pi == nullptr) return nullptr;
+        char name[PROP_NAME_MAX];
+        if (orig_sp_read != nullptr) {
+            orig_sp_read(pi, name, nullptr);
+            if (IsDeniedProp(name)) continue;
+        }
+        if (seen == n) return pi;
+        seen++;
+    }
+    return nullptr;
+}
+
 // Dobby export-side hook: patches the symbol in libc itself, so libraries
 // loaded later (e.g. libemulatordetector.so via System.loadLibrary) call
 // the replacement too. LSPlt PLT-patching only covered already-loaded
@@ -209,9 +283,15 @@ void InstallPropertyHooks() {
     bool ok_cb   = HookExport("__system_property_read_callback",
             reinterpret_cast<void*>(&my_sp_read_callback),
             reinterpret_cast<void**>(&orig_sp_read_callback));
+    bool ok_foreach = HookExport("__system_property_foreach",
+            reinterpret_cast<void*>(&my_sp_foreach),
+            reinterpret_cast<void**>(&orig_sp_foreach));
+    bool ok_nth = HookExport("__system_property_find_nth",
+            reinterpret_cast<void*>(&my_sp_find_nth),
+            reinterpret_cast<void**>(&orig_sp_find_nth));
 
-    DS_LOGI("Hook(prop): get=%d find=%d read=%d read_callback=%d",
-            ok_get, ok_find, ok_read, ok_cb);
+    DS_LOGI("Hook(prop): get=%d find=%d read=%d read_callback=%d foreach=%d find_nth=%d",
+            ok_get, ok_find, ok_read, ok_cb, ok_foreach, ok_nth);
 
     InstallSystemHooks();
 

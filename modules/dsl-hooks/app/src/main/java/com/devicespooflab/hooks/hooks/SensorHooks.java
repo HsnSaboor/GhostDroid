@@ -27,18 +27,27 @@ public class SensorHooks {
     // real data paths are untouched. Fail-closed: any reflection error
     // leaves the filtered list as-is and the game keeps running.
 
-    // {type, stringType, name, vendor}
+    // {type, stringType, name, vendor, maxRange, resolution}
+    // IMU/magnetometer mirror Galaxy S25 Ultra teardown parts (iFixit:
+    // STMicro LSM6DSV 6-axis + AKM magnetometer) — closest verified
+    // Samsung flagship reference; software sensors carry Samsung vendor.
     private static final Object[][] SYNTHETIC = {
-        {Sensor.TYPE_ACCELEROMETER, "android.sensor.accelerometer", "S26 Accelerometer", "Samsung"},
-        {Sensor.TYPE_GYROSCOPE, "android.sensor.gyroscope", "S26 Gyroscope", "Samsung"},
-        {Sensor.TYPE_MAGNETIC_FIELD, "android.sensor.magnetic_field", "S26 Magnetic Field", "Samsung"},
-        {Sensor.TYPE_PROXIMITY, "android.sensor.proximity", "S26 Proximity", "Samsung"},
-        {Sensor.TYPE_LIGHT, "android.sensor.light", "S26 Light", "Samsung"},
-        {Sensor.TYPE_GRAVITY, "android.sensor.gravity", "S26 Gravity", "Samsung"},
+        {Sensor.TYPE_ACCELEROMETER, "android.sensor.accelerometer",
+                "LSM6DSV Accelerometer", "STMicroelectronics", 156.9064f, 0.0012f},
+        {Sensor.TYPE_GYROSCOPE, "android.sensor.gyroscope",
+                "LSM6DSV Gyroscope", "STMicroelectronics", 34.9066f, 0.0011f},
+        {Sensor.TYPE_MAGNETIC_FIELD, "android.sensor.magnetic_field",
+                "AK09918 Magnetometer", "AKM", 2500.0f, 0.15f},
+        {Sensor.TYPE_PROXIMITY, "android.sensor.proximity",
+                "S26 Proximity", "Samsung", 8.0f, 1.0f},
+        {Sensor.TYPE_LIGHT, "android.sensor.light",
+                "S26 Light", "Samsung", 43000.0f, 1.0f},
+        {Sensor.TYPE_GRAVITY, "android.sensor.gravity",
+                "S26 Gravity", "Samsung", 19.6133f, 0.01f},
         {Sensor.TYPE_LINEAR_ACCELERATION, "android.sensor.linear_acceleration",
-                "S26 Linear Acceleration", "Samsung"},
+                "S26 Linear Acceleration", "Samsung", 19.6133f, 0.01f},
         {Sensor.TYPE_ROTATION_VECTOR, "android.sensor.rotation_vector",
-                "S26 Rotation Vector", "Samsung"},
+                "S26 Rotation Vector", "Samsung", 1.0f, 0.0001f},
     };
 
     private static List<Sensor> syntheticCache = null;
@@ -153,7 +162,7 @@ public class SensorHooks {
         List<Sensor> made = new ArrayList<>(SYNTHETIC.length);
         for (Object[] def : SYNTHETIC) {
             Sensor s = makeSensor((Integer) def[0], (String) def[1], (String) def[2],
-                    (String) def[3]);
+                    (String) def[3], (Float) def[4], (Float) def[5]);
             if (s != null) made.add(s);
         }
         syntheticCache = made;
@@ -164,7 +173,8 @@ public class SensorHooks {
     // Build a presence-only Sensor via the hidden no-arg constructor plus
     // field injection (userdebug permits hidden-API reflection with a
     // warning; everything is guarded so failure just yields no sensors).
-    private static Sensor makeSensor(int type, String stringType, String name, String vendor) {
+    private static Sensor makeSensor(int type, String stringType, String name, String vendor,
+            float maxRange, float resolution) {
         try {
             Constructor<?> ctor = Sensor.class.getDeclaredConstructor();
             ctor.setAccessible(true);
@@ -177,9 +187,9 @@ public class SensorHooks {
             setField(s, "mHandle", -(1000 + type));
             setField(s, "mMinDelay", 5000);
             setField(s, "mMaxDelay", 200000);
-            setField(s, "mResolution", 0.01f);
+            setField(s, "mResolution", resolution);
             setField(s, "mPower", 0.5f);
-            setField(s, "mMaxRange", 40.0f);
+            setField(s, "mMaxRange", maxRange);
             return s;
         } catch (Throwable t) {
             Legacy.log(TAG + ": sensor synthesis unavailable: " + t);
