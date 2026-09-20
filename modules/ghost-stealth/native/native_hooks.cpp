@@ -1,6 +1,7 @@
 #include "gs_state.h"
 
 #include <atomic>
+#include <cstring>
 #include <mutex>
 
 namespace gs {
@@ -55,6 +56,11 @@ bool ProbeSlot() {
 
 void TraceProbeProp(const char* name) {
     if (name == nullptr || !TraceProbes() || !ProbeSlot()) return;
+    // Self-noise: every DS_LOGW makes logd read our own tag level, which
+    // would flood the cap and drown the real scan. Never log logd's reads.
+    if (strncmp(name, "persist.log.tag", 15) == 0 ||
+        strncmp(name, "log.tag", 7) == 0)
+        return;
     DS_LOGW("probe prop: %s", name);
 }
 
