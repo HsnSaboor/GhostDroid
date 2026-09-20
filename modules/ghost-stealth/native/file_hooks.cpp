@@ -45,6 +45,12 @@ std::unordered_set<DIR*> g_fakedir_set;
 #define FAKE_USB_DEVNUM "/data/local/tmp/gs_fake_usb_devnum"
 #define FAKE_PCI_VENDOR "/data/local/tmp/gs_fake_pci_vendor"
 #define FAKE_PCI_DEVICE "/data/local/tmp/gs_fake_pci_device"
+// Raw sysfs device tree + Adreno counters (probe log: ACE reads
+// /sys/devices/pci0000:00/0000:00:02.0/* directly, bypassing the
+// /sys/bus/pci fakes; kgsl gpubusy absence = no-Adreno tell).
+#define FAKE_PCI_DEV_UEVENT "/data/local/tmp/gs_fake_pci_dev_uevent"
+#define FAKE_PCI_DEV_MODALIAS "/data/local/tmp/gs_fake_pci_dev_modalias"
+#define FAKE_KGSL_GPUBUSY "/data/local/tmp/gs_fake_kgsl_gpubusy"
 // Battery: DeviceInfoHW reads charge_full*/energy_full* from three
 // candidate dirs (bms/, battery/, qcom-battery/) + model/manufacturer.
 // Serve 5000mAh Li-ion design values; level/status come from the sticky
@@ -347,6 +353,24 @@ const char* Redirect(const char* path) {
     // leaks DRIVER=iwlwifi. Per-process redirect only — NEVER global tmpfs
     // (minigbm/libdrm need real PCI sysfs for Intel GPU BO alloc).
     if (path != nullptr && strcmp(path, "/proc/bus/pci/devices") == 0) return FAKE_PCI_DEVICES;
+    // Raw sysfs device tree: /sys/devices/pci0000:00/<bdf>/{vendor,device,
+    // subsystem_vendor,subsystem_device,uevent,modalias} leak Intel i915 +
+    // ThinkPad subsystem (probe log: 4-5x each from ACE). Same Qualcomm
+    // view as the bus-tree fakes; host graphics stack is unhooked.
+    if (path != nullptr && PathStartsWith(path, "/sys/devices/pci0000:00/")) {
+        const char* slash = strrchr(path, '/');
+        const char* node = slash != nullptr ? slash + 1 : path;
+        if (strcmp(node, "vendor") == 0 || strcmp(node, "subsystem_vendor") == 0)
+            return FAKE_PCI_VENDOR;
+        if (strcmp(node, "device") == 0 || strcmp(node, "subsystem_device") == 0)
+            return FAKE_PCI_DEVICE;
+        if (strcmp(node, "uevent") == 0) return FAKE_PCI_DEV_UEVENT;
+        if (strcmp(node, "modalias") == 0) return FAKE_PCI_DEV_MODALIAS;
+    }
+    // Adreno busy counters live here on Snapdragon; Intel has no kgsl node
+    // (ENOENT = no-Adreno tell). Serve plausible busy/total counters.
+    if (path != nullptr && strcmp(path, "/sys/class/kgsl/kgsl-3d0/gpubusy") == 0)
+        return FAKE_KGSL_GPUBUSY;
     if (path != nullptr && PathStartsWith(path, "/sys/bus/pci/devices/") &&
         strlen(path) >= 7 && strcmp(path + strlen(path) - 7, "/uevent") == 0)
         return FAKE_PCI_UEVENT;

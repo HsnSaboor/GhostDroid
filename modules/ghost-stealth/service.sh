@@ -43,6 +43,7 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_usb_idvendor fake_usb_idproduct fake_usb_version \
          fake_usb_busnum fake_usb_devnum \
          fake_pci_vendor fake_pci_device \
+         fake_pci_dev_uevent fake_pci_dev_modalias fake_kgsl_gpubusy \
          fake_bat_charge_full fake_bat_charge_full_design \
          fake_bat_model fake_bat_manufacturer; do
     cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
