@@ -42,9 +42,169 @@ public class SystemPropertiesHooks {
                 }
             } catch (Exception ignored) {
             }
+            hookExecFallbacks();
         } catch (Exception e) {
             Legacy.log(TAG + ": Failed to hook SystemProperties: " + e.getMessage());
         }
+    }
+
+    // ByShell fallback (getprop via Runtime.exec / ProcessBuilder): the
+    // Java SystemProperties hook never sees these. Rewrite explicit
+    // denied-key args to a benign passthrough key before spawn so the
+    // child prints an empty/innocent value instead of the waydroid leak.
+    // Fail-closed: any error leaves the command untouched.
+    // NOT covered here (native-owned, see hole table): bare `getprop`
+    // full-dump, popen/__system_property_get, and /proc file reads —
+    // those belong to the native libc layer (ghost-stealth).
+    private static void hookExecFallbacks() {
+        Legacy.safeHook(TAG, "Runtime.exec", () -> {
+            HookFramework.hookAllMethods(Runtime.class, "exec",
+                    new HookFramework.BeforeHook() {
+                        @Override
+                        public void before(HookFramework.HookChain chain) {
+                            try {
+                                rewriteExecArgs(chain);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Runtime.exec rewrite failed: " + t);
+                            }
+                        }
+                    });
+        });
+        Legacy.safeHook(TAG, "ProcessBuilder.start", () -> {
+            Legacy.findAndHookMethod(ProcessBuilder.class, "start",
+                    new HookFramework.BeforeHook() {
+                        @Override
+                        public void before(HookFramework.HookChain chain) {
+                            try {
+                                Object self = chain.thisObject();
+                                if (self instanceof ProcessBuilder) {
+                                    sanitizeCommandList(((ProcessBuilder) self).command());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": ProcessBuilder rewrite failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void rewriteExecArgs(HookFramework.HookChain chain) {
+        for (int i = 0; i < chain.argCount(); i++) {
+            Object arg = chain.arg(i, null);
+            if (arg instanceof String) {
+                String rewritten = sanitizeShellCommand((String) arg);
+                if (rewritten != null) {
+                    chain.setArg(i, rewritten);
+                }
+            } else if (arg instanceof String[]) {
+                sanitizeCommandArray((String[]) arg);
+            } else if (arg instanceof java.util.List) {
+                sanitizeCommandList((java.util.List<?>) arg);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void sanitizeCommandList(java.util.List<?> cmd) {
+        try {
+            if (!(cmd instanceof java.util.List)
+                    || ((java.util.List<?>) cmd).isEmpty()) {
+                return;
+            }
+            java.util.List<Object> mutable = (java.util.List<Object>) cmd;
+            for (int i = 0; i < mutable.size(); i++) {
+                Object el = mutable.get(i);
+                if (!(el instanceof String)) {
+                    continue;
+                }
+                String token = (String) el;
+                if (isDeniedProp(token) && previousIsGetprop(mutable, i)) {
+                    mutable.set(i, "persist.sys.timezone");
+                }
+            }
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": sanitizeCommandList failed: " + t);
+        }
+    }
+
+    private static void sanitizeCommandArray(String[] cmd) {
+        try {
+            for (int i = 0; i < cmd.length; i++) {
+                if (cmd[i] != null && isDeniedProp(cmd[i])
+                        && previousIsGetprop(cmd, i)) {
+                    cmd[i] = "persist.sys.timezone";
+                }
+            }
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": sanitizeCommandArray failed: " + t);
+        }
+    }
+
+    private static String sanitizeShellCommand(String cmd) {
+        try {
+            if (cmd == null || !cmd.contains("getprop")) {
+                return null;
+            }
+            String[] tokens = cmd.split("\\s+");
+            boolean changed = false;
+            for (int i = 0; i < tokens.length; i++) {
+                if (isDeniedProp(stripQuotes(tokens[i]))
+                        && previousIsGetprop(tokens, i)) {
+                    tokens[i] = "persist.sys.timezone";
+                    changed = true;
+                }
+            }
+            return changed ? String.join(" ", tokens) : null;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": sanitizeShellCommand failed: " + t);
+            return null;
+        }
+    }
+
+    private static boolean previousIsGetprop(java.util.List<Object> tokens, int idx) {
+        try {
+            for (int i = idx - 1; i >= 0; i--) {
+                Object t = tokens.get(i);
+                if (!(t instanceof String)) {
+                    continue;
+                }
+                String s = ((String) t).trim();
+                if (s.isEmpty() || "-Z".equals(s)) {
+                    continue;
+                }
+                return "getprop".equals(s) || s.endsWith("/getprop");
+            }
+            return false;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean previousIsGetprop(String[] tokens, int idx) {
+        try {
+            for (int i = idx - 1; i >= 0; i--) {
+                String s = tokens[i] == null ? "" : tokens[i].trim();
+                if (s.isEmpty() || "-Z".equals(s)) {
+                    continue;
+                }
+                return "getprop".equals(s) || s.endsWith("/getprop");
+            }
+            return false;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static String stripQuotes(String token) {
+        if (token == null) {
+            return null;
+        }
+        if (token.length() >= 2
+                && ((token.startsWith("\"") && token.endsWith("\""))
+                        || (token.startsWith("'") && token.endsWith("'")))) {
+            return token.substring(1, token.length() - 1);
+        }
+        return token;
     }
 
     private static void hookSystemProperties(ClassLoader classLoader) {

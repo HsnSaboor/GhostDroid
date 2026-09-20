@@ -249,18 +249,138 @@ const prop_info* my_sp_find_nth(unsigned n) {
 // Shared deny-list predicate (declared in gs_state.h): the exec/popen
 // getprop bypass reuses the same deny-aware view as the libc hooks.
 // Container tells read as unset: key NAMES alone betray Waydroid even when
-// values are spoofed (probe log: 600x waydroid.host.uid).
+// values are spoofed (probe log: 856x waydroid.host.uid).
 // persist.waydroid.fake_wifi is exempt (platform FakeWifi needs it, no
 // device signal). ro.arch needs no rule (real phones also return empty).
+// Probe-grounded (PUBG pid 3164, 26k-line take): every prefix/exact below
+// was QUERIED by the game and is absent on a real S26, so deny (empty)
+// rather than invent a value.
 bool IsDeniedProperty(const char* name) {
-    if (name == nullptr) return false;
-    if (strncmp(name, "waydroid.", 9) == 0) return true;
+    if (name == nullptr || name[0] == '\0') return false;
+    // Vendor/container namespace prefixes: any key under these betrays
+    // the runtime even with a spoofed value.
+    static const char* const kDeniedPrefixes[] = {
+        "waydroid.",                 // Waydroid container (600x+ queried)
+        "qemu.",                     // goldfish/ranchu kernel props
+        "ro.kernel.qemu",            // ro.kernel.qemu.* paravirt tells
+        "ro.qemu.",                  // ro.qemu.initrc
+        "vendor.qemu.",              // vendor.qemu.vport.*, sf.fake_camera
+        "init.svc.qemu",             // init.svc.qemu-*, qemud*
+        "init.svc.goldfish-",        // init.svc.goldfish-setup/logcat
+        "init.svc.ranchu-",          // init.svc.ranchu-setup/net
+        "init.svc.vbox86-",          // init.svc.vbox86-setup
+        "init.svc.ld",               // init.svc.ldinit (LDPlayer)
+        "init.svc.cloud",            // cloudAppEngine/cloudcheck
+        "init.svc.cph",              // init.svc.cph_logger (Redfinger cph)
+        "init.svc.ecalc",            // init.svc.ecalcMediaCtl/setup
+        "init.svc.lg",               // init.svc.lgserver (LG cloud)
+        "init.svc_debug_pid.",       // init.svc_debug_pid.cloudAppEngine
+        "com.cph.",                  // Redfinger cloud-phone client keys
+        "persist.com.cph.",          // persist.com.cph.adbd/bg_killer
+        "ro.com.cph.",               // ro.com.cph.cloud_app_engine/mac
+        "docker.",                   // docker.fps.*/storage
+        "ro.docker.",                // ro.docker.Gateway/IPAddress
+        "microvirt.",                // microvirt.inited/memu_version (MEmu)
+        "nemud.",                    // nemud.player_package (MEmu)
+        "persist.nox.",              // persist.nox.simulator_version
+        "persist.ld.",               // persist.ld.user.identified
+        "persist.gamematrix.",       // persist.gamematrix.instance
+        "javaprop.gamematrix.",      // javaprop.gamematrix.gameid
+        "vendor.gamematrix.",        // vendor.gamematrix.cluster/hw_type
+        "debug.gamematrix.",         // debug.gamematrix.deviceid
+        "dev.cloudgame.",            // dev.cloudgame.heartbeat
+        "ro.cloud.",                 // ro.cloud.gaming/rentable
+        "ro.tenc.",                  // ro.tenc.cloudgame.gameid
+        "ro.pscloud.",               // ro.pscloud.vm.name
+        "ro.boottime.cloud",         // ro.boottime.cloudAppEngine/vm_srv
+        "ro.boottime.cph",           // ro.boottime.cph_logger
+        "ro.boottime.ecalc",         // ro.boottime.ecalcMediaCtl/setup
+        "ro.boottime.lg",            // ro.boottime.lgserver
+        "target.cloud.",             // target.cloud.type
+        "storage.cloud.",            // storage.cloud.mode
+        "vendor.cloudgame.",         // vendor.cloudgame.game
+        "hm.",                       // Haimawan hm.custom.*/service.id
+        "hm_",                       // hm_rtc_*/hm_wm_size_*
+        "persist.hm.",               // persist.hm.device.info
+        "ro.hm.",                    // ro.hm.device.type
+        "ro.ecalc.",                 // ro.ecalc.otherSystemSize
+        "camera.ecalc.",             // camera.ecalc.camera_facing
+        "ro.rk.",                    // ro.rk.bt_enable/ethernet/hdmi (RK boxes)
+        "ro.rksdk.",                 // ro.rksdk.version
+        "ro.lgsys.",                 // ro.lgsys.sid/tid
+        "ro.boot.ro.lgsys.",         // ro.boot.ro.lgsys.tid
+        "lg.huang.",                 // lg.huang.addrule/init/network
+        "lgctrl.",                   // lgctrl.properties.pid
+        "vm.lgsys.",                 // vm.lgsys.init
+        "ro.build.nubia.",           // ro.build.nubia.rom.name
+        "ro.build.tyd.",             // ro.build.tyd.kbstyle_version
+        "ro.gn.",                    // ro.gn.gnromvernumber (GIONEE)
+        "ro.lenovo.",                // ro.lenovo.series
+        "ro.lewa.",                  // ro.lewa.version
+        "ro.meizu.",                 // ro.meizu.product.model
+        "ro.miui.",                  // ro.miui.ui.version.name (no MIUI on S26)
+        "ro.vivo.",                  // ro.vivo.os.*
+        "ro.gfx.driver",             // ro.gfx.driver.0/1/_build_time
+        "ro.kernel.mac80211_hwsim.",  // Linux wifi-simulator channels
+        "persist.sys.bd.",           // persist.sys.bd.keep_alive/su_white
+        "persist.sys.byte_cloud_env",  // byte-dance cloud env flag
+        "phone.",                    // phone.area/aws/productname
+        "bst.",                      // bst.bluestacks_eb_url
+        "com.taoxinyun.",            // com.taoxinyun.android.channel
+        "omx_vp8_",                  // omx_vp8_max/min_qp (soft-codec tell)
+        "adjust.",                   // adjust.preinstall.*
+        "vendor.cf.",                // vendor.cf.address (Cuttlefish)
+        "vclusters.",                // vclusters.virtual.camera
+        "gralloc.gbm.device",        // mesa/gbm software-render tell
+        "mesa.",                     // mesa.* debug knobs (absent on retail)
+        "debug.mesa.",               // debug.mesa.* (absent on retail)
+        "vendor.mesa.",              // vendor.mesa.* (absent on retail)
+    };
+    for (const char* prefix : kDeniedPrefixes) {
+        size_t len = strlen(prefix);
+        if (strncmp(name, prefix, len) == 0) return true;
+    }
     if (strncmp(name, "persist.waydroid.", 17) == 0 &&
         strcmp(name, "persist.waydroid.fake_wifi") != 0)
         return true;
-    // v4l2 camera HAL key exists only on Linux/VMM stacks; real phones
-    // leave it absent. Deny (empty) rather than spoof a value.
-    if (strcmp(name, "ro.hardware.camera") == 0) return true;
+    // One-off emulator/cloud tells: real S26 leaves these absent.
+    static const char* const kDeniedExact[] = {
+        "ro.hardware.camera",        // v4l2 camera HAL key, VMM-only
+        "ro.hardware.fps.cph",       // Redfinger fps HAL key
+        "ro.adb.qemud",              // adb-over-qemud pipe flag
+        "ro.kernel.android.qemud",   // android.qemud kernel driver
+        "ro.dalvik.vm.isa.x86_64",   // x86_64 ABI tell on arm64 profile
+        "ro.genymotion.version",     // Genymotion build stamp
+        "ro.ddy.webrtc",             // dayu-cloud webrtc flag
+        "ro.aa.romver",              // third-party ROM version stamp
+        "ro.bd.product.model",       // box-stack product model
+        "ro.build.rom.id",           // third-party ROM id
+        "ro.build.version.emui",     // EMUI version (no EMUI on S26)
+        "ro.build.version.opporom",  // Oppo ROM version
+        "ro.global.scene",           // scene-sdk leftover key
+        "ro.vendor.rk_sdk",          // Rockchip vendor SDK flag
+        "ro.vendor.redirect_socket_calls",  // vsock-redirect tell
+        "ro.vendor.product.brand",   // vendor product overlay (Waydroid)
+        "ro.vendor.product.name",    // vendor product overlay (Waydroid)
+        "ro.product.base_version",   // base-version overlay (Waydroid)
+        "vendor.rild.libpath",       // emulator rild path (unsourceable)
+        "gsm.version.baseband",      // emulator baseband (unsourceable)
+        "drm.gpu.vendor_name",       // drm/gbm software-render tell
+        "service.adb.tcp.port",      // tcp-adb tell (unset on retail S26)
+        "persist.adb.tls_server.enable",  // adb tls-server flag
+        "ro.boot.vbmeta.digest",     // test-keys vbmeta digest (unsourceable)
+        "ro.boot.enable_dm_verity",  // verity-mode tell (unset on retail)
+        "sys.tencent.model",         // tencent channel leftover
+        "sys.prop.writewifissid",    // wifi-ssid writer flag
+        "wifi_name",                 // cooler-style wifi key
+        "phone_type",                // phone-type leftover key
+        "su_white_list.1",           // bd su-whitelist tell
+        "keep_alive_whitelist",      // bd keep-alive tell
+        "init.svc.android-hardware-media-c2-goldfish-hal-1-0",
+    };
+    for (const char* key : kDeniedExact) {
+        if (strcmp(name, key) == 0) return true;
+    }
     return false;
 }
 

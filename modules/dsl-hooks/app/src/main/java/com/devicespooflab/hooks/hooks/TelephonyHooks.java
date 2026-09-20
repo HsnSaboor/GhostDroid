@@ -376,6 +376,74 @@ public class TelephonyHooks {
                                     }
                                 });
                     });
+
+            // Bulk-list siblings some detectors enumerate instead of the
+            // base list: same empty -> single synthetic T-Mobile entry.
+            for (String bulk : new String[]{
+                    "getCompleteActiveSubscriptionInfoList",
+                    "getAccessibleSubscriptionInfoList",
+                    "getAvailableSubscriptionInfoList"}) {
+                final String bulkName = bulk;
+                Legacy.safeHook("DeviceSpoofLab-Telephony", bulkName, () -> {
+                    HookFramework.hookAllMethods(subscriptionManager, bulkName,
+                            new HookFramework.Hook() {
+                                @Override
+                                @SuppressWarnings("unchecked")
+                                public void after(HookFramework.HookChain chain,
+                                        Object result, Throwable error) {
+                                    try {
+                                        java.util.List<Object> orig =
+                                                (java.util.List<Object>) result;
+                                        if (orig != null && !orig.isEmpty()) {
+                                            return;
+                                        }
+                                        Object info = syntheticSubscriptionInfo(
+                                                lpparam.classLoader);
+                                        if (info != null) {
+                                            java.util.List<Object> single =
+                                                    new java.util.ArrayList<>(1);
+                                            single.add(info);
+                                            chain.replaceResult(single);
+                                        }
+                                    } catch (Throwable t) {
+                                        Legacy.log("DeviceSpoofLab-Telephony"
+                                                + ": " + bulkName + " failed: " + t);
+                                    }
+                                }
+                            });
+                });
+            }
+
+            // Single-entry lookups bypass the list: backfill null with the
+            // same synthetic entry so slot-index checks see a SIM present.
+            for (String single : new String[]{
+                    "getActiveSubscriptionInfo",
+                    "getActiveSubscriptionInfoForSimSlotIndex",
+                    "getActiveSubscriptionInfoForSubscription"}) {
+                final String singleName = single;
+                Legacy.safeHook("DeviceSpoofLab-Telephony", singleName, () -> {
+                    HookFramework.hookAllMethods(subscriptionManager, singleName,
+                            new HookFramework.Hook() {
+                                @Override
+                                public void after(HookFramework.HookChain chain,
+                                        Object result, Throwable error) {
+                                    try {
+                                        if (result != null) {
+                                            return;
+                                        }
+                                        Object info = syntheticSubscriptionInfo(
+                                                lpparam.classLoader);
+                                        if (info != null) {
+                                            chain.replaceResult(info);
+                                        }
+                                    } catch (Throwable t) {
+                                        Legacy.log("DeviceSpoofLab-Telephony"
+                                                + ": " + singleName + " failed: " + t);
+                                    }
+                                }
+                            });
+                });
+            }
         }
     }
 

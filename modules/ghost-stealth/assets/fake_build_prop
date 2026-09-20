@@ -1,0 +1,36 @@
+# Per-process /system/build.prop view (S26 Ultra). Values mirror
+# config/spoof.conf; kept in sync by hand (file slice owns this copy).
+ro.product.manufacturer=samsung
+ro.product.brand=samsung
+ro.product.model=SM-S948B
+ro.product.name=m3qxeea
+ro.product.device=m3q
+ro.product.board=kaanapali
+ro.product.product=m3qxeea
+ro.product.cpu.abi=arm64-v8a
+ro.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi
+ro.product.cpu.abilist32=armeabi-v7a,armeabi
+ro.product.cpu.abilist64=arm64-v8a
+ro.board.platform=kaanapali
+ro.soc.manufacturer=Qualcomm
+ro.soc.model=SM8850
+ro.hardware=qcom
+ro.build.fingerprint=samsung/m3qxeea/m3q:13/TQ3A.230901.001/S948BXXU1AXE4:user/release-keys
+ro.build.description=m3qxeea-user 13 TQ3A.230901.001 S948BXXU1AXE4 release-keys
+ro.build.flavor=m3qxeea-user
+ro.build.host=SWDG4619
+ro.build.id=TQ3A.230901.001
+ro.build.display.id=TQ3A.230901.001
+ro.build.product=m3qxeea
+ro.build.user=dpi
+ro.build.tags=release-keys
+ro.build.type=user
+ro.build.version.incremental=S948BXXU1AXE4
+ro.build.version.sdk=33
+ro.build.version.release=13
+ro.build.version.security_patch=2024-05-01
+ro.build.characteristics=nosdcard
+ro.bootloader=S948BXXU1AXE4
+ro.debuggable=0
+ro.secure=1
+ro.kernel.qemu=0

@@ -47,7 +47,16 @@ public class ApplistHooks {
         hookInstalledPackages(appPm);
         hookInstalledApplications(appPm);
         hookQueryIntentActivities(appPm);
-        hookGetPackageInfo(appPm);
+        hookQueryIntentServices(appPm);
+        hookQueryBroadcastReceivers(appPm);
+        hookResolveActivity(appPm);
+        hookResolveService(appPm);
+        hookDirectLookup(appPm, "getPackageInfo");
+        hookDirectLookup(appPm, "getApplicationInfo");
+        hookDirectLookup(appPm, "getActivityInfo");
+        hookDirectLookup(appPm, "getServiceInfo");
+        hookDirectLookup(appPm, "getReceiverInfo");
+        hookDirectLookup(appPm, "getProviderInfo");
     }
 
     private static boolean denied(String pkg) {
@@ -171,8 +180,23 @@ public class ApplistHooks {
     }
 
     private static void hookQueryIntentActivities(Class<?> appPm) {
-        Legacy.safeHook(TAG, "queryIntentActivities", () -> {
-            HookFramework.hookAllMethods(appPm, "queryIntentActivities",
+        hookListFilter(appPm, "queryIntentActivities");
+    }
+
+    private static void hookQueryIntentServices(Class<?> appPm) {
+        hookListFilter(appPm, "queryIntentServices");
+    }
+
+    private static void hookQueryBroadcastReceivers(Class<?> appPm) {
+        hookListFilter(appPm, "queryBroadcastReceivers");
+    }
+
+    // Single shared list filter: strips deny-set packages from any
+    // List<ResolveInfo>-returning PackageManager query. Fail-closed: any
+    // reflection error leaves the original result untouched.
+    private static void hookListFilter(Class<?> appPm, String method) {
+        Legacy.safeHook(TAG, method, () -> {
+            HookFramework.hookAllMethods(appPm, method,
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
@@ -195,32 +219,76 @@ public class ApplistHooks {
                                     chain.replaceResult(kept);
                                 }
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": queryIntentActivities filter failed: " + t);
+                                Legacy.log(TAG + ": " + method + " filter failed: " + t);
                             }
                         }
                     });
         });
     }
 
-    private static void hookGetPackageInfo(Class<?> appPm) {
-        Legacy.safeHook(TAG, "getPackageInfo", () -> {
-            HookFramework.hookAllMethods(appPm, "getPackageInfo",
+    // resolveActivity/resolveService return a single ResolveInfo (or null):
+    // null it out when it points at a denied package.
+    private static void hookResolveActivity(Class<?> appPm) {
+        hookSingleResolve(appPm, "resolveActivity");
+    }
+
+    private static void hookResolveService(Class<?> appPm) {
+        hookSingleResolve(appPm, "resolveService");
+    }
+
+    private static void hookSingleResolve(Class<?> appPm, String method) {
+        Legacy.safeHook(TAG, method, () -> {
+            HookFramework.hookAllMethods(appPm, method,
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result != null && denied(packageOf(result))) {
+                                    chain.replaceResult(null);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": " + method + " deny check failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Direct lookups (getPackageInfo/getApplicationInfo/getActivityInfo/
+    // getServiceInfo/getReceiverInfo/getProviderInfo): every overload takes
+    // the package (or a ComponentName whose package is arg 0/derived) as
+    // arg 0, so one shared deny check covers all overloads via hookAll.
+    private static void hookDirectLookup(Class<?> appPm, String method) {
+        Legacy.safeHook(TAG, method, () -> {
+            HookFramework.hookAllMethods(appPm, method,
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
                                 Object result, Throwable error) throws Throwable {
                             try {
-                                String pkg = chain.arg(0, null);
+                                String pkg = lookupPackage(chain);
                                 if (denied(pkg)) {
                                     throw new PackageManager.NameNotFoundException(pkg);
                                 }
                             } catch (PackageManager.NameNotFoundException e) {
                                 throw e;
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": getPackageInfo deny check failed: " + t);
+                                Legacy.log(TAG + ": " + method + " deny check failed: " + t);
                             }
                         }
                     });
         });
+    }
+
+    private static String lookupPackage(HookFramework.HookChain chain) {
+        Object first = chain.arg(0, null);
+        if (first instanceof String) {
+            return (String) first;
+        }
+        if (first instanceof android.content.ComponentName) {
+            return ((android.content.ComponentName) first).getPackageName();
+        }
+        return null;
     }
 }

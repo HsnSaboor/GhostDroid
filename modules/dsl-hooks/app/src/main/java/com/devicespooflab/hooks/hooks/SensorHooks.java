@@ -67,11 +67,15 @@ public class SensorHooks {
                     new HookFramework.Hook() {@Override
                         @SuppressWarnings("unchecked")
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            List<Sensor> orig = (List<Sensor>) result;
-                            java.util.List<Object> args = chain.args();
-                            int type = (args != null && !args.isEmpty() && args.get(0) instanceof Integer)
-                                    ? (Integer) args.get(0) : Sensor.TYPE_ALL;
-                            chain.replaceResult(withSynthetic(filter(orig), type));
+                            try {
+                                List<Sensor> orig = (List<Sensor>) result;
+                                java.util.List<Object> args = chain.args();
+                                int type = (args != null && !args.isEmpty() && args.get(0) instanceof Integer)
+                                        ? (Integer) args.get(0) : Sensor.TYPE_ALL;
+                                chain.replaceResult(withSynthetic(filter(orig), type));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getSensorList filter failed: " + t);
+                            }
                         }
                     });
         } catch (Throwable t) {
@@ -83,14 +87,18 @@ public class SensorHooks {
                     int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            Sensor s = (Sensor) result;
-                            if (s != null && isEmulatorSensor(s)) {
-                                s = null;
-                            }
-                            if (s == null) {
-                                Sensor synth = syntheticFor(requestedType(chain, 0));
-                                if (synth != null) chain.replaceResult(synth);
-                                else if (result != null) chain.replaceResult(null);
+                            try {
+                                Sensor s = (Sensor) result;
+                                if (s != null && isEmulatorSensor(s)) {
+                                    s = null;
+                                }
+                                if (s == null) {
+                                    Sensor synth = syntheticFor(requestedType(chain, 0));
+                                    if (synth != null) chain.replaceResult(synth);
+                                    else if (result != null) chain.replaceResult(null);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDefaultSensor filter failed: " + t);
                             }
                         }
                     });
@@ -103,20 +111,26 @@ public class SensorHooks {
                     int.class, boolean.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            Sensor s = (Sensor) result;
-                            if (s != null && isEmulatorSensor(s)) {
-                                s = null;
-                            }
-                            if (s == null) {
-                                Sensor synth = syntheticFor(requestedType(chain, 0));
-                                if (synth != null) chain.replaceResult(synth);
-                                else if (result != null) chain.replaceResult(null);
+                            try {
+                                Sensor s = (Sensor) result;
+                                if (s != null && isEmulatorSensor(s)) {
+                                    s = null;
+                                }
+                                if (s == null) {
+                                    Sensor synth = syntheticFor(requestedType(chain, 0));
+                                    if (synth != null) chain.replaceResult(synth);
+                                    else if (result != null) chain.replaceResult(null);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDefaultSensor(wakeUp) filter failed: " + t);
                             }
                         }
                     });
         } catch (Throwable t) { /* version-specific overload */ }
 
         hookRegisterListener();
+        hookUnregisterListener();
+        hookDynamicSensorList();
     }
 
     // Synthetic sensors have no HAL behind them, so the real
@@ -144,6 +158,59 @@ public class SensorHooks {
                                 chain.replaceResult(true);
                             } catch (Throwable t) {
                                 Legacy.log(TAG + ": registerListener synth post failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Mirror of registerListener: unregistering a synthetic handle must
+    // report success (boolean overloads) instead of leaking "no such
+    // sensor". Void overloads pass through untouched. Fail-closed.
+    private static void hookUnregisterListener() {
+        Legacy.safeHook(TAG, "unregisterListener", () -> {
+            HookFramework.hookAllMethods(SensorManager.class, "unregisterListener",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                Sensor sensor = sensorArg(chain);
+                                if (sensor == null || !isSyntheticHandle(sensor)) {
+                                    return;
+                                }
+                                if (result instanceof Boolean) {
+                                    chain.replaceResult(true);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": unregisterListener synth ack failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Dynamic sensors (USB/BT hot-plug): phones normally report none, so
+    // only strip emulator tokens here — never append static synthetics.
+    // Fail-closed: any error leaves the original list as-is.
+    private static void hookDynamicSensorList() {
+        Legacy.safeHook(TAG, "getDynamicSensorList", () -> {
+            HookFramework.hookAllMethods(SensorManager.class, "getDynamicSensorList",
+                    new HookFramework.Hook() {
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (!(result instanceof List)) {
+                                    return;
+                                }
+                                List<Sensor> filtered = filter((List<Sensor>) result);
+                                if (filtered.size() != ((List<?>) result).size()) {
+                                    chain.replaceResult(filtered);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDynamicSensorList filter failed: " + t);
                             }
                         }
                     });

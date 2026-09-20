@@ -579,6 +579,45 @@ public class NetworkHooks {
                     });
         });
 
+        // Per-network and dump-all variants bypass getActiveNetworkInfo:
+        // spoof each element so detectors enumerating networks still see
+        // WIFI/LTE. getAllNetworks (Network[]) is intentionally untouched —
+        // Network tokens cannot be faked safely; capabilities/link-props
+        // per Network are already rewritten above.
+        Legacy.safeHook(TAG, "ConnectivityManager.getNetworkInfo", () -> {
+            HookFramework.hookAllMethods(cm, "getNetworkInfo",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (result != null) {
+                                    spoofNetworkInfo(result);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getNetworkInfo spoof failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "ConnectivityManager.getAllNetworkInfo", () -> {
+            HookFramework.hookAllMethods(cm, "getAllNetworkInfo",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (result instanceof android.net.NetworkInfo[]) {
+                                    for (Object info : (Object[]) result) {
+                                        if (info != null) {
+                                            spoofNetworkInfo(info);
+                                        }
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAllNetworkInfo spoof failed: " + t);
+                            }
+                        }
+                    });
+        });
+
         Legacy.safeHook(TAG, "ConnectivityManager.getNetworkCapabilities", () -> {
             HookFramework.hookAllMethods(cm, "getNetworkCapabilities",
                     new HookFramework.Hook() {@Override

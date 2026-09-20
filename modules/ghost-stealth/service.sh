@@ -40,7 +40,10 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # gs_fake_platform_drivers_list, gs_fake_sys_module_list,
 # gs_fake_usb_{manufacturer,product,serial,idvendor,idproduct,version,
 # busnum,devnum}, gs_fake_pci_{vendor,device},
-# gs_fake_bat_{charge_full,charge_full_design,model,manufacturer}.
+# gs_fake_bat_{charge_full,charge_full_design,model,manufacturer},
+# gs_fake_cpuinfo, gs_fake_build_prop,
+# gs_fake_cpufreq_{prime,perf,min}, gs_fake_cpu_online,
+# gs_fake_{kallsyms,iomem,ioports,proc_misc}.
 for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_usb_drivers_list fake_pci_drivers_list \
          fake_platform_drivers_list fake_sys_module_list \
@@ -50,7 +53,11 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_pci_vendor fake_pci_device \
          fake_pci_dev_uevent fake_pci_dev_modalias fake_kgsl_gpubusy \
          fake_bat_charge_full fake_bat_charge_full_design \
-         fake_bat_model fake_bat_manufacturer; do
+         fake_bat_model fake_bat_manufacturer \
+         fake_cpuinfo fake_build_prop \
+         fake_cpufreq_prime fake_cpufreq_perf fake_cpufreq_min \
+         fake_cpu_online fake_kallsyms fake_iomem fake_ioports \
+         fake_proc_misc; do
     cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
     chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
 done

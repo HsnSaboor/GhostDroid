@@ -1,0 +1,6 @@
+00000000-00000fff : reserved
+40000000-7fffffff : System RAM
+  41000000-42ffffff : Kernel code
+  43000000-43ffffff : Kernel data
+90000000-90000fff : virtio-mmio
+a0000000-a0000fff : virtio-mmio

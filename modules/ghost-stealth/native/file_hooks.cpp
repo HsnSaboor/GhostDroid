@@ -65,6 +65,20 @@ std::unordered_set<DIR*> g_fakedir_set;
     "/data/local/tmp/gs_fake_bat_charge_full_design"
 #define FAKE_BAT_MODEL "/data/local/tmp/gs_fake_bat_model"
 #define FAKE_BAT_MANUFACTURER "/data/local/tmp/gs_fake_bat_manufacturer"
+// Probe log (PUBG pid 3164) direct-read tells: /proc/cpuinfo (Intel, global
+// bind misses the target mount ns), /system/build.prop (41x, bypasses prop
+// hooks), host kernel truth (/proc/kallsyms+iomem+ioports+misc), per-cpu
+// cpufreq counters (host kHz, not Oryon) + cpu online topology.
+#define FAKE_CPUINFO "/data/local/tmp/gs_fake_cpuinfo"
+#define FAKE_BUILD_PROP "/data/local/tmp/gs_fake_build_prop"
+#define FAKE_CPUFREQ_PRIME "/data/local/tmp/gs_fake_cpufreq_prime"
+#define FAKE_CPUFREQ_PERF "/data/local/tmp/gs_fake_cpufreq_perf"
+#define FAKE_CPUFREQ_MIN "/data/local/tmp/gs_fake_cpufreq_min"
+#define FAKE_CPU_ONLINE "/data/local/tmp/gs_fake_cpu_online"
+#define FAKE_KALLSYMS "/data/local/tmp/gs_fake_kallsyms"
+#define FAKE_IOMEM "/data/local/tmp/gs_fake_iomem"
+#define FAKE_IOPORTS "/data/local/tmp/gs_fake_ioports"
+#define FAKE_PROC_MISC "/data/local/tmp/gs_fake_proc_misc"
 
 int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
@@ -162,40 +176,53 @@ bool IsStatusPath(const char* p);
 // Maps-content views (/proc/self/maps et al.) are filtered separately in
 // OpenFilteredMaps: ACE parses maps text, which dl_iterate_phdr can't cover.
 
-bool IsMapsPath(const char* p) {
-    if (p == nullptr) return false;
-    if (strcmp(p, "/proc/self/maps") == 0 ||
-        strcmp(p, "/proc/self/smaps") == 0 ||
-        strcmp(p, "/proc/self/smaps_rollup") == 0)
-        return true;
-    // /proc/self/task/<tid>/{maps,smaps,smaps_rollup}
-    static const char kTask[] = "/proc/self/task/";
-    if (strncmp(p, kTask, sizeof(kTask) - 1) == 0) {
-        const char* slash = strchr(p + sizeof(kTask) - 1, '/');
-        if (slash != nullptr && (strcmp(slash, "/maps") == 0 ||
-                                 strcmp(slash, "/smaps") == 0 ||
-                                 strcmp(slash, "/smaps_rollup") == 0))
-            return true;
-    }
-    // /proc/<pid>/{maps,smaps,smaps_rollup} only when pid == self
-    // (detectors build the path via getpid()).
+// Numeric pid segment matcher (no allocation): sets lenOut to the digit
+// run length. Used by the /proc pid-view predicate below.
+bool IsNumericPid(const char* s, size_t* lenOut) {
+    if (s == nullptr) return false;
+    size_t i = 0;
+    while (s[i] >= '0' && s[i] <= '9') i++;
+    if (lenOut != nullptr) *lenOut = i;
+    return i > 0;
+}
+
+// /proc pid-view predicate (DRY, shared by maps + status filters):
+// matches /proc/self/<view>, /proc/self/task/<tid>/<view>,
+// /proc/<pid>/<view>, /proc/<pid>/task/<tid>/<view> for ANY numeric pid.
+// Widened from self-only: probe log shows reads of a sibling's maps
+// (/proc/4885/maps). Only translator/framework lines are stripped (maps)
+// or TracerPid zeroed (status), so other-pid views stay truthful
+// otherwise; oversized views still fail open.
+bool IsProcPidView(const char* p, const char* view) {
+    if (p == nullptr || view == nullptr || *view != '/') return false;
     static const char kProc[] = "/proc/";
-    if (strncmp(p, kProc, sizeof(kProc) - 1) == 0) {
-        const char* rest = p + sizeof(kProc) - 1;
-        long pid = 0;
-        size_t i = 0;
-        while (rest[i] >= '0' && rest[i] <= '9') {
-            pid = pid * 10 + (rest[i] - '0');
-            i++;
-        }
-        if (i > 0 && pid == (long)::getpid()) {
-            const char* tail = rest + i;
-            if (strcmp(tail, "/maps") == 0 || strcmp(tail, "/smaps") == 0 ||
-                strcmp(tail, "/smaps_rollup") == 0)
-                return true;
-        }
+    if (strncmp(p, kProc, sizeof(kProc) - 1) != 0) return false;
+    const char* rest = p + sizeof(kProc) - 1;
+    if (strncmp(rest, "self/", 5) == 0) {
+        const char* after = rest + 5;
+        if (strcmp(after, view + 1) == 0) return true;
+        static const char kTask[] = "task/";
+        if (strncmp(after, kTask, sizeof(kTask) - 1) != 0) return false;
+        const char* tid = after + sizeof(kTask) - 1;
+        size_t n = 0;
+        if (!IsNumericPid(tid, &n)) return false;
+        return tid[n] == '/' && strcmp(tid + n, view) == 0;
     }
-    return false;
+    size_t n = 0;
+    if (!IsNumericPid(rest, &n)) return false;
+    const char* after = rest + n;
+    if (strcmp(after, view) == 0) return true;
+    static const char kTask[] = "/task/";
+    if (strncmp(after, kTask, sizeof(kTask) - 1) != 0) return false;
+    const char* tid = after + sizeof(kTask) - 1;
+    size_t m = 0;
+    if (!IsNumericPid(tid, &m)) return false;
+    return tid[m] == '/' && strcmp(tid + m, view) == 0;
+}
+
+bool IsMapsPath(const char* p) {
+    return IsProcPidView(p, "/maps") || IsProcPidView(p, "/smaps") ||
+           IsProcPidView(p, "/smaps_rollup");
 }
 
 // (Removed: probe tracing now logs every open unconditionally.)
@@ -305,6 +332,11 @@ bool IsTranslatorPath(const char* p) {
     if (PathStartsWith(p, "/system/etc/binfmt_misc")) return true;
     if (strcmp(p, "/system/etc/init/houdini.rc") == 0 ||
         strcmp(p, "/system/etc/init/ndk_translation.rc") == 0) return true;
+    // x86_64 framework oat (probe log: opens of oat/x86_64/*.art+.vdex).
+    // Real S26 Ultra ships arm64-only oat; the x86_64 boot image here is a
+    // host-runtime artifact. The runtime holds its fds (zygote-inherited),
+    // so denying fresh existence/content probes only blinds detectors.
+    if (strstr(p, "oat/x86_64") != nullptr) return true;
     return false;
 }
 
@@ -427,38 +459,25 @@ bool IsHiddenModuleLine(const char* p) {
     return IsTranslatorPath(p) || IsHookFrameworkPath(p);
 }
 
-// TracerPid/status views eligible for the pipe-backed rewrite:
-// /proc/self/status, /proc/self/task/<tid>/status, /proc/<selfpid>/status.
+// TracerPid/status views eligible for the pipe-backed rewrite (any pid:
+// detectors also read siblings, e.g. /proc/4885/maps; TracerPid of other
+// pids is zeroed the same way, everything else passes through verbatim).
 bool IsStatusPath(const char* p) {
-    if (p == nullptr) return false;
-    if (strcmp(p, "/proc/self/status") == 0) return true;
-    static const char kTask[] = "/proc/self/task/";
-    if (strncmp(p, kTask, sizeof(kTask) - 1) == 0) {
-        const char* slash = strchr(p + sizeof(kTask) - 1, '/');
-        if (slash != nullptr && strcmp(slash, "/status") == 0) return true;
-        return false;
-    }
-    static const char kProc[] = "/proc/";
-    if (strncmp(p, kProc, sizeof(kProc) - 1) == 0) {
-        const char* rest = p + sizeof(kProc) - 1;
-        long pid = 0;
-        size_t i = 0;
-        while (rest[i] >= '0' && rest[i] <= '9') {
-            pid = pid * 10 + (rest[i] - '0');
-            i++;
-        }
-        if (i > 0 && pid == (long)::getpid()) {
-            if (strcmp(rest + i, "/status") == 0) return true;
-        }
-    }
-    return false;
+    return IsProcPidView(p, "/status");
 }
 
 
 
-// TracerPid pipe filter: read the real status, rewrite any non-zero
-// TracerPid line to `TracerPid:\t0`, serve via pipe (fail-open: -1 hands
-// back to the real open). Read-only callers only.
+// TracerPid/caps/seccomp pipe filter: read the real status, normalize
+// debugger + container tells to stock Pixel app values, serve via pipe
+// (fail-open: -1 hands back to the real open). Read-only callers only.
+//
+//   TracerPid -> 0 (anti-debug; probe log: 6x status reads)
+//   CapInh/CapPrm/CapEff/CapBnd/CapAmb -> 0 (Waydroid container may carry
+//     ambient/bounding caps a stock phone drops for apps; 0 is the app norm)
+//   NoNewPrivs -> 1, Seccomp -> 2, Seccomp_filters -> 1 (stock app sandbox;
+//     a container with Seccomp: 0 would betray the VMM stack)
+// Name/State/Uid/Gid pass through (u0_aXXX app identity is normal).
 int OpenFilteredStatus(const char* path, int flags) {
     if ((flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND |
                   O_PATH | O_TMPFILE)) != 0)
@@ -496,6 +515,19 @@ int OpenFilteredStatus(const char* path, int flags) {
         if (strncmp(line.c_str(), "TracerPid:", 10) == 0) {
             out += "TracerPid:\t0";
             out += "\n";
+        } else if (strncmp(line.c_str(), "CapInh:", 7) == 0 ||
+                   strncmp(line.c_str(), "CapPrm:", 7) == 0 ||
+                   strncmp(line.c_str(), "CapEff:", 7) == 0 ||
+                   strncmp(line.c_str(), "CapBnd:", 7) == 0 ||
+                   strncmp(line.c_str(), "CapAmb:", 7) == 0) {
+            out.append(line.c_str(), 7);
+            out += "\t0000000000000000\n";
+        } else if (strncmp(line.c_str(), "NoNewPrivs:", 11) == 0) {
+            out += "NoNewPrivs:\t1\n";
+        } else if (strncmp(line.c_str(), "Seccomp_filters:", 16) == 0) {
+            out += "Seccomp_filters:\t1\n";
+        } else if (strncmp(line.c_str(), "Seccomp:", 8) == 0) {
+            out += "Seccomp:\t2\n";
         } else {
             out += line;
         }
@@ -509,6 +541,37 @@ int OpenFilteredStatus(const char* path, int flags) {
         ::fcntl(fd, F_SETFL, fl | O_NONBLOCK);
     }
     return fd;
+}
+
+// Oryon V3 (SM8850) cpufreq view: cpu0-1 prime @4.74GHz, cpu2-7 perf
+// @3.62GHz (matches the service.sh global mask). Only freq-counter nodes
+// are faked; governor/policy dirs stay real so DVFS readers never break.
+// Unknown nodes and cpu>=8 fall through (fail-open).
+const char* CpufreqFake(const char* path) {
+    static const char kPrefix[] = "/sys/devices/system/cpu/";
+    if (!PathStartsWith(path, kPrefix)) return nullptr;
+    const char* rest = path + sizeof(kPrefix) - 1;  // "cpu<N>/cpufreq/<node>"
+    if (rest[0] != 'c' || rest[1] != 'p' || rest[2] != 'u') return nullptr;
+    const char* d = rest + 3;
+    int cpu = 0;
+    int digits = 0;
+    while (*d >= '0' && *d <= '9') {
+        cpu = cpu * 10 + (*d - '0');
+        d++;
+        digits++;
+    }
+    if (digits == 0 || cpu < 0 || cpu > 7) return nullptr;
+    static const char kFreq[] = "/cpufreq/";
+    if (strncmp(d, kFreq, sizeof(kFreq) - 1) != 0) return nullptr;
+    const char* node = d + sizeof(kFreq) - 1;
+    if (strcmp(node, "scaling_cur_freq") == 0 ||
+        strcmp(node, "cpuinfo_max_freq") == 0 ||
+        strcmp(node, "scaling_max_freq") == 0)
+        return cpu < 2 ? FAKE_CPUFREQ_PRIME : FAKE_CPUFREQ_PERF;
+    if (strcmp(node, "cpuinfo_min_freq") == 0 ||
+        strcmp(node, "scaling_min_freq") == 0)
+        return FAKE_CPUFREQ_MIN;
+    return nullptr;
 }
 
 const char* Redirect(const char* path) {
@@ -574,6 +637,23 @@ const char* Redirect(const char* path) {
         (strcmp(path, "/sys/class/power_supply/bms/battery_type") == 0 ||
          strcmp(path, "/sys/class/power_supply/battery/manufacturer") == 0))
         return FAKE_BAT_MANUFACTURER;
+    // Probe log (PUBG 3164) direct-read tells, per-process only:
+    // /proc/cpuinfo leaks Intel (global bind misses the target mount ns);
+    // /system/build.prop (41x) bypasses the prop hooks; kallsyms/iomem/
+    // ioports/misc expose x86 ranges + Waydroid devices; cpufreq counters
+    // report host kHz instead of Oryon V3 clocks.
+    if (path != nullptr && strcmp(path, "/proc/cpuinfo") == 0) return FAKE_CPUINFO;
+    if (path != nullptr && strcmp(path, "/system/build.prop") == 0) return FAKE_BUILD_PROP;
+    if (path != nullptr && strcmp(path, "/proc/kallsyms") == 0) return FAKE_KALLSYMS;
+    if (path != nullptr && strcmp(path, "/proc/iomem") == 0) return FAKE_IOMEM;
+    if (path != nullptr && strcmp(path, "/proc/ioports") == 0) return FAKE_IOPORTS;
+    if (path != nullptr && strcmp(path, "/proc/misc") == 0) return FAKE_PROC_MISC;
+    if (path != nullptr && strcmp(path, "/sys/devices/system/cpu/online") == 0)
+        return FAKE_CPU_ONLINE;
+    if (path != nullptr) {
+        const char* cf = CpufreqFake(path);
+        if (cf != nullptr) return cf;
+    }
     // PCI Wi-Fi/iGPU: /proc/bus/pci/devices leaks Intel IDs, pci uevent
     // leaks DRIVER=iwlwifi. Per-process redirect only — NEVER global tmpfs
     // (minigbm/libdrm need real PCI sysfs for Intel GPU BO alloc).
@@ -916,6 +996,7 @@ int (*orig_faccessat)(int, const char*, int, int) = nullptr;
 
 int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
     if (IsTranslatorPath(path) || IsRootPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
     }
@@ -927,6 +1008,7 @@ int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
 
 int my_faccessat(int dirfd, const char* path, int mode, int flags) {
     if (IsTranslatorPath(path) || IsRootPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
     }

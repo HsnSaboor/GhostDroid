@@ -29,8 +29,12 @@ public class PackageInfoHooks {
 
         HookFramework.Hook patcher = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                if (result instanceof PackageInfo) {
-                    patch((PackageInfo) result);
+                try {
+                    if (result instanceof PackageInfo) {
+                        patch((PackageInfo) result);
+                    }
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": PackageInfo patch failed: " + t);
                 }
             }
         };
@@ -49,6 +53,25 @@ public class PackageInfoHooks {
                         String.class, flags, patcher);
             }
         } catch (Throwable t) { /* Android 13+ overload */ }
+
+        // ApplicationInfo.FLAG_DEBUGGABLE leaks a debuggable/eng build:
+        // clear it on every getApplicationInfo overload (fail-closed).
+        Legacy.safeHook(TAG, "getApplicationInfo", () -> {
+            HookFramework.hookAllMethods(appPm, "getApplicationInfo",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof ApplicationInfo) {
+                                    clearDebuggable((ApplicationInfo) result);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getApplicationInfo flag clear failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static void hookGetInstallerPackageName(HookContext lpparam) {
@@ -123,6 +146,17 @@ public class PackageInfoHooks {
         pi.firstInstallTime = install;
         // lastUpdateTime: random within 0–14 days after install, stable per app.
         pi.lastUpdateTime = install + (Math.abs(stableHash(pi.packageName)) % (14L * DAY_MS));
+        if (pi.applicationInfo != null) {
+            clearDebuggable(pi.applicationInfo);
+        }
+    }
+
+    private static void clearDebuggable(ApplicationInfo ai) {
+        try {
+            ai.flags &= ~ApplicationInfo.FLAG_DEBUGGABLE;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": clearDebuggable failed: " + t);
+        }
     }
 
     private static long stableInstallTime() {
