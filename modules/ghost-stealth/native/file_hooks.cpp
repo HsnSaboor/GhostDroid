@@ -13,6 +13,7 @@
 #include <string>
 #include <sys/inotify.h>
 #include <sys/ptrace.h>
+#include <sys/vfs.h>
 #include <sys/system_properties.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -1195,10 +1196,19 @@ bool BuildPopenGetprop(const char* cmd, std::string& out) {
 }
 
 // Pipe-backed FILE* serving `content` (popen/getprop path). Null on error
-// so the caller can fail open to the real popen.
+// so the caller can fail open to the real popen. Grows the pipe first:
+// an early-return version wrote into a 64 KiB default pipe with no reader
+// yet and deadlocked the caller on payloads above the buffer.
 FILE* PipeFileFromString(const std::string& content, const char* mode) {
     int fds[2];
     if (::pipe(fds) != 0) return nullptr;
+    ::fcntl(fds[0], F_SETPIPE_SZ, (int)MAPS_FILTER_MAX);
+    long cap = ::fcntl(fds[0], F_GETPIPE_SZ);
+    if (cap <= 0 || content.size() > (size_t)cap) {
+        ::close(fds[0]);
+        ::close(fds[1]);
+        return nullptr;
+    }
     size_t written = 0;
     while (written < content.size()) {
         ssize_t n = ::write(fds[1], content.data() + written,
