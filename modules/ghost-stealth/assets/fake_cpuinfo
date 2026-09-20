@@ -1,74 +1,75 @@
-Processor	: AArch64 Processor rev 4 (aarch64)
+Processor	: AArch64 Processor rev 1 (aarch64)
 processor	: 0
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x801
-CPU revision	: 4
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
 
 processor	: 1
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x801
-CPU revision	: 4
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
 
 processor	: 2
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x801
-CPU revision	: 4
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
 
 processor	: 3
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x801
-CPU revision	: 4
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
 
 processor	: 4
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x800
-CPU revision	: 2
+CPU variant	: 0x1
+CPU part	: 0xd41
+CPU revision	: 0
 
 processor	: 5
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x800
-CPU revision	: 2
+CPU variant	: 0x1
+CPU part	: 0xd41
+CPU revision	: 0
 
 processor	: 6
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x800
-CPU revision	: 2
+CPU variant	: 0x1
+CPU part	: 0xd44
+CPU revision	: 0
 
 processor	: 7
 BogoMIPS	: 38.40
-Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32
-CPU implementer	: 0x51
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+CPU implementer	: 0x41
 CPU architecture: 8
-CPU variant	: 0xa
-CPU part	: 0x800
-CPU revision	: 2
+CPU variant	: 0x1
+CPU part	: 0xd44
+CPU revision	: 0
 
-Hardware : Qualcomm Technologies, Inc SM8750-AB
+Hardware : Qualcomm SM8850
+Revision : 0001

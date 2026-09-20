@@ -48,7 +48,15 @@ public class SensorHooks {
                 "S26 Linear Acceleration", "Samsung", 19.6133f, 0.01f},
         {Sensor.TYPE_ROTATION_VECTOR, "android.sensor.rotation_vector",
                 "S26 Rotation Vector", "Samsung", 1.0f, 0.0001f},
+        {Sensor.TYPE_PRESSURE, "android.sensor.pressure",
+                "BMP390 Pressure", "Samsung", 1100.0f, 0.01f},
+        {Sensor.TYPE_STEP_COUNTER, "android.sensor.step_counter",
+                "S26 Step Counter", "Samsung", 100000.0f, 1.0f},
+        {Sensor.TYPE_STEP_DETECTOR, "android.sensor.step_detector",
+                "S26 Step Detector", "Samsung", 1.0f, 1.0f},
     };
+
+    private static float sStepCount = 1234.0f;
 
     private static List<Sensor> syntheticCache = null;
 
@@ -107,6 +115,211 @@ public class SensorHooks {
                         }
                     });
         } catch (Throwable t) { /* version-specific overload */ }
+
+        hookRegisterListener();
+    }
+
+    // Synthetic sensors have no HAL behind them, so the real
+    // registerListener would return false and games would conclude the
+    // device has no motion path. Claim success for synthetic handles and
+    // post one synthetic event; real sensors pass through untouched.
+    // Fail-closed: any error leaves the original result as-is.
+    private static void hookRegisterListener() {
+        Legacy.safeHook(TAG, "registerListener", () -> {
+            HookFramework.hookAllMethods(SensorManager.class, "registerListener",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                Sensor sensor = sensorArg(chain);
+                                if (sensor == null || !isSyntheticHandle(sensor)) {
+                                    return;
+                                }
+                                Object listener = listenerArg(chain);
+                                android.os.Handler handler = handlerArg(chain);
+                                if (listener != null) {
+                                    postSyntheticEvent(listener, sensor, handler);
+                                }
+                                chain.replaceResult(true);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": registerListener synth post failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static Sensor sensorArg(HookFramework.HookChain chain) {
+        try {
+            for (Object arg : chain.args()) {
+                if (arg instanceof Sensor) {
+                    return (Sensor) arg;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static Object listenerArg(HookFramework.HookChain chain) {
+        try {
+            for (Object arg : chain.args()) {
+                if (arg instanceof android.hardware.SensorEventListener) {
+                    return arg;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static android.os.Handler handlerArg(HookFramework.HookChain chain) {
+        try {
+            for (Object arg : chain.args()) {
+                if (arg instanceof android.os.Handler) {
+                    return (android.os.Handler) arg;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static boolean isSyntheticHandle(Sensor sensor) {
+        try {
+            int handle = Legacy.getIntField(sensor, "mHandle");
+            return handle <= -1000 && handle > -2000;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void postSyntheticEvent(Object listener, Sensor sensor,
+            android.os.Handler handler) {
+        try {
+            final android.hardware.SensorEventListener target =
+                    (android.hardware.SensorEventListener) listener;
+            final android.hardware.SensorEvent event =
+                    syntheticEvent(sensor);
+            if (event == null) {
+                return;
+            }
+            Runnable deliver = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        target.onSensorChanged(event);
+                    } catch (Throwable t) {
+                        Legacy.log(TAG + ": synth deliver failed: " + t);
+                    }
+                }
+            };
+            boolean posted = false;
+            if (handler != null) {
+                try {
+                    posted = handler.post(deliver);
+                } catch (Throwable ignored) {
+                }
+            }
+            if (!posted) {
+                try {
+                    deliver.run();
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": synth direct deliver failed: " + t);
+                }
+            }
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": postSyntheticEvent failed: " + t);
+        }
+    }
+
+    private static android.hardware.SensorEvent syntheticEvent(Sensor sensor) {
+        try {
+            float[] values = valuesFor(sensor.getType());
+            Object inst = allocateSensorEvent(sensor, values);
+            return (android.hardware.SensorEvent) inst;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": syntheticEvent build failed: " + t);
+            return null;
+        }
+    }
+
+    private static float noise() {
+        return (float) ((Math.random() - 0.5) * 0.08);
+    }
+
+    private static synchronized float nextSteps() {
+        sStepCount += 1.0f;
+        return sStepCount;
+    }
+
+    private static float[] valuesFor(int type) {
+        switch (type) {
+            case Sensor.TYPE_ACCELEROMETER:
+                return new float[]{noise(), noise(), 9.81f + noise()};
+            case Sensor.TYPE_GYROSCOPE:
+                return new float[]{noise() * 0.1f, noise() * 0.1f, noise() * 0.1f};
+            case Sensor.TYPE_MAGNETIC_FIELD:
+                return new float[]{20.0f + noise(), -30.0f + noise(), 25.0f + noise()};
+            case Sensor.TYPE_LIGHT:
+                return new float[]{1000.0f};
+            case Sensor.TYPE_PROXIMITY:
+                return new float[]{8.0f};
+            case Sensor.TYPE_GRAVITY:
+                return new float[]{noise() * 0.1f, noise() * 0.1f, 9.81f + noise() * 0.1f};
+            case Sensor.TYPE_LINEAR_ACCELERATION:
+                return new float[]{noise() * 0.1f, noise() * 0.1f, noise() * 0.1f};
+            case Sensor.TYPE_ROTATION_VECTOR:
+                return new float[]{0.0f, 0.0f, 0.0f, 1.0f};
+            case Sensor.TYPE_PRESSURE:
+                return new float[]{1013.25f + noise()};
+            case Sensor.TYPE_STEP_COUNTER:
+                return new float[]{nextSteps()};
+            case Sensor.TYPE_STEP_DETECTOR:
+                return new float[]{1.0f};
+            default:
+                return new float[]{0.0f, 0.0f, 0.0f};
+        }
+    }
+
+    // SensorEvent has no public constructor; allocate without calling one
+    // (Unsafe) and inject sensor/values/accuracy/timestamp. Any failure
+    // returns null and registerListener still reports true.
+    private static Object allocateSensorEvent(Sensor sensor, float[] values) {
+        try {
+            Class<?> eventClass = Class.forName("android.hardware.SensorEvent");
+            Object unsafe = unsafeInstance();
+            if (unsafe == null) {
+                return null;
+            }
+            java.lang.reflect.Method allocate =
+                    unsafe.getClass().getMethod("allocateInstance", Class.class);
+            Object event = allocate.invoke(unsafe, eventClass);
+            Legacy.setObjectField(event, "sensor", sensor);
+            Legacy.setObjectField(event, "values", values);
+            Legacy.setIntField(event, "accuracy", 3);
+            try {
+                Legacy.setLongField(event, "timestamp", System.nanoTime());
+            } catch (Throwable ignored) {
+            }
+            return event;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": allocateSensorEvent failed: " + t);
+            return null;
+        }
+    }
+
+    private static Object unsafeInstance() {
+        try {
+            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+            Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
+            theUnsafe.setAccessible(true);
+            return theUnsafe.get(null);
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": Unsafe unavailable: " + t);
+            return null;
+        }
     }
 
     private static int requestedType(HookFramework.HookChain chain, int idx) {

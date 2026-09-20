@@ -17,6 +17,20 @@ public class SystemPropertiesHooks {
     private static final Set<Class<?>> HOOKED_CLASSES =
             Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
 
+    // Waydroid-identifying properties must never leak: return the caller's
+    // default instead. The fake_wifi kill-switch itself stays readable so
+    // NetworkHooks can honor persist.waydroid.fake_wifi / fake_wifi.
+    static boolean isDeniedProp(String key) {
+        if (key == null || key.isEmpty()) {
+            return false;
+        }
+        if (key.equals("fake_wifi") || key.endsWith(".fake_wifi")) {
+            return false;
+        }
+        return key.startsWith("waydroid.")
+                || key.startsWith("persist.waydroid.");
+    }
+
     public static void hook(HookContext lpparam) {
         try {
             hookSystemProperties(lpparam.classLoader);
@@ -49,12 +63,20 @@ public class SystemPropertiesHooks {
                 String.class,
                 new HookFramework.Hook() {@Override
                     public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String key = (String) chain.arg(0, null);
-                        String originalValue = (String) result;
-                        String spoofedValue = ConfigManager.getSystemProperty(key, null);
+                        try {
+                            String key = (String) chain.arg(0, null);
+                            if (isDeniedProp(key)) {
+                                chain.replaceResult("");
+                                return;
+                            }
+                            String originalValue = (String) result;
+                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
-                        if (spoofedValue != null) {
-                            chain.replaceResult(spoofedValue);
+                            if (spoofedValue != null) {
+                                chain.replaceResult(spoofedValue);
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": get(String) failed: " + t);
                         }
                     }
                 });
@@ -68,12 +90,20 @@ public class SystemPropertiesHooks {
                 String.class, String.class,
                 new HookFramework.Hook() {@Override
                     public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String key = (String) chain.arg(0, null);
-                        String defaultValue = (String) chain.arg(1, null);
-                        String spoofedValue = ConfigManager.getSystemProperty(key, null);
+                        try {
+                            String key = (String) chain.arg(0, null);
+                            String defaultValue = (String) chain.arg(1, null);
+                            if (isDeniedProp(key)) {
+                                chain.replaceResult(defaultValue);
+                                return;
+                            }
+                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
-                        if (spoofedValue != null) {
-                            chain.replaceResult(spoofedValue);
+                            if (spoofedValue != null) {
+                                chain.replaceResult(spoofedValue);
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": get(String, String) failed: " + t);
                         }
                     }
                 });
@@ -87,16 +117,24 @@ public class SystemPropertiesHooks {
                 String.class, int.class,
                 new HookFramework.Hook() {@Override
                     public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String key = (String) chain.arg(0, null);
-                        String spoofedValue = ConfigManager.getSystemProperty(key, null);
-
-                        if (spoofedValue != null) {
-                            try {
-                                int intValue = Integer.parseInt(spoofedValue);
-                                chain.replaceResult(intValue);
-                            } catch (NumberFormatException e) {
-                                // Invalid int value, keep original
+                        try {
+                            String key = (String) chain.arg(0, null);
+                            if (isDeniedProp(key)) {
+                                chain.replaceResult(chain.arg(1, 0));
+                                return;
                             }
+                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
+
+                            if (spoofedValue != null) {
+                                try {
+                                    int intValue = Integer.parseInt(spoofedValue);
+                                    chain.replaceResult(intValue);
+                                } catch (NumberFormatException e) {
+                                    // Invalid int value, keep original
+                                }
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getInt failed: " + t);
                         }
                     }
                 });
@@ -110,14 +148,22 @@ public class SystemPropertiesHooks {
                 String.class, boolean.class,
                 new HookFramework.Hook() {@Override
                     public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String key = (String) chain.arg(0, null);
-                        String spoofedValue = ConfigManager.getSystemProperty(key, null);
+                        try {
+                            String key = (String) chain.arg(0, null);
+                            if (isDeniedProp(key)) {
+                                chain.replaceResult(chain.arg(1, false));
+                                return;
+                            }
+                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
 
-                        if (spoofedValue != null) {
-                            // Handle both "true"/"false" and "1"/"0"
-                            boolean boolValue = spoofedValue.equals("1") ||
-                                              spoofedValue.equalsIgnoreCase("true");
-                            chain.replaceResult(boolValue);
+                            if (spoofedValue != null) {
+                                // Handle both "true"/"false" and "1"/"0"
+                                boolean boolValue = spoofedValue.equals("1") ||
+                                                  spoofedValue.equalsIgnoreCase("true");
+                                chain.replaceResult(boolValue);
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getBoolean failed: " + t);
                         }
                     }
                 });
@@ -131,16 +177,24 @@ public class SystemPropertiesHooks {
                 String.class, long.class,
                 new HookFramework.Hook() {@Override
                     public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String key = (String) chain.arg(0, null);
-                        String spoofedValue = ConfigManager.getSystemProperty(key, null);
-
-                        if (spoofedValue != null) {
-                            try {
-                                long longValue = Long.parseLong(spoofedValue);
-                                chain.replaceResult(longValue);
-                            } catch (NumberFormatException e) {
-                                // Invalid long value, keep original
+                        try {
+                            String key = (String) chain.arg(0, null);
+                            if (isDeniedProp(key)) {
+                                chain.replaceResult(chain.arg(1, 0L));
+                                return;
                             }
+                            String spoofedValue = ConfigManager.getSystemProperty(key, null);
+
+                            if (spoofedValue != null) {
+                                try {
+                                    long longValue = Long.parseLong(spoofedValue);
+                                    chain.replaceResult(longValue);
+                                } catch (NumberFormatException e) {
+                                    // Invalid long value, keep original
+                                }
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getLong failed: " + t);
                         }
                     }
                 });

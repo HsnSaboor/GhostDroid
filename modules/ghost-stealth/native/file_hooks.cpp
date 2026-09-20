@@ -1,14 +1,19 @@
 #include "gs_state.h"
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <link.h>
 #include <mutex>
 #include <string>
+#include <sys/inotify.h>
+#include <sys/ptrace.h>
+#include <sys/system_properties.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_set>
@@ -132,6 +137,12 @@ bool IsMountsPath(const char* p) {
 
 // Forward: translator predicate (defined below) reused by the maps filter.
 bool IsTranslatorPath(const char* p);
+// Root file-cloak + hook-framework predicates (defined below, next to the
+// translator cloak so all deny/filter tables stay in one place).
+bool IsRootPath(const char* p);
+bool IsHookFrameworkPath(const char* p);
+bool IsHiddenModuleLine(const char* p);
+bool IsStatusPath(const char* p);
 
 // Translator cloak (EmulatorDetection.cpp:108-132): the ARM bridge must
 // stay LOADABLE for games (PUBG runs translated code via Houdini) but
@@ -196,6 +207,34 @@ bool IsMapsPath(const char* p) {
 // Open real maps, strip translator lines, serve via pipe. Returns the
 // read-end fd, or -1 to fall back to the real open. Single write into a
 // pre-grown pipe buffer, so the caller never blocks with no reader yet.
+// Pipe-backed read-end serving `content` (shared by the maps + status
+// filters). Returns the read-end fd, or -1 to fail open to the real file.
+// Never blocks: refuses payloads larger than the grown pipe buffer.
+int PipeReadEndFromString(const std::string& content) {
+    int fds[2];
+    if (::pipe(fds) != 0) return -1;
+    ::fcntl(fds[0], F_SETPIPE_SZ, (int)MAPS_FILTER_MAX);
+    long cap = ::fcntl(fds[0], F_GETPIPE_SZ);
+    if (cap <= 0 || content.size() > (size_t)cap) {
+        ::close(fds[0]);
+        ::close(fds[1]);
+        return -1;
+    }
+    size_t written = 0;
+    while (written < content.size()) {
+        ssize_t n = ::write(fds[1], content.data() + written,
+                            content.size() - written);
+        if (n <= 0) {
+            ::close(fds[0]);
+            ::close(fds[1]);
+            return -1;
+        }
+        written += (size_t)n;
+    }
+    ::close(fds[1]);
+    return fds[0];
+}
+
 int OpenFilteredMaps(const char* path, int flags) {
     // Read-only views only; writers / O_PATH / O_TMPFILE fall through real.
     if ((flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND |
@@ -233,37 +272,20 @@ int OpenFilteredMaps(const char* path, int flags) {
         std::string line = data.substr(pos, len);
         // Whole-line substring scan: maps lines carry the mapped pathname,
         // so the dl_phdr predicate applies (libraries stay mapped).
-        if (!IsTranslatorPath(line.c_str())) out += line;
+        if (!IsHiddenModuleLine(line.c_str())) out += line;
         pos += len;
     }
-    int fds[2];
-    if (::pipe(fds) != 0) return -1;
-    ::fcntl(fds[0], F_SETPIPE_SZ, (int)MAPS_FILTER_MAX);
     // Never hand out a pipe the payload can't fit: a blocking write past
-    // the buffer with no reader yet would wedge the caller mid-startup.
-    long cap = ::fcntl(fds[0], F_GETPIPE_SZ);
-    if (cap <= 0 || out.size() > (size_t)cap) {
-        ::close(fds[0]);
-        ::close(fds[1]);
-        return -1;
-    }
-    size_t written = 0;
-    while (written < out.size()) {
-        ssize_t n = ::write(fds[1], out.data() + written, out.size() - written);
-        if (n <= 0) {
-            ::close(fds[0]);
-            ::close(fds[1]);
-            return -1;
-        }
-        written += (size_t)n;
-    }
-    ::close(fds[1]);
-    if ((flags & O_CLOEXEC) != 0) ::fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    // the buffer with no reader yet would wedge the caller mid-startup
+    // (helper fails open with -1 in that case).
+    int fd = PipeReadEndFromString(out);
+    if (fd < 0) return -1;
+    if ((flags & O_CLOEXEC) != 0) ::fcntl(fd, F_SETFD, FD_CLOEXEC);
     if ((flags & O_NONBLOCK) != 0) {
-        int fl = ::fcntl(fds[0], F_GETFL, 0);
-        ::fcntl(fds[0], F_SETFL, fl | O_NONBLOCK);
+        int fl = ::fcntl(fd, F_GETFL, 0);
+        ::fcntl(fd, F_SETFL, fl | O_NONBLOCK);
     }
-    return fds[0];
+    return fd;
 }
 
 bool IsTranslatorPath(const char* p) {
@@ -284,6 +306,209 @@ bool IsTranslatorPath(const char* p) {
     if (strcmp(p, "/system/etc/init/houdini.rc") == 0 ||
         strcmp(p, "/system/etc/init/ndk_translation.rc") == 0) return true;
     return false;
+}
+
+// Basename of a path (no allocation): pointer into p after the last '/'.
+const char* Basename(const char* p) {
+    if (p == nullptr) return nullptr;
+    const char* slash = strrchr(p, '/');
+    return slash != nullptr ? slash + 1 : p;
+}
+
+// Case-insensitive substring search (no allocation): framework .so names
+// appear in mixed case in the wild (XposedBridge, LSPosed, Magisk...).
+bool ContainsCI(const char* hay, const char* needle) {
+    if (hay == nullptr || needle == nullptr || *needle == '\0') return false;
+    for (const char* h = hay; *h != '\0'; h++) {
+        const char* hh = h;
+        const char* nn = needle;
+        while (*nn != '\0' && *hh != '\0' &&
+               tolower((unsigned char)*hh) == tolower((unsigned char)*nn)) {
+            hh++;
+            nn++;
+        }
+        if (*nn == '\0') return true;
+    }
+    return false;
+}
+
+// Root file-cloak table (fail-CLOSED with ENOENT, mirroring the translator
+// cloak above): any existence/open probe of a root tell reads as absent.
+//
+//   exact:  /system/xbin/su, /system/bin/su, /sbin/su, /su/bin/su,
+//           /dev/qemu_pipe, /dev/socket/qemud, goldfish nodes,
+//           hawk emulator props/bins/libs, hardware_info.txt
+//   prefix: /data/adb/* (magisk dir, modules, ...)
+//   basename: su, busybox, daemonsu, Superuser.apk
+//   substring: magisk pkgs, eu.chainfire.supersu
+//
+// Explicitly NOT matched: libbluetooth_jni.so / libvulkan.so (guarded first
+// so a future substring can never swallow real game libraries).
+bool IsRootPath(const char* p) {
+    if (p == nullptr || *p == '\0') return false;
+    if (strstr(p, "libbluetooth_jni.so") != nullptr) return false;
+    if (strstr(p, "libvulkan.so") != nullptr) return false;
+    if (strcmp(p, "/system/xbin/su") == 0 ||
+        strcmp(p, "/system/bin/su") == 0 ||
+        strcmp(p, "/sbin/su") == 0 ||
+        strcmp(p, "/su/bin/su") == 0 ||
+        strcmp(p, "/dev/qemu_pipe") == 0 ||
+        strcmp(p, "/dev/socket/qemud") == 0 ||
+        strcmp(p, "/data/share1/hardware_info.txt") == 0 ||
+        strcmp(p, "/system/bin/qemu_props") == 0 ||
+        strcmp(p, "/system/bin/androVM-prop") == 0 ||
+        strcmp(p, "/system/bin/microvirt-prop") == 0 ||
+        strcmp(p, "/system/bin/microvirtd") == 0 ||
+        strcmp(p, "/system/bin/nox-prop") == 0 ||
+        strcmp(p, "/system/bin/ttVM-prop") == 0 ||
+        strcmp(p, "/system/bin/droid4x-prop") == 0 ||
+        strcmp(p, "/system/bin/windroyed") == 0 ||
+        strcmp(p, "/system/lib/libdroid4x.so") == 0 ||
+        strcmp(p, "/system/lib64/libdroid4x.so") == 0 ||
+        strcmp(p, "/system/lib/libc_malloc_debug_qemu.so") == 0 ||
+        strcmp(p, "/system/lib64/libc_malloc_debug_qemu.so") == 0)
+        return true;
+    if (strcmp(p, "/data/adb") == 0 ||
+        PathStartsWith(p, "/data/adb/"))
+        return true;
+    const char* base = Basename(p);
+    if (strcmp(base, "su") == 0 ||
+        strcmp(base, "busybox") == 0 ||
+        strcmp(base, "daemonsu") == 0 ||
+        strcmp(base, "Superuser.apk") == 0)
+        return true;
+    if (strstr(p, "magisk") != nullptr) return true;
+    if (strstr(p, "eu.chainfire.supersu") != nullptr) return true;
+    if (strstr(p, "goldfish") != nullptr) return true;
+    if (strstr(p, "qemu_props") != nullptr ||
+        strstr(p, "androVM-prop") != nullptr ||
+        strstr(p, "microvirt-prop") != nullptr ||
+        strstr(p, "microvirtd") != nullptr ||
+        strstr(p, "nox-prop") != nullptr ||
+        strstr(p, "ttVM-prop") != nullptr ||
+        strstr(p, "droid4x-prop") != nullptr ||
+        strstr(p, "windroyed") != nullptr ||
+        strstr(p, "libdroid4x") != nullptr ||
+        strstr(p, "libc_malloc_debug_qemu") != nullptr ||
+        strstr(p, "hardware_info.txt") != nullptr ||
+        strstr(p, "qemu_pipe") != nullptr ||
+        strstr(p, "qemud") != nullptr)
+        return true;
+    return false;
+}
+
+// Hook-framework module predicate for the maps/phdr content filters
+// (fail-OPEN: oversized views fall back to real fds, games never break).
+// Covers xposed / lsposed / lspd / zygisk / shamiko / riru / frida /
+// substrate / edxposed / magisk / lsplant. Our own libs (gs_native, dobby,
+// lsplt) are guarded first so we never hide ourselves from our own view.
+bool IsHookFrameworkPath(const char* p) {
+    if (p == nullptr) return false;
+    if (strstr(p, "gs_native") != nullptr) return false;
+    if (strstr(p, "libdobby") != nullptr) return false;
+    if (strstr(p, "dobby") != nullptr) return false;
+    if (strstr(p, "lsplt") != nullptr) return false;
+    if (ContainsCI(p, "xposed")) return true;
+    if (ContainsCI(p, "lsposed")) return true;
+    if (ContainsCI(p, "lspd")) return true;
+    if (ContainsCI(p, "zygisk")) return true;
+    if (ContainsCI(p, "shamiko")) return true;
+    if (ContainsCI(p, "riru")) return true;
+    if (ContainsCI(p, "frida")) return true;
+    if (ContainsCI(p, "substrate")) return true;
+    if (ContainsCI(p, "edxposed")) return true;
+    if (ContainsCI(p, "magisk")) return true;
+    if (ContainsCI(p, "lsplant")) return true;
+    return false;
+}
+
+// Single maps/phdr predicate (DRY): translator cloak + hook frameworks.
+bool IsHiddenModuleLine(const char* p) {
+    return IsTranslatorPath(p) || IsHookFrameworkPath(p);
+}
+
+// TracerPid/status views eligible for the pipe-backed rewrite:
+// /proc/self/status, /proc/self/task/<tid>/status, /proc/<selfpid>/status.
+bool IsStatusPath(const char* p) {
+    if (p == nullptr) return false;
+    if (strcmp(p, "/proc/self/status") == 0) return true;
+    static const char kTask[] = "/proc/self/task/";
+    if (strncmp(p, kTask, sizeof(kTask) - 1) == 0) {
+        const char* slash = strchr(p + sizeof(kTask) - 1, '/');
+        if (slash != nullptr && strcmp(slash, "/status") == 0) return true;
+        return false;
+    }
+    static const char kProc[] = "/proc/";
+    if (strncmp(p, kProc, sizeof(kProc) - 1) == 0) {
+        const char* rest = p + sizeof(kProc) - 1;
+        long pid = 0;
+        size_t i = 0;
+        while (rest[i] >= '0' && rest[i] <= '9') {
+            pid = pid * 10 + (rest[i] - '0');
+            i++;
+        }
+        if (i > 0 && pid == (long)::getpid()) {
+            if (strcmp(rest + i, "/status") == 0) return true;
+        }
+    }
+    return false;
+}
+
+
+
+// TracerPid pipe filter: read the real status, rewrite any non-zero
+// TracerPid line to `TracerPid:\t0`, serve via pipe (fail-open: -1 hands
+// back to the real open). Read-only callers only.
+int OpenFilteredStatus(const char* path, int flags) {
+    if ((flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND |
+                  O_PATH | O_TMPFILE)) != 0)
+        return -1;
+    if (orig_open == nullptr) return -1;
+    int real = orig_open(path, O_RDONLY | O_CLOEXEC, (mode_t)0);
+    if (real < 0) return -1;
+    std::string data;
+    data.reserve(4096);
+    char buf[1024];
+    size_t total = 0;
+    for (;;) {
+        ssize_t n = ::read(real, buf, sizeof(buf));
+        if (n < 0) {
+            ::close(real);
+            return -1;
+        }
+        if (n == 0) break;
+        if (total + (size_t)n > 65536) {
+            ::close(real);
+            return -1;
+        }
+        data.append(buf, (size_t)n);
+        total += (size_t)n;
+    }
+    ::close(real);
+    std::string out;
+    out.reserve(data.size());
+    size_t pos = 0;
+    while (pos < data.size()) {
+        size_t eol = data.find('\n', pos);
+        bool has_nl = (eol != std::string::npos);
+        size_t len = has_nl ? eol - pos + 1 : data.size() - pos;
+        std::string line = data.substr(pos, len);
+        if (strncmp(line.c_str(), "TracerPid:", 10) == 0) {
+            out += "TracerPid:\t0";
+            out += "\n";
+        } else {
+            out += line;
+        }
+        pos += len;
+    }
+    int fd = PipeReadEndFromString(out);
+    if (fd < 0) return -1;
+    if ((flags & O_CLOEXEC) != 0) ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+    if ((flags & O_NONBLOCK) != 0) {
+        int fl = ::fcntl(fd, F_GETFL, 0);
+        ::fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    }
+    return fd;
 }
 
 const char* Redirect(const char* path) {
@@ -381,7 +606,7 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
-    if (IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
@@ -391,6 +616,11 @@ int my_open(const char* path, int flags, ...) {
     // hook alone can't cover it). Serve the filtered pipe view.
     if (IsMapsPath(path)) {
         int fd = OpenFilteredMaps(path, flags);
+        if (fd >= 0) return fd;
+    }
+    // TracerPid pipe view (fail-open: falls through to real on -1).
+    if (IsStatusPath(path)) {
+        int fd = OpenFilteredStatus(path, flags);
         if (fd >= 0) return fd;
     }
     const char* eff = Redirect(path);
@@ -410,7 +640,7 @@ int my_open(const char* path, int flags, ...) {
 }
 
 int my_openat(int dirfd, const char* path, int flags, ...) {
-    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
@@ -422,6 +652,10 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
     }
     if (dirfd == AT_FDCWD && IsMapsPath(path)) {
         int fd = OpenFilteredMaps(path, flags);
+        if (fd >= 0) return fd;
+    }
+    if (dirfd == AT_FDCWD && IsStatusPath(path)) {
+        int fd = OpenFilteredStatus(path, flags);
         if (fd >= 0) return fd;
     }
     if (dirfd == AT_FDCWD && path != nullptr) {
@@ -443,12 +677,23 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
-    if (IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return nullptr;
     }
     TraceProbeFile("fopen", path);
+    // TracerPid pipe view for stdio readers of status (fscanf/fgets loops).
+    if (IsStatusPath(path) && mode != nullptr && strchr(mode, 'r') != nullptr &&
+        strchr(mode, 'w') == nullptr && strchr(mode, 'a') == nullptr &&
+        strchr(mode, '+') == nullptr) {
+        int fd = OpenFilteredStatus(path, O_RDONLY);
+        if (fd >= 0) {
+            FILE* f = ::fdopen(fd, mode);
+            if (f != nullptr) return f;
+            ::close(fd);
+        }
+    }
     // Same filtered view for stdio readers of maps (fscanf/fgets loops).
     if (IsMapsPath(path) && mode != nullptr && strchr(mode, 'r') != nullptr &&
         strchr(mode, 'w') == nullptr && strchr(mode, 'a') == nullptr &&
@@ -529,7 +774,8 @@ DIR* my_opendir(const char* path) {
     // Translator dirs (/system/lib/arm, /system/lib64/arm64, binfmt_misc)
     // enumerate as EMPTY so listFilesInDirectory() finds no bridge files.
     // The loader already has the real fds, so games keep running.
-    if (IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return nullptr;
     }
@@ -669,7 +915,7 @@ int (*orig_fstatat)(int, const char*, struct stat*, int) = nullptr;
 int (*orig_faccessat)(int, const char*, int, int) = nullptr;
 
 int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
-    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
         errno = ENOENT;
         return -1;
     }
@@ -680,7 +926,7 @@ int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
 }
 
 int my_faccessat(int dirfd, const char* path, int mode, int flags) {
-    if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+    if (IsTranslatorPath(path) || IsRootPath(path)) {
         errno = ENOENT;
         return -1;
     }
@@ -714,14 +960,178 @@ int my_dl_iterate_phdr(int (*cb)(struct dl_phdr_info*, size_t, void*),
             void* vctx) -> int {
         auto* c = reinterpret_cast<FilterCtx*>(vctx);
         if (info != nullptr && info->dlpi_name != nullptr &&
-            IsTranslatorPath(info->dlpi_name)) {
-            return 0;  // skip: hide translator module from detectors
+            IsHiddenModuleLine(info->dlpi_name)) {
+            return 0;  // skip: hide translator/hook module from detectors
         }
         return c->cb(info, size, c->data);
     };
     if (orig_dl_iterate_phdr != nullptr)
         return orig_dl_iterate_phdr(filtered, &ctx);
     return 0;
+}
+
+// --- getprop shell bypass -------------------------------------------------
+// Detectors dodge libc properties via `sh -c "getprop <key>"`, bare
+// `getprop` dumps, or direct exec of the getprop binary (all fork+read
+// stdout, bypassing __system_property_get). Serve the same deny-aware
+// spoofed view the libc hooks serve:
+//
+//   single key: denied/missing -> `echo` (empty); spoofed -> `echo 'value'`;
+//               unknown keys pass through to the real getprop (fail-open).
+//   bare dump:  `printf '%s\\n' '[k]: [v]' ...` built from g_props with
+//               denied keys skipped and spoofed values substituted.
+//
+// Only exact single-command forms are rewritten; compound shell
+// (`;`, `|`, `&`, ... past the key) passes through untouched so app
+// spawn / installer scripts never break.
+//
+// NOTE on execl/execv: Bionic routes every exec-family call through
+// execve, so this hook plus popen covers execl/execv/execlp/execvp with
+// no extra hooks.
+
+const char* ExecBasename(const char* path) {
+    if (path == nullptr) return "";
+    const char* base = strrchr(path, '/');
+    return base != nullptr ? base + 1 : path;
+}
+
+const char* SkipSpaces(const char* p) {
+    while (p != nullptr && *p == ' ') p++;
+    return p;
+}
+
+bool IsShellRemainderSafe(const char* p) {
+    // Only trailing whitespace allowed after the key token.
+    while (p != nullptr && *p != '\0') {
+        if (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') return false;
+        p++;
+    }
+    return true;
+}
+
+// Parse `getprop [key]` out of an `sh -c` command. Returns 1 + key for a
+// single-key query, 0 for a bare dump, -1 for anything compound/foreign.
+int ParseGetpropShCmd(const char* cmd, char* keyOut, size_t keyCap) {
+    if (cmd == nullptr || keyOut == nullptr || keyCap == 0) return -1;
+    const char* p = SkipSpaces(cmd);
+    static const char kGetprop[] = "getprop";
+    if (strncmp(p, kGetprop, sizeof(kGetprop) - 1) != 0) return -1;
+    p += sizeof(kGetprop) - 1;
+    if (*p != '\0' && *p != ' ' && *p != '\t') return -1;
+    p = SkipSpaces(p);
+    if (*p == '\0') return 0;  // bare dump
+    size_t i = 0;
+    while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\n' &&
+           *p != '\r' && *p != ';' && *p != '|' && *p != '&' &&
+           *p != '`' && *p != '$' && *p != '(' && *p != ')' &&
+           *p != '<' && *p != '>') {
+        if (i + 1 < keyCap) keyOut[i++] = *p;
+        p++;
+    }
+    keyOut[i] = '\0';
+    if (i == 0) return -1;
+    if (!IsShellRemainderSafe(p)) return -1;
+    return 1;
+}
+
+// Append a single-quoted shell word (keys/values are [a-z0-9._-] plus
+// free-form values; `'` becomes `'\''`).
+void AppendShellQuoted(std::string& out, const char* v) {
+    out += '\'';
+    for (const char* q = v; q != nullptr && *q != '\0'; q++) {
+        if (*q == '\'') {
+            out += "'\\''";
+        } else {
+            out += *q;
+        }
+    }
+    out += '\'';
+}
+
+// Build `echo 'value'` (or bare `echo` for denied/missing) for one key.
+// Returns false to fail open to the real getprop (unknown key).
+bool BuildGetpropSingle(const char* key, char* out, size_t cap) {
+    if (key == nullptr || out == nullptr || cap == 0) return false;
+    if (IsDeniedProperty(key)) {
+        snprintf(out, cap, "echo");
+        return true;
+    }
+    std::string spoofed;
+    if (!LookupProperty(key, spoofed)) return false;
+    std::string cmd = "echo ";
+    AppendShellQuoted(cmd, spoofed.c_str());
+    snprintf(out, cap, "%s", cmd.c_str());
+    return true;
+}
+
+// Build the bare-dump replacement: `printf '%s\n' '[k]: [v]' ...` over
+// g_props minus denied keys. Returns false on overflow (fail-open).
+bool BuildGetpropDump(char* out, size_t cap) {
+    if (out == nullptr || cap == 0) return false;
+    std::string cmd = "printf '%s\n'";
+    for (const auto& kv : g_props) {
+        if (IsDeniedProperty(kv.first.c_str())) continue;
+        if (kv.first == "debug.verbose" ||
+            kv.first == "debug.trace_probes")
+            continue;
+        std::string entry = "[" + kv.first + "]: [" + kv.second + "]";
+        std::string word;
+        AppendShellQuoted(word, entry.c_str());
+        if (cmd.size() + 1 + word.size() + 1 > cap) return false;
+        cmd += ' ';
+        cmd += word;
+    }
+    snprintf(out, cap, "%s", cmd.c_str());
+    return true;
+}
+
+// Popen content builders over the same table (no fork): single key gives
+// `value\n` ("" when denied/missing); bare gives the filtered dump.
+bool BuildPopenGetprop(const char* cmd, std::string& out) {
+    char key[PROP_NAME_MAX] = {0};
+    int kind = ParseGetpropShCmd(SkipSpaces(cmd), key, sizeof(key));
+    if (kind < 0) return false;
+    if (kind == 0) {
+        out.clear();
+        for (const auto& kv : g_props) {
+            if (IsDeniedProperty(kv.first.c_str())) continue;
+            if (kv.first == "debug.verbose" ||
+                kv.first == "debug.trace_probes")
+                continue;
+            out += "[" + kv.first + "]: [" + kv.second + "]\n";
+        }
+        return true;
+    }
+    if (IsDeniedProperty(key)) {
+        out.clear();
+        return true;
+    }
+    std::string spoofed;
+    if (!LookupProperty(key, spoofed)) return false;  // fail-open: real popen
+    out = spoofed + "\n";
+    return true;
+}
+
+// Pipe-backed FILE* serving `content` (popen/getprop path). Null on error
+// so the caller can fail open to the real popen.
+FILE* PipeFileFromString(const std::string& content, const char* mode) {
+    int fds[2];
+    if (::pipe(fds) != 0) return nullptr;
+    size_t written = 0;
+    while (written < content.size()) {
+        ssize_t n = ::write(fds[1], content.data() + written,
+                            content.size() - written);
+        if (n <= 0) {
+            ::close(fds[0]);
+            ::close(fds[1]);
+            return nullptr;
+        }
+        written += (size_t)n;
+    }
+    ::close(fds[1]);
+    FILE* f = ::fdopen(fds[0], mode);
+    if (f == nullptr) ::close(fds[0]);
+    return f;
 }
 
 // --- execve redirect ------------------------------------------------------
@@ -733,16 +1143,14 @@ int my_execve(const char* path, char* const argv[], char* const envp[]) {
     // Trace shell probes (`sh -c "getprop ..."`, `sh -c "ls ..."`) verbatim.
     if (path != nullptr && argv != nullptr && argv[0] != nullptr &&
         argv[1] != nullptr && argv[2] != nullptr) {
-        const char* base = strrchr(path, '/');
-        base = base != nullptr ? base + 1 : path;
+        const char* base = ExecBasename(path);
         if (strcmp(base, "sh") == 0 && strcmp(argv[1], "-c") == 0) {
             TraceProbeFile("exec-sh", argv[2]);
         }
     }
     if (path != nullptr && argv != nullptr && argv[0] != nullptr &&
         orig_execve != nullptr) {
-        const char* base = strrchr(path, '/');
-        base = base != nullptr ? base + 1 : path;
+        const char* base = ExecBasename(path);
         if (strcmp(base, "sh") == 0 && argv[1] != nullptr &&
             strcmp(argv[1], "-c") == 0 && argv[2] != nullptr) {
             const char* cmd = argv[2];
@@ -791,9 +1199,169 @@ int my_execve(const char* path, char* const argv[], char* const envp[]) {
                     }
                 }
             }
+            // getprop bypass: serve the deny-aware spoofed view.
+            {
+                char key[PROP_NAME_MAX] = {0};
+                int kind = ParseGetpropShCmd(cmd, key, sizeof(key));
+                if (kind == 1) {
+                    static thread_local char ncmd[1024];
+                    if (BuildGetpropSingle(key, ncmd, sizeof(ncmd))) {
+                        TraceProbeFile("exec-getprop", key);
+                        char* nargv[4];
+                        nargv[0] = argv[0];
+                        nargv[1] = argv[1];
+                        nargv[2] = ncmd;
+                        nargv[3] = nullptr;
+                        return orig_execve(path, nargv, envp);
+                    }
+                } else if (kind == 0) {
+                    static thread_local char ncmd[32768];
+                    if (BuildGetpropDump(ncmd, sizeof(ncmd))) {
+                        TraceProbeFile("exec-getprop", "(dump)");
+                        char* nargv[4];
+                        nargv[0] = argv[0];
+                        nargv[1] = argv[1];
+                        nargv[2] = ncmd;
+                        nargv[3] = nullptr;
+                        return orig_execve(path, nargv, envp);
+                    }
+                }
+            }
+        }
+        // Direct exec of the getprop binary (no sh wrapper).
+        if (strcmp(base, "getprop") == 0) {
+            const char* key = (argv[1] != nullptr) ? argv[1] : nullptr;
+            if (key == nullptr || *key == '\0') {
+                static thread_local char ncmd[32768];
+                if (BuildGetpropDump(ncmd, sizeof(ncmd))) {
+                    TraceProbeFile("exec-getprop", "(dump)");
+                    static thread_local char sh[] = "/system/bin/sh";
+                    static thread_local char dash_c[] = "-c";
+                    char* nargv[4];
+                    nargv[0] = sh;
+                    nargv[1] = dash_c;
+                    nargv[2] = ncmd;
+                    nargv[3] = nullptr;
+                    return orig_execve(sh, nargv, envp);
+                }
+            } else if (argv[2] == nullptr) {
+                // Denied/missing -> bare `echo` (empty); spoofed -> echo
+                // with the raw value (no shell quoting needed: direct
+                // argv, no sh involved). Unknown keys fall through real.
+                if (IsDeniedProperty(key)) {
+                    TraceProbeFile("exec-getprop", key);
+                    static thread_local char epath[] = "/system/bin/echo";
+                    char* nargv[2];
+                    nargv[0] = epath;
+                    nargv[1] = nullptr;
+                    return orig_execve(epath, nargv, envp);
+                }
+                std::string spoofed;
+                if (LookupProperty(key, spoofed)) {
+                    TraceProbeFile("exec-getprop", key);
+                    static thread_local char epath[] = "/system/bin/echo";
+                    static thread_local char val[PROP_VALUE_MAX];
+                    snprintf(val, sizeof(val), "%s", spoofed.c_str());
+                    char* nargv[3];
+                    nargv[0] = epath;
+                    nargv[1] = val;
+                    nargv[2] = nullptr;
+                    return orig_execve(epath, nargv, envp);
+                }
+            }
         }
     }
     if (orig_execve != nullptr) return orig_execve(path, argv, envp);
+    return -1;
+}
+
+// --- popen bypass ---------------------------------------------------------
+// Same getprop table without the fork: pipe-backed FILE* for getprop
+// commands, real popen otherwise (fail-open). Synthetic handles are
+// tracked so my_pclose can fclose them instead of waitpid-ing a child
+// that never existed.
+
+std::mutex g_popen_mutex;
+std::unordered_set<FILE*> g_popen_set;
+FILE* (*orig_popen)(const char*, const char*) = nullptr;
+int (*orig_pclose)(FILE*) = nullptr;
+
+bool IsSyntheticPopen(FILE* f) {
+    std::lock_guard<std::mutex> lk(g_popen_mutex);
+    return g_popen_set.find(f) != g_popen_set.end();
+}
+
+void RegisterSyntheticPopen(FILE* f) {
+    std::lock_guard<std::mutex> lk(g_popen_mutex);
+    g_popen_set.insert(f);
+}
+
+void UnregisterSyntheticPopen(FILE* f) {
+    std::lock_guard<std::mutex> lk(g_popen_mutex);
+    g_popen_set.erase(f);
+}
+
+FILE* my_popen(const char* cmd, const char* mode) {
+    if (cmd != nullptr && mode != nullptr && strchr(mode, 'r') != nullptr &&
+        strchr(mode, 'w') == nullptr && strchr(mode, '+') == nullptr) {
+        std::string content;
+        if (BuildPopenGetprop(cmd, content)) {
+            TraceProbeFile("popen-getprop", cmd);
+            FILE* f = PipeFileFromString(content, mode);
+            if (f != nullptr) {
+                RegisterSyntheticPopen(f);
+                return f;
+            }
+            // Pipe failure: fail open to the real popen below.
+        }
+    }
+    if (orig_popen != nullptr) return orig_popen(cmd, mode);
+    errno = ENOSYS;
+    return nullptr;
+}
+
+int my_pclose(FILE* f) {
+    if (f != nullptr && IsSyntheticPopen(f)) {
+        UnregisterSyntheticPopen(f);
+        return ::fclose(f) == 0 ? 0 : -1;
+    }
+    if (orig_pclose != nullptr) return orig_pclose(f);
+    errno = ENOSYS;
+    return -1;
+}
+
+// --- ptrace guard -----------------------------------------------------------
+// Anti-debug: detectors call ptrace(TRACEME) expecting failure under a
+// tracer, or ATTACH self to detect refusal. Fake TRACEME success (no real
+// call) and refuse ATTACH on our own pid; everything else passes through.
+long (*orig_ptrace)(int, pid_t, void*, void*) = nullptr;
+
+long my_ptrace(int request, pid_t pid, void* addr, void* data) {
+    if (request == PTRACE_TRACEME) {
+        TraceProbeFile("ptrace", "traceme-faked");
+        return 0;
+    }
+    if (request == PTRACE_ATTACH && pid == ::getpid()) {
+        TraceProbeFile("ptrace", "attach-self-denied");
+        errno = EPERM;
+        return -1;
+    }
+    if (orig_ptrace != nullptr) return orig_ptrace(request, pid, addr, data);
+    errno = ENOSYS;
+    return -1;
+}
+
+// --- inotify watch: log-only --------------------------------------------------
+// Detectors watch su/magisk paths via inotify; log the watched path for
+// the probe trace. Do NOT deny yet (fail-open by design).
+int (*orig_inotify_add_watch)(int, const char*, uint32_t) = nullptr;
+
+int my_inotify_add_watch(int fd, const char* path, uint32_t mask) {
+    TraceProbeFile("inotify", path);
+    (void)mask;
+    if (orig_inotify_add_watch != nullptr)
+        return orig_inotify_add_watch(fd, path, mask);
+    errno = ENOSYS;
     return -1;
 }
 
@@ -839,15 +1407,33 @@ void InstallFileHooks() {
                                    reinterpret_cast<void*>(&my_faccessat),
                                    reinterpret_cast<void**>(&orig_faccessat));
     // Loaded-module enumeration (dl_phdr_info substring "libhoudini.so"):
-    // filter translator entries so checkArmTranslation sees a clean list.
+    // filter translator + hook-framework entries so checkArmTranslation
+    // sees a clean list. Own libs (gs_native/dobby) are guarded inside
+    // the predicate and stay visible.
     bool ok_phdr = HookExport("dl_iterate_phdr",
                               reinterpret_cast<void*>(&my_dl_iterate_phdr),
                               reinterpret_cast<void**>(&orig_dl_iterate_phdr));
-    DS_LOGI("file hooks: open=%d openat=%d fopen=%d opendir=%d readdir=%d closedir=%d rewinddir=%d telldir=%d seekdir=%d dirfd=%d execve=%d fstatat=%d faccessat=%d phdr=%d",
+    // getprop shell bypass (Runtime.exec / popen over the same prop table).
+    // Bionic routes execl/execv/execlp/execvp through execve, so the execve
+    // hook covers them with no extra hooks.
+    bool ok_popen = HookExport("popen", reinterpret_cast<void*>(&my_popen),
+                               reinterpret_cast<void**>(&orig_popen));
+    bool ok_pclose = HookExport("pclose",
+                                reinterpret_cast<void*>(&my_pclose),
+                                reinterpret_cast<void**>(&orig_pclose));
+    // Anti-debug ptrace guard + log-only inotify watch (never denies).
+    bool ok_ptrace = HookExport("ptrace",
+                                reinterpret_cast<void*>(&my_ptrace),
+                                reinterpret_cast<void**>(&orig_ptrace));
+    bool ok_inotify = HookExport("inotify_add_watch",
+                                 reinterpret_cast<void*>(&my_inotify_add_watch),
+                                 reinterpret_cast<void**>(&orig_inotify_add_watch));
+    DS_LOGI("file hooks: open=%d openat=%d fopen=%d opendir=%d readdir=%d closedir=%d rewinddir=%d telldir=%d seekdir=%d dirfd=%d execve=%d fstatat=%d faccessat=%d phdr=%d popen=%d pclose=%d ptrace=%d inotify=%d",
             ok_open, ok_openat, ok_fopen,
             ok_opendir, ok_readdir, ok_closedir,
             ok_rewinddir, ok_telldir, ok_seekdir, ok_dirfd, ok_execve,
-            ok_fstatat, ok_faccessat, ok_phdr);
+            ok_fstatat, ok_faccessat, ok_phdr, ok_popen, ok_pclose,
+            ok_ptrace, ok_inotify);
 }
 
 }  // namespace gs

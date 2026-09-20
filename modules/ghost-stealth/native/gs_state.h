@@ -17,6 +17,11 @@ extern std::unordered_map<std::string, std::string> g_props;
 
 bool LookupProperty(const char* name, std::string& out);
 
+// Container-tell deny-list predicate shared by the property hooks and the
+// exec/popen getprop bypass (deny-aware serving). Defined in
+// property_hooks.cpp; fail-open (false) on null.
+bool IsDeniedProperty(const char* name);
+
 bool IsVerboseLoggingEnabled();
 
 // Probe tracing (debug.trace_probes=1 in spoof.conf): appends EVERY

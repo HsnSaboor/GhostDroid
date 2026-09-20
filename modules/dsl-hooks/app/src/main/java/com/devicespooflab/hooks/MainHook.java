@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.devicespooflab.hooks.hooks.AccountHooks;
 import com.devicespooflab.hooks.hooks.AdvertisingIdHooks;
+import com.devicespooflab.hooks.hooks.ApplistHooks;
 import com.devicespooflab.hooks.hooks.AppSetIdHooks;
 import com.devicespooflab.hooks.hooks.BatteryHooks;
 import com.devicespooflab.hooks.hooks.BatteryIntentHooks;
@@ -174,6 +175,7 @@ public class MainHook {
             new Entry("AccountHooks", AccountHooks::hook, 0, false),
             new Entry("LocaleHooks", LocaleHooks::hook, 0, true),
             new Entry("PackageInfoHooks", PackageInfoHooks::hook, 0, false),
+            new Entry("ApplistHooks", ApplistHooks::hook, 0, false),
             new Entry("BatteryHooks", BatteryHooks::hook, 0, false),
             // Sticky ACTION_BATTERY_CHANGED broadcast: Level/Status/Health/
             // Power source/Technology/Temperature/Voltage rows. Rewritten to

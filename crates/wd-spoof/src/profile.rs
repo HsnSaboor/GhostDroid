@@ -58,6 +58,22 @@ pub struct SpoofProfile {
     /// `ro.build.type` (always `user`). Empty = line skipped.
     #[serde(default, rename = "ro.build.type")]
     pub build_type: String,
+    /// Profile identity for stable MAC seed (`name + android_id`).
+    /// Empty = fall back to `model`, then `fingerprint`.
+    #[serde(default)]
+    pub name: String,
+    /// Per-profile `android_id` hex. Empty = seed on name only.
+    #[serde(default)]
+    pub android_id: String,
+    /// Explicit `wifi.mac` override. Empty = stable generated. Wins when set.
+    #[serde(default)]
+    pub wifi_mac: String,
+    /// Explicit `wifi.bssid` override. Empty = stable generated. Wins when set.
+    #[serde(default)]
+    pub wifi_bssid: String,
+    /// Explicit `bluetooth.mac` override. Empty = stable generated. Wins set.
+    #[serde(default)]
+    pub bt_mac: String,
 }
 
 /// Template keys required per game profile.
@@ -92,6 +108,21 @@ impl SpoofProfile {
         Ok(profile)
     }
 
+    /// Seed identity: `name`, else `model`, else `fingerprint`.
+    #[must_use]
+    pub fn seed_name(&self) -> &str {
+        tracing::debug!("spoof: seed name pick");
+        if self.name.trim().is_empty() {
+            if self.model.trim().is_empty() {
+                &self.fingerprint
+            } else {
+                &self.model
+            }
+        } else {
+            &self.name
+        }
+    }
+
     /// Validate: non-empty fingerprint + globs, never x86 in abilist.
     ///
     /// # Errors
@@ -115,6 +146,17 @@ impl SpoofProfile {
             return Err(wd_core::WdError::Validation(
                 "ro.hardware banned in base.prop (kills hwcomposer/surfaceflinger)".to_owned(),
             ));
+        }
+        for (key, value) in [
+            ("wifi.mac", self.wifi_mac.as_str()),
+            ("wifi.bssid", self.wifi_bssid.as_str()),
+            ("bluetooth.mac", self.bt_mac.as_str()),
+        ] {
+            if !value.trim().is_empty() && crate::mac::parse_mac(value).is_none() {
+                return Err(wd_core::WdError::Validation(format!(
+                    "malformed {key} override (want xx:xx:xx:xx:xx:xx)"
+                )));
+            }
         }
         tracing::debug!("spoof: valid");
         Ok(())
@@ -181,5 +223,29 @@ mod tests {
         bad.fake_wifi.clear();
         assert!(bad.validate().is_err());
         assert!(!has_keys(&["fingerprint"]));
+    }
+
+    #[test]
+    fn seed_name_fallback_chain() {
+        let named = load("example.toml");
+        assert!(!named.seed_name().is_empty());
+        let mut with_name = named.clone();
+        with_name.name = "ghost".to_owned();
+        assert_eq!(with_name.seed_name(), "ghost");
+        let mut no_model = named.clone();
+        no_model.model.clear();
+        assert_eq!(no_model.seed_name(), named.fingerprint.as_str());
+    }
+
+    #[test]
+    fn rejects_malformed_mac_override() {
+        let mut bad = load("example.toml");
+        bad.wifi_mac = "not-a-mac".to_owned();
+        assert!(bad.validate().is_err());
+        let mut good = load("example.toml");
+        good.wifi_mac = "0a:1b:2c:3d:4e:5f".to_owned();
+        good.wifi_bssid = "0a:1b:2c:3d:4e:60".to_owned();
+        good.bt_mac = "0a:1b:2c:3d:4e:61".to_owned();
+        assert!(good.validate().is_ok());
     }
 }

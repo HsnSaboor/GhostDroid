@@ -22,6 +22,10 @@ public class GpuHooks {
     // EGL strings (EGL14.EGL_VENDOR).
     private static final int EGL_VENDOR = 0x3053;
     private static final int EGL_VERSION = 0x3054;
+    private static final int EGL_EXTENSIONS = 0x3055;
+
+    // Vulkan 1.3.0 packed (variant 0, major 1, minor 3, patch 0).
+    private static final int VULKAN_API_1_3 = 0x403000;
 
     public static void hook(HookContext lpparam) {
         // glGetString is only declared on GLES10/GLES20 (GLES30+ inherit
@@ -44,11 +48,29 @@ public class GpuHooks {
             Legacy.findAndHookMethod(info, "getDeviceName",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult("Adreno (TM) 840");
+                            try {
+                                chain.replaceResult("Adreno (TM) 840");
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": VulkanDeviceInfo.getDeviceName failed: " + t);
+                            }
                         }
                     });
         } catch (Throwable t) {
             Legacy.log(TAG + ": failed to hook VulkanDeviceInfo.getDeviceName: " + t);
+        }
+        try {
+            HookFramework.hookAllMethods(info, "getApiVersion",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult(VULKAN_API_1_3);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": VulkanDeviceInfo.getApiVersion failed: " + t);
+                            }
+                        }
+                    });
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": failed to hook VulkanDeviceInfo.getApiVersion: " + t);
         }
     }
 
@@ -76,6 +98,39 @@ public class GpuHooks {
         }
     }
 
+    // Drop host-GPU extension tokens (Mesa/Intel/llvmpipe/swrast) that
+    // leak the Waydroid host through eglQueryString(EGL_EXTENSIONS).
+    // Fail-closed: null on any error keeps the original string.
+    static String stripHostGlTokens(String extensions) {
+        try {
+            if (extensions == null || extensions.isEmpty()) {
+                return null;
+            }
+            String[] tokens = extensions.split(" ");
+            StringBuilder kept = new StringBuilder(extensions.length());
+            boolean changed = false;
+            for (String token : tokens) {
+                if (token.isEmpty()) {
+                    continue;
+                }
+                String lower = token.toLowerCase();
+                if (lower.contains("mesa") || lower.contains("intel")
+                        || lower.contains("llvmpipe") || lower.contains("swrast")) {
+                    changed = true;
+                    continue;
+                }
+                if (kept.length() > 0) {
+                    kept.append(' ');
+                }
+                kept.append(token);
+            }
+            return changed ? kept.toString() : null;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": stripHostGlTokens failed: " + t);
+            return null;
+        }
+    }
+
     private static void hookEglQueryString(ClassLoader loader) {
         Class<?> egl14 = Legacy.findClassIfExists("android.opengl.EGL14", loader);
         Class<?> display = Legacy.findClassIfExists("android.opengl.EGLDisplay", loader);
@@ -85,12 +140,21 @@ public class GpuHooks {
                     display, int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            int name = chain.arg(1, -1);
-                            if (name == EGL_VENDOR) {
-                                chain.replaceResult(ConfigManager.getGpuVendor());
-                            } else if (name == EGL_VERSION) {
-                                // String label only — EGL init stays real.
-                                chain.replaceResult(ConfigManager.getGpuEglVersion());
+                            try {
+                                int name = chain.arg(1, -1);
+                                if (name == EGL_VENDOR) {
+                                    chain.replaceResult(ConfigManager.getGpuVendor());
+                                } else if (name == EGL_VERSION) {
+                                    // String label only — EGL init stays real.
+                                    chain.replaceResult(ConfigManager.getGpuEglVersion());
+                                } else if (name == EGL_EXTENSIONS) {
+                                    String stripped = stripHostGlTokens((String) result);
+                                    if (stripped != null) {
+                                        chain.replaceResult(stripped);
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": eglQueryString failed: " + t);
                             }
                         }
                     });

@@ -42,6 +42,158 @@ public class InputDeviceHooks {
                         }
                     });
         } catch (Throwable t) { /* getDescriptor signature stable */ }
+
+        hookSources();
+        hookMotionRanges();
+        hookVendorProduct();
+    }
+
+    // Flagship touchscreen view: every device reports touchscreen sources.
+    private static void hookSources() {
+        Legacy.safeHook(TAG, "InputDevice.getSources", () -> {
+            Legacy.findAndHookMethod(InputDevice.class, "getSources",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult(InputDevice.SOURCE_CLASS_POINTER
+                                        | InputDevice.SOURCE_TOUCHSCREEN);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getSources failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Touchscreen axis ranges (X/Y); MotionRange has no public ctor so it is
+    // built reflectively and any failure leaves the original result.
+    private static void hookMotionRanges() {
+        Legacy.safeHook(TAG, "InputDevice.getMotionRange", () -> {
+            HookFramework.hookAllMethods(InputDevice.class, "getMotionRange",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (result != null) {
+                                    return;
+                                }
+                                int axis = chain.arg(0, -1);
+                                Object range = motionRangeFor(axis);
+                                if (range != null) {
+                                    chain.replaceResult(range);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getMotionRange failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "InputDevice.getMotionRanges", () -> {
+            Legacy.findAndHookMethod(InputDevice.class, "getMotionRanges",
+                    new HookFramework.Hook() {@Override
+                        @SuppressWarnings("unchecked")
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                java.util.List<Object> orig = (java.util.List<Object>) result;
+                                if (orig != null && !orig.isEmpty()) {
+                                    return;
+                                }
+                                java.util.List<Object> ranges = new java.util.ArrayList<>(2);
+                                Object x = motionRangeFor(android.view.MotionEvent.AXIS_X);
+                                Object y = motionRangeFor(android.view.MotionEvent.AXIS_Y);
+                                if (x != null) {
+                                    ranges.add(x);
+                                }
+                                if (y != null) {
+                                    ranges.add(y);
+                                }
+                                if (!ranges.isEmpty()) {
+                                    chain.replaceResult(ranges);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getMotionRanges failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static Object motionRangeFor(int axis) {
+        try {
+            if (axis != android.view.MotionEvent.AXIS_X
+                    && axis != android.view.MotionEvent.AXIS_Y) {
+                return null;
+            }
+            float max = axis == android.view.MotionEvent.AXIS_X ? 1080.0f : 2400.0f;
+            Class<?> rangeClass =
+                    Class.forName("android.view.InputDevice$MotionRange");
+            for (java.lang.reflect.Constructor<?> c : rangeClass.getDeclaredConstructors()) {
+                Class<?>[] types = c.getParameterTypes();
+                if (types.length < 6) {
+                    continue;
+                }
+                if (types[0] != int.class || types[1] != int.class) {
+                    continue;
+                }
+                Object[] args = new Object[types.length];
+                args[0] = axis;
+                args[1] = InputDevice.SOURCE_TOUCHSCREEN;
+                float[] floats = {0.0f, max, 0.0f, 0.0f, 1.0f};
+                int fi = 0;
+                boolean ok = true;
+                for (int i = 2; i < types.length; i++) {
+                    if (types[i] == float.class && fi < floats.length) {
+                        args[i] = floats[fi++];
+                    } else if (types[i] == int.class) {
+                        args[i] = 0;
+                    } else {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok) {
+                    continue;
+                }
+                try {
+                    c.setAccessible(true);
+                    return c.newInstance(args);
+                } catch (Throwable ignored) {
+                }
+            }
+            return null;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": motionRangeFor failed: " + t);
+            return null;
+        }
+    }
+
+    // Samsung VID (04e8): matches the spoofed Samsung device identity.
+    private static void hookVendorProduct() {
+        Legacy.safeHook(TAG, "InputDevice.getVendorId", () -> {
+            Legacy.findAndHookMethod(InputDevice.class, "getVendorId",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult(0x04e8);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getVendorId failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "InputDevice.getProductId", () -> {
+            Legacy.findAndHookMethod(InputDevice.class, "getProductId",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult(0x04e8);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getProductId failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static boolean isEmulator(String s) {

@@ -30,17 +30,9 @@ const prop_info* (*orig_sp_find_nth)(unsigned) = nullptr;
 
 // Container tell deny-list: key NAMES alone betray Waydroid even when
 // values are spoofed (probe log: 600x waydroid.host.uid). These read as
-// unset in target processes. persist.waydroid.fake_wifi is exempt: the
-// platform FakeWifi hook needs it and it carries no device signal.
-// ro.arch needs no rule (real phones also return empty for it).
-bool IsDeniedProp(const char* name) {
-    if (name == nullptr) return false;
-    if (strncmp(name, "waydroid.", 9) == 0) return true;
-    if (strncmp(name, "persist.waydroid.", 17) == 0 &&
-        strcmp(name, "persist.waydroid.fake_wifi") != 0)
-        return true;
-    return false;
-}
+// Forward: shared deny-list predicate, defined once below at gs scope
+// (declared in gs_state.h so the exec/popen bypass reuses it).
+bool IsDeniedProp(const char* name);
 
 // Opaque prop_info* we return from __system_property_find for spoofed keys.
 // The real layout is libc-internal; our read hook recognises these pointers
@@ -251,6 +243,26 @@ const prop_info* my_sp_find_nth(unsigned n) {
     }
     return nullptr;
 }
+
+}  // namespace
+
+// Shared deny-list predicate (declared in gs_state.h): the exec/popen
+// getprop bypass reuses the same deny-aware view as the libc hooks.
+// Container tells read as unset: key NAMES alone betray Waydroid even when
+// values are spoofed (probe log: 600x waydroid.host.uid).
+// persist.waydroid.fake_wifi is exempt (platform FakeWifi needs it, no
+// device signal). ro.arch needs no rule (real phones also return empty).
+bool IsDeniedProperty(const char* name) {
+    if (name == nullptr) return false;
+    if (strncmp(name, "waydroid.", 9) == 0) return true;
+    if (strncmp(name, "persist.waydroid.", 17) == 0 &&
+        strcmp(name, "persist.waydroid.fake_wifi") != 0)
+        return true;
+    return false;
+}
+
+namespace {
+bool IsDeniedProp(const char* name) { return IsDeniedProperty(name); }
 
 // Dobby export-side hook: patches the symbol in libc itself, so libraries
 // loaded later (e.g. libemulatordetector.so via System.loadLibrary) call

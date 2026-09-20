@@ -15,8 +15,13 @@ mount -o bind "$FAKE" /proc/cpuinfo 2>/dev/null || true
 cp "$MODDIR"/assets/fake_version "$MODDIR/fake_version" 2>/dev/null || true
 mount -o bind "$MODDIR/fake_version" /proc/version 2>/dev/null || true
 # DMI mask: hide host board/serial, keep dir present (ENOENT-safe).
+# Populate Samsung S26 Ultra identity after tmpfs mount.
 if [ -d /sys/class/dmi/id ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/class/dmi/id 2>/dev/null || true
+    echo "SM-S948B" > /sys/class/dmi/id/product_name 2>/dev/null || true
+    echo "SAMSUNG" > /sys/class/dmi/id/sys_vendor 2>/dev/null || true
+    echo "m3q" > /sys/class/dmi/id/board_name 2>/dev/null || true
+    echo "S948BXXU1AXE4" > /sys/class/dmi/id/bios_version 2>/dev/null || true
 fi
 # Mounts mask: DeviceInfoHW Mounts tab leaks /dev/nvme0n1p2, btrfs subvol
 # /@/@home, and overlay lowerdirs under /var/lib/waydroid. The canonical
@@ -56,12 +61,12 @@ cp "$MODDIR"/assets/fake_mounts "$MODDIR/fake_mounts" 2>/dev/null || true
 # Mounts masking is per-process only via file_hooks.cpp open/openat/fopen
 # redirect serving /data/local/tmp/gs_fake_mounts.
 # Block mask: hide host nvme0n1 from /sys/block (Storage tab). Guarded:
-# only when the dir exists; dummy sda/mmcblk0 keep enumeration sane.
+# only when the dir exists; mmcblk0 reports 256GB (536870912 x 512B
+# sectors); sda stays absent (UFS-only device, no SCSI disk).
 if [ -d /sys/block ]; then
     mount -t tmpfs -o size=4k,mode=755 tmpfs /sys/block 2>/dev/null || true
-    mkdir -p /sys/block/sda /sys/block/mmcblk0 2>/dev/null || true
-    echo 274877906944 > /sys/block/sda/size 2>/dev/null || true
-    echo 0 > /sys/block/mmcblk0/size 2>/dev/null || true
+    mkdir -p /sys/block/mmcblk0 2>/dev/null || true
+    echo 536870912 > /sys/block/mmcblk0/size 2>/dev/null || true
 fi
 # Battery mask: DeviceInfoHW Battery tab leaks AC-wall + 1000mAh host UPS.
 # Bind fake values over real sysfs nodes when present (guarded per-node).
