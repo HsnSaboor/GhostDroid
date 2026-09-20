@@ -222,6 +222,9 @@ void InstallPropertyHooks() {
             (size_t)g_props.size(), (void*)orig_sp_get,
             (void*)orig_sp_find, (void*)orig_sp_read,
             (void*)orig_sp_read_callback);
+    if (TraceProbes()) {
+        DS_LOGW("probe tracing ON: full take -> /data/local/tmp/gs_probe_<pid>.log");
+    }
 }
 
 }  // namespace gs

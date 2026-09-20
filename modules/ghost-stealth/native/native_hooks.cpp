@@ -1,8 +1,12 @@
 #include "gs_state.h"
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
+#include <fcntl.h>
 #include <mutex>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 namespace gs {
 std::unordered_map<std::string, std::string> g_props;
@@ -43,30 +47,54 @@ bool TraceProbes() {
 
 namespace {
 
-std::atomic<int> g_probe_lines{0};
-// 4000 lines max per process: full ACE scan fits, logcat survives.
-constexpr int kProbeCap = 4000;
+std::mutex g_probe_mutex;
+int g_probe_fd = -2;  // -2 = unopened, -1 = failed/off
 
-bool ProbeSlot() {
-    int n = g_probe_lines.fetch_add(1, std::memory_order_relaxed);
-    return n < kProbeCap;
+// Raw-syscall file sink: bypasses libc (and our own open hook), so tracing
+// can never recurse or feed back into itself.
+int ProbeFd() {
+    if (g_probe_fd != -2) return g_probe_fd;
+    char path[64];
+    snprintf(path, sizeof(path), "/data/local/tmp/gs_probe_%d.log",
+             (int)::getpid());
+    long fd = syscall(SYS_openat, AT_FDCWD, path,
+                      O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    g_probe_fd = (fd < 0) ? -1 : (int)fd;
+    return g_probe_fd;
+}
+
+void ProbeWrite(const char* kind, const char* a, const char* b) {
+    std::lock_guard<std::mutex> lk(g_probe_mutex);
+    int fd = ProbeFd();
+    if (fd < 0) return;
+    char line[1056];
+    int n;
+    if (b != nullptr) {
+        n = snprintf(line, sizeof(line), "%s %s %s\n", kind, a, b);
+    } else {
+        n = snprintf(line, sizeof(line), "%s %s\n", kind, a);
+    }
+    if (n <= 0) return;
+    size_t total = (size_t)n < sizeof(line) ? (size_t)n : sizeof(line) - 1;
+    const char* p = line;
+    while (total > 0) {
+        long w = syscall(SYS_write, fd, p, total);
+        if (w <= 0) break;
+        p += w;
+        total -= (size_t)w;
+    }
 }
 
 }  // namespace
 
 void TraceProbeProp(const char* name) {
-    if (name == nullptr || !TraceProbes() || !ProbeSlot()) return;
-    // Self-noise: every DS_LOGW makes logd read our own tag level, which
-    // would flood the cap and drown the real scan. Never log logd's reads.
-    if (strncmp(name, "persist.log.tag", 15) == 0 ||
-        strncmp(name, "log.tag", 7) == 0)
-        return;
-    DS_LOGW("probe prop: %s", name);
+    if (name == nullptr || !TraceProbes()) return;
+    ProbeWrite("prop", name, nullptr);
 }
 
 void TraceProbeFile(const char* op, const char* path) {
-    if (op == nullptr || path == nullptr || !TraceProbes() || !ProbeSlot()) return;
-    DS_LOGW("probe %s: %s", op, path);
+    if (op == nullptr || path == nullptr || !TraceProbes()) return;
+    ProbeWrite("file", op, path);
 }
 
 }  // namespace gs

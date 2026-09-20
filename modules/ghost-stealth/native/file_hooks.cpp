@@ -181,23 +181,7 @@ bool IsMapsPath(const char* p) {
     return false;
 }
 
-// Probe-trace path filter: only detection-relevant opens are logged.
-bool IsProbePath(const char* p) {
-    if (p == nullptr) return false;
-    if (IsMapsPath(p)) return true;
-    if (PathStartsWith(p, "/dev/__properties__/")) return true;
-    if (strcmp(p, "/proc/cpuinfo") == 0 || strcmp(p, "/proc/version") == 0 ||
-        strcmp(p, "/proc/modules") == 0 || strcmp(p, "/proc/bus/input/devices") == 0 ||
-        strcmp(p, "/proc/asound/cards") == 0 || strcmp(p, "/sys/bus/usb/devices") == 0 ||
-        IsMountsPath(p))
-        return true;
-    if (strstr(p, "sensor") != nullptr || strstr(p, "houdini") != nullptr ||
-        strstr(p, "magisk") != nullptr || strstr(p, "xposed") != nullptr ||
-        strstr(p, "supersu") != nullptr || strstr(p, "busybox") != nullptr ||
-        strstr(p, "/su") != nullptr)
-        return true;
-    return false;
-}
+// (Removed: probe tracing now logs every open unconditionally.)
 
 // Max maps bytes filtered inline (1 MiB pipe). Larger -> fail open (real
 // fd) so the game never breaks; detectors just see truth in that case.
@@ -378,7 +362,7 @@ int my_open(const char* path, int flags, ...) {
         errno = ENOENT;
         return -1;
     }
-    if (IsProbePath(path)) TraceProbeFile("open", path);
+    TraceProbeFile("open", path);
     // ACE parses /proc/self/maps text for translator .so names (dl_phdr
     // hook alone can't cover it). Serve the filtered pipe view.
     if (IsMapsPath(path)) {
@@ -407,7 +391,7 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
         errno = ENOENT;
         return -1;
     }
-    if (dirfd == AT_FDCWD && IsProbePath(path)) TraceProbeFile("openat", path);
+    if (dirfd == AT_FDCWD) TraceProbeFile("openat", path);
     if (dirfd == AT_FDCWD && IsMountsPath(path)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
@@ -440,7 +424,7 @@ FILE* my_fopen(const char* path, const char* mode) {
         errno = ENOENT;
         return nullptr;
     }
-    if (IsProbePath(path)) TraceProbeFile("fopen", path);
+    TraceProbeFile("fopen", path);
     // Same filtered view for stdio readers of maps (fscanf/fgets loops).
     if (IsMapsPath(path) && mode != nullptr && strchr(mode, 'r') != nullptr &&
         strchr(mode, 'w') == nullptr && strchr(mode, 'a') == nullptr &&
@@ -722,6 +706,15 @@ int my_dl_iterate_phdr(int (*cb)(struct dl_phdr_info*, size_t, void*),
 // Only exact masked roots + bare `ls <root>` / `cat <root>` forms; every
 // other exec passes through untouched (app spawn, dex2oat, etc. safe).
 int my_execve(const char* path, char* const argv[], char* const envp[]) {
+    // Trace shell probes (`sh -c "getprop ..."`, `sh -c "ls ..."`) verbatim.
+    if (path != nullptr && argv != nullptr && argv[0] != nullptr &&
+        argv[1] != nullptr && argv[2] != nullptr) {
+        const char* base = strrchr(path, '/');
+        base = base != nullptr ? base + 1 : path;
+        if (strcmp(base, "sh") == 0 && strcmp(argv[1], "-c") == 0) {
+            TraceProbeFile("exec-sh", argv[2]);
+        }
+    }
     if (path != nullptr && argv != nullptr && argv[0] != nullptr &&
         orig_execve != nullptr) {
         const char* base = strrchr(path, '/');
