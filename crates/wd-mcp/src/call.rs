@@ -260,8 +260,11 @@ fn app_start_live(params: &serde_json::Value) -> serde_json::Value {
         return spawn_out("app.start", &argv, Err(e))
             .unwrap_or_else(|| serde_json::json!({"ok": true}));
     }
+    // Tap-equivalent resume: platform launch can leave translucent tasks
+    // stuck invisible; re-fire the resolved launcher intent over adb.
+    let launcher = resume_launcher_adb(&pkg);
     if wait_s == 0 {
-        return serde_json::json!({"ok": true, "tool": "app.start", "pkg": pkg, "visible": false, "booting": true});
+        return serde_json::json!({"ok": true, "tool": "app.start", "pkg": pkg, "visible": false, "booting": true, "launcher": launcher});
     }
     let frame = wd_waydroid::wait_first_frame(&pkg, wait_s.saturating_mul(1_000), 2_000);
     serde_json::json!({
@@ -271,7 +274,21 @@ fn app_start_live(params: &serde_json::Value) -> serde_json::Value {
         "visible": frame.visible,
         "booting": !frame.visible,
         "waited_s": frame.waited_ms / 1_000,
+        "launcher": launcher,
     })
+}
+
+/// Resolve `<pkg>` to its launcher component and re-fire
+/// `am start MAIN/LAUNCHER` via `adb`. Returns the component fired, or
+/// [`None`] when resolution/start failed (best-effort resume).
+fn resume_launcher_adb(pkg: &str) -> Option<String> {
+    tracing::info!(pkg, "call: resume launcher");
+    let resolve = wd_waydroid::resolve_launcher_args(&wd_core::Pkg(pkg.to_owned()));
+    let out = run_bin("adb", &resolve, 10_000).ok()?;
+    let component = wd_waydroid::parse_launcher_component(&out)?;
+    let start = wd_waydroid::launcher_start_args(&component);
+    run_bin("adb", &start, 10_000).ok()?;
+    Some(component)
 }
 
 /// `app.stop`: live `waydroid shell am force-stop <pkg>`.

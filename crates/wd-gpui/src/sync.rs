@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use wd_core::Pkg;
 use wd_shell::{DeviceState, GameRow};
-use wd_waydroid::{AppRow, Status, boot_args, parse_app_list, parse_status, run_waydroid};
+use wd_waydroid::{AppRow, Status, boot_args, parse_app_list, parse_status, run_adb, run_waydroid};
 
 /// Per-call timeout for `status` / `app list`.
 const QUICK_MS: u64 = 10_000;
@@ -167,9 +167,11 @@ pub fn device_action(action: DeviceAction) -> wd_core::Result<(DeviceState, Stri
 
 /// Launch one app via `waydroid app launch <pkg>` (Library card button).
 ///
-/// Fires the intent, then polls `adb dumpsys` until the task flips
-/// `visible=true` (first frame). Heavy games boot translucent for minutes
-/// under translation — the report says "booting" instead of fake success.
+/// Fires the intent, then re-fires the tap-equivalent launcher intent
+/// (`am start MAIN/LAUNCHER` on the resolved component): platform launch
+/// alone can leave translucent-splash tasks stuck invisible, while the
+/// launcher intent resumes them. Finally polls `adb dumpsys` until the
+/// task flips `visible=true` (first frame).
 ///
 /// # Errors
 ///
@@ -179,11 +181,31 @@ pub fn launch_game(pkg: &str) -> wd_core::Result<LaunchReport> {
     let args = wd_waydroid::launch_args(&Pkg(pkg.to_owned()));
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
     run_waydroid(&args_ref, QUICK_MS)?;
+    resume_launcher(pkg);
     let frame = wd_waydroid::wait_first_frame(pkg, LAUNCH_WAIT_MS, LAUNCH_GAP_MS);
     Ok(LaunchReport {
         visible: frame.visible,
         waited_secs: frame.waited_ms / 1_000,
     })
+}
+
+/// Best-effort launcher-intent resume: resolve `<pkg>` to its launcher
+/// component and re-fire `am start MAIN/LAUNCHER` over `adb` (tap path).
+/// Silent no-op when resolution or start fails; the visibility poll below
+/// reports the outcome either way.
+fn resume_launcher(pkg: &str) {
+    tracing::info!(pkg, "sync: resume launcher");
+    let resolve = wd_waydroid::resolve_launcher_args(&Pkg(pkg.to_owned()));
+    let resolve_ref: Vec<&str> = resolve.iter().map(String::as_str).collect();
+    let Ok(out) = run_adb(&resolve_ref, QUICK_MS) else {
+        return;
+    };
+    let Some(component) = wd_waydroid::parse_launcher_component(&out) else {
+        return;
+    };
+    let start = wd_waydroid::launcher_start_args(&component);
+    let start_ref: Vec<&str> = start.iter().map(String::as_str).collect();
+    let _ = run_adb(&start_ref, QUICK_MS);
 }
 
 /// Honest outcome of [`launch_game`]: first frame seen or still booting.

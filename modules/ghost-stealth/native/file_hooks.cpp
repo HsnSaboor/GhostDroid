@@ -181,6 +181,24 @@ bool IsMapsPath(const char* p) {
     return false;
 }
 
+// Probe-trace path filter: only detection-relevant opens are logged.
+bool IsProbePath(const char* p) {
+    if (p == nullptr) return false;
+    if (IsMapsPath(p)) return true;
+    if (PathStartsWith(p, "/dev/__properties__/")) return true;
+    if (strcmp(p, "/proc/cpuinfo") == 0 || strcmp(p, "/proc/version") == 0 ||
+        strcmp(p, "/proc/modules") == 0 || strcmp(p, "/proc/bus/input/devices") == 0 ||
+        strcmp(p, "/proc/asound/cards") == 0 || strcmp(p, "/sys/bus/usb/devices") == 0 ||
+        IsMountsPath(p))
+        return true;
+    if (strstr(p, "sensor") != nullptr || strstr(p, "houdini") != nullptr ||
+        strstr(p, "magisk") != nullptr || strstr(p, "xposed") != nullptr ||
+        strstr(p, "supersu") != nullptr || strstr(p, "busybox") != nullptr ||
+        strstr(p, "/su") != nullptr)
+        return true;
+    return false;
+}
+
 // Max maps bytes filtered inline (1 MiB pipe). Larger -> fail open (real
 // fd) so the game never breaks; detectors just see truth in that case.
 #define MAPS_FILTER_MAX (1u << 20)
@@ -356,9 +374,11 @@ const char* Redirect(const char* path) {
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
     if (IsTranslatorPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
     }
+    if (IsProbePath(path)) TraceProbeFile("open", path);
     // ACE parses /proc/self/maps text for translator .so names (dl_phdr
     // hook alone can't cover it). Serve the filtered pipe view.
     if (IsMapsPath(path)) {
@@ -383,9 +403,11 @@ int my_open(const char* path, int flags, ...) {
 
 int my_openat(int dirfd, const char* path, int flags, ...) {
     if (dirfd == AT_FDCWD && IsTranslatorPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
     }
+    if (dirfd == AT_FDCWD && IsProbePath(path)) TraceProbeFile("openat", path);
     if (dirfd == AT_FDCWD && IsMountsPath(path)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
@@ -414,9 +436,11 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 
 FILE* my_fopen(const char* path, const char* mode) {
     if (IsTranslatorPath(path)) {
+        TraceProbeFile("deny", path);
         errno = ENOENT;
         return nullptr;
     }
+    if (IsProbePath(path)) TraceProbeFile("fopen", path);
     // Same filtered view for stdio readers of maps (fscanf/fgets loops).
     if (IsMapsPath(path) && mode != nullptr && strchr(mode, 'r') != nullptr &&
         strchr(mode, 'w') == nullptr && strchr(mode, 'a') == nullptr &&

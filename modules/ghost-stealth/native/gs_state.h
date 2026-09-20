@@ -19,6 +19,16 @@ bool LookupProperty(const char* name, std::string& out);
 
 bool IsVerboseLoggingEnabled();
 
+// Probe tracing (debug.trace_probes=1 in spoof.conf): logs every property
+// key and every sensitive file open from the target process so detection
+// scans can be observed instead of guessed. Capped per process.
+bool TraceProbes();
+
+// Log one probe line, enforcing the per-process cap. Returns true when the
+// caller should skip its own logging (cap reached).
+void TraceProbeProp(const char* name);
+void TraceProbeFile(const char* op, const char* path);
+
 void InstallPropertyHooks();
 
 void InstallSystemHooks();

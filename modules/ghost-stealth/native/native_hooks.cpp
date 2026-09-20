@@ -32,6 +32,37 @@ bool IsVerboseLoggingEnabled() {
             || v == "YES" || v == "on" || v == "ON";
 }
 
+bool TraceProbes() {
+    auto it = g_props.find("debug.trace_probes");
+    if (it == g_props.end()) return false;
+    const std::string& v = it->second;
+    return v == "1" || v == "true" || v == "TRUE" || v == "yes"
+            || v == "YES" || v == "on" || v == "ON";
+}
+
+namespace {
+
+std::atomic<int> g_probe_lines{0};
+// 4000 lines max per process: full ACE scan fits, logcat survives.
+constexpr int kProbeCap = 4000;
+
+bool ProbeSlot() {
+    int n = g_probe_lines.fetch_add(1, std::memory_order_relaxed);
+    return n < kProbeCap;
+}
+
+}  // namespace
+
+void TraceProbeProp(const char* name) {
+    if (name == nullptr || !TraceProbes() || !ProbeSlot()) return;
+    DS_LOGW("probe prop: %s", name);
+}
+
+void TraceProbeFile(const char* op, const char* path) {
+    if (op == nullptr || path == nullptr || !TraceProbes() || !ProbeSlot()) return;
+    DS_LOGW("probe %s: %s", op, path);
+}
+
 }  // namespace gs
 
 extern "C" int

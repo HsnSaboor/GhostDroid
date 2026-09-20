@@ -21,7 +21,9 @@ pub use android_server::{
     log_args as server_log_args, push_args as server_push_args,
 };
 pub use apps::{
-    AppRow, install_args, intent_args, launch_args, list_args, parse_app_list, remove_args,
+    AppRow, LAUNCHER_ACTION, LAUNCHER_CATEGORY, install_args, intent_args, launch_args,
+    launcher_start_args, list_args, parse_app_list, parse_launcher_component, remove_args,
+    resolve_launcher_args,
 };
 pub use exec::{WaitFrame, is_app_verb, run_adb, run_waydroid, wait_first_frame};
 pub use focus::{TaskVis, dumpsys_args, parse_task_visibility, pidof_args};

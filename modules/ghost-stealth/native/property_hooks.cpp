@@ -64,6 +64,7 @@ const prop_info* MakeSynthetic(const char* name) {
 }
 
 int my_sp_get(const char* name, char* value) {
+    TraceProbeProp(name);
     std::string spoofed;
     if (LookupProperty(name, spoofed)) {
         size_t n = spoofed.size();
@@ -79,6 +80,7 @@ int my_sp_get(const char* name, char* value) {
 }
 
 const prop_info* my_sp_find(const char* name) {
+    TraceProbeProp(name);
     if (name != nullptr) {
         std::string spoofed;
         if (LookupProperty(name, spoofed)) {

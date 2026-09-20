@@ -27,6 +27,65 @@ pub fn launch_args(pkg: &Pkg) -> Vec<String> {
     vec!["app".to_owned(), "launch".to_owned(), pkg.0.clone()]
 }
 
+/// Launcher intent action (tap-equivalent resume path).
+pub const LAUNCHER_ACTION: &str = "android.intent.action.MAIN";
+/// Launcher intent category (tap-equivalent resume path).
+pub const LAUNCHER_CATEGORY: &str = "android.intent.category.LAUNCHER";
+
+/// Build `adb shell cmd package resolve-activity --brief` args that print
+/// the package's launcher component on the last output line.
+///
+/// `waydroid app launch` alone can leave translucent-splash tasks stuck
+/// invisible; re-firing the launcher intent (what a launcher tap sends)
+/// resumes them. Pure builder; run via `adb`.
+#[must_use]
+pub fn resolve_launcher_args(pkg: &Pkg) -> Vec<String> {
+    tracing::info!(package = %pkg.0, "apps: resolve launcher args");
+    vec![
+        "shell".to_owned(),
+        "cmd".to_owned(),
+        "package".to_owned(),
+        "resolve-activity".to_owned(),
+        "--brief".to_owned(),
+        "-a".to_owned(),
+        LAUNCHER_ACTION.to_owned(),
+        "-c".to_owned(),
+        LAUNCHER_CATEGORY.to_owned(),
+        pkg.0.clone(),
+    ]
+}
+
+/// Parse the launcher component (`pkg/Class`) from
+/// [`resolve_launcher_args`] output: last non-empty line containing `/`.
+/// Returns [`None`] when no launcher activity resolves. Pure, no spawn.
+#[must_use]
+pub fn parse_launcher_component(out: &str) -> Option<String> {
+    tracing::debug!(len = out.len(), "apps: parse launcher component");
+    out.lines()
+        .map(str::trim)
+        .rev()
+        .find(|line| line.contains('/'))
+        .map(ToOwned::to_owned)
+}
+
+/// Build `adb shell am start` args for a launcher component: the exact
+/// tap-equivalent intent (`MAIN` + `LAUNCHER` + `-n`). Pure builder.
+#[must_use]
+pub fn launcher_start_args(component: &str) -> Vec<String> {
+    tracing::info!(component, "apps: launcher start args");
+    vec![
+        "shell".to_owned(),
+        "am".to_owned(),
+        "start".to_owned(),
+        "-a".to_owned(),
+        LAUNCHER_ACTION.to_owned(),
+        "-c".to_owned(),
+        LAUNCHER_CATEGORY.to_owned(),
+        "-n".to_owned(),
+        component.to_owned(),
+    ]
+}
+
 /// Build `waydroid app list` args.
 #[must_use]
 pub fn list_args() -> Vec<String> {
@@ -114,5 +173,53 @@ mod tests {
     fn skips_empty() {
         assert!(parse_app_list("").is_empty());
         assert!(parse_app_list("Name: \npackageName: \n").is_empty());
+    }
+
+    #[test]
+    fn launcher_shapes() {
+        let pkg = Pkg("com.tencent.ig".to_owned());
+        assert_eq!(
+            resolve_launcher_args(&pkg),
+            vec![
+                "shell",
+                "cmd",
+                "package",
+                "resolve-activity",
+                "--brief",
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "com.tencent.ig"
+            ]
+        );
+        assert_eq!(
+            launcher_start_args("com.tencent.ig/com.epicgames.ue4.SplashActivity"),
+            vec![
+                "shell",
+                "am",
+                "start",
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "-n",
+                "com.tencent.ig/com.epicgames.ue4.SplashActivity"
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_live_resolve() {
+        let out = "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false\ncom.tencent.ig/com.epicgames.ue4.SplashActivity\n";
+        assert_eq!(
+            parse_launcher_component(out).as_deref(),
+            Some("com.tencent.ig/com.epicgames.ue4.SplashActivity")
+        );
+        assert_eq!(parse_launcher_component(""), None);
+        assert_eq!(
+            parse_launcher_component("priority=0 preferredOrder=0\n"),
+            None
+        );
     }
 }
