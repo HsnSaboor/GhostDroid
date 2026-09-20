@@ -258,6 +258,9 @@ bool IsDeniedProperty(const char* name) {
     if (strncmp(name, "persist.waydroid.", 17) == 0 &&
         strcmp(name, "persist.waydroid.fake_wifi") != 0)
         return true;
+    // v4l2 camera HAL key exists only on Linux/VMM stacks; real phones
+    // leave it absent. Deny (empty) rather than spoof a value.
+    if (strcmp(name, "ro.hardware.camera") == 0) return true;
     return false;
 }
 
