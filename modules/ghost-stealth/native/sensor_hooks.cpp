@@ -146,8 +146,10 @@ void InstallSensorHooks() {
 
 bool TryHookSensorResolved() {
     if (g_orig_get_sensor_list != nullptr) return true;
-    void* sym = DobbySymbolResolver(nullptr, "ASensorManager_getSensorList");
-    if (sym == nullptr) return false;
+    // Guarded probe via TryHookOne (reentrancy-safe): DobbySymbolResolver
+    // opens /proc/self/maps through our own my_fopen — a direct resolve
+    // here recurses to stack overflow (tombstone 9978). Never resolve
+    // inline in a lazy-retry path.
     InstallSensorHooks();
     return g_orig_get_sensor_list != nullptr;
 }
