@@ -1,5 +1,4 @@
-// sensor_hooks.cpp: native NDK sensor spoof (ASensorManager).
-//
+// sensor_hooks.cpp: native NDK sensor spoof (ASensorManager).//
 // Java SensorHooks covers android.hardware.SensorManager, but ACE reads
 // sensors natively via ASensorManager_getSensorList (libcubehawk links
 // only __system_property_get/open/fopen — the GPU/battery/sensor signal
@@ -111,17 +110,17 @@ bool TryHookOne(const char* sym, void* replace, void** orig) {
     // until the stack overflows (verified tombstone 2026-09-22:
     // TryHookSensorResolved <-> GetProcessModuleMap cycle). Skip the
     // resolve while already inside one; the next probe retries.
-    static thread_local bool s_in_resolve = false;
+    //
+    // NOTE: plain static (not thread_local): thread_local in a Zygisk
+    // .so uses emutls, uninitialized during early zygote init — every
+    // read returned fresh false and the guard never held (tombstone
+    // round 2). Recursion is same-thread, so a process-wide flag is
+    // correct here; concurrent threads just skip a retry.
+    static bool s_in_resolve = false;
     if (s_in_resolve) return false;
-    void* addr = nullptr;
-    {
-        struct Guard {
-            bool& f;
-            Guard(bool& f) : f(f) { f = true; }
-            ~Guard() { f = false; }
-        } g(s_in_resolve);
-        addr = DobbySymbolResolver(nullptr, sym);
-    }
+    s_in_resolve = true;
+    void* addr = DobbySymbolResolver(nullptr, sym);
+    s_in_resolve = false;
     if (addr == nullptr) return false;
     if (*orig != nullptr) return true;
     return DobbyHook(addr, (dobby_dummy_func_t)replace,

@@ -99,7 +99,8 @@ const unsigned char* my_glGetString(unsigned int name) {
 bool TryHookResolved() {
     // Reentrancy guard (see sensor_hooks.cpp TryHookOne): the resolver
     // opens /proc/self/maps via fopen; our my_fopen retries this hook.
-    static thread_local bool s_in_resolve = false;
+    // Plain static, NOT thread_local (emutls uninit in early zygote).
+    static bool s_in_resolve = false;
     if (g_orig_gl_get_string != nullptr) return true;
     if (s_in_resolve) return false;
     s_in_resolve = true;
