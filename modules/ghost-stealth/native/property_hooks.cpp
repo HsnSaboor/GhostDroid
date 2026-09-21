@@ -540,7 +540,12 @@ void InstallPropertyHooks() {
     // when the GL driver is not loaded yet just leaves real strings.
     InstallGraphicsHooks();
 
-    InstallSensorHooks();
+    // NOTE: InstallSensorHooks deliberately NOT called here.
+    // DobbySymbolResolver -> GetProcessModuleMap crashes inside
+    // preAppSpecialize/zygote early init (tombstone 10057: single-frame
+    // crash in the maps parser, not recursion). Same reason the graphics
+    // hook tolerates install-time miss: lazy retry in my_sp_get/my_open/
+    // my_fopen lands it once the app process is fully up.
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
