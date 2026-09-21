@@ -105,7 +105,23 @@ const char* my_ASensor_getName(const void* sensor) {
 }
 
 bool TryHookOne(const char* sym, void* replace, void** orig) {
-    void* addr = DobbySymbolResolver(nullptr, sym);
+    // Reentrancy guard: DobbySymbolResolver opens /proc/self/maps via
+    // fopen internally. Our my_fopen/my_open retry the lazy hooks, so an
+    // unguarded resolve recurses (resolver -> fopen -> resolve -> ...)
+    // until the stack overflows (verified tombstone 2026-09-22:
+    // TryHookSensorResolved <-> GetProcessModuleMap cycle). Skip the
+    // resolve while already inside one; the next probe retries.
+    static thread_local bool s_in_resolve = false;
+    if (s_in_resolve) return false;
+    void* addr = nullptr;
+    {
+        struct Guard {
+            bool& f;
+            Guard(bool& f) : f(f) { f = true; }
+            ~Guard() { f = false; }
+        } g(s_in_resolve);
+        addr = DobbySymbolResolver(nullptr, sym);
+    }
     if (addr == nullptr) return false;
     if (*orig != nullptr) return true;
     return DobbyHook(addr, (dobby_dummy_func_t)replace,

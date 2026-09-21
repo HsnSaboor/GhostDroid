@@ -97,8 +97,14 @@ const unsigned char* my_glGetString(unsigned int name) {
 }
 
 bool TryHookResolved() {
+    // Reentrancy guard (see sensor_hooks.cpp TryHookOne): the resolver
+    // opens /proc/self/maps via fopen; our my_fopen retries this hook.
+    static thread_local bool s_in_resolve = false;
     if (g_orig_gl_get_string != nullptr) return true;
+    if (s_in_resolve) return false;
+    s_in_resolve = true;
     void* sym = DobbySymbolResolver(nullptr, "glGetString");
+    s_in_resolve = false;
     if (sym == nullptr) return false;
     return DobbyHook(sym, (dobby_dummy_func_t)&my_glGetString,
                      (dobby_dummy_func_t*)&g_orig_gl_get_string) == 0;
