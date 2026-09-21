@@ -125,6 +125,10 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
+    // Lazy GLES hook: libGLESv2.so maps after preAppSpecialize, so retry the
+    // resolver on every prop probe (single pointer check once hooked).
+    // Lands glGetString the moment the game loads the GL driver.
+    if (!TryHookGraphicsResolved()) { /* not loaded yet; keep probing */ }
     // ro.hardware.gralloc DISABLED 2026-09-21: masking it to empty inside
     // the game process SEGVs GraphicBufferAllocator (verified tombstone:
     // gbm_mesa_bo_import via CrosGralloc4Mapper::importBuffer). The

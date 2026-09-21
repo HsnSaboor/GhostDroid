@@ -56,6 +56,7 @@ std::unordered_set<DIR*> g_fakedir_set;
 // /sys/bus/pci fakes; kgsl gpubusy absence = no-Adreno tell).
 #define FAKE_PCI_DEV_UEVENT "/data/local/tmp/gs_fake_pci_dev_uevent"
 #define FAKE_PCI_DEV_MODALIAS "/data/local/tmp/gs_fake_pci_dev_modalias"
+#define FAKE_PCI_REVISION "/data/local/tmp/gs_fake_pci_revision"
 #define FAKE_KGSL_GPUBUSY "/data/local/tmp/gs_fake_kgsl_gpubusy"
 // Battery: DeviceInfoHW reads charge_full*/energy_full* from three
 // candidate dirs (bms/, battery/, qcom-battery/) + model/manufacturer.
@@ -849,6 +850,7 @@ const char* Redirect(const char* path) {
             return FAKE_PCI_DEVICE;
         if (strcmp(node, "uevent") == 0) return FAKE_PCI_DEV_UEVENT;
         if (strcmp(node, "modalias") == 0) return FAKE_PCI_DEV_MODALIAS;
+        if (strcmp(node, "revision") == 0) return FAKE_PCI_REVISION;
     }
     // Adreno busy counters live here on Snapdragon; Intel has no kgsl node
     // (ENOENT = no-Adreno tell). Serve plausible busy/total counters.
@@ -864,6 +866,9 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
+    // Lazy GLES hook retry (same rationale as my_sp_get): file probes run
+    // throughout the game lifecycle, long after the GL driver maps.
+    TryHookGraphicsResolved();
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
@@ -958,6 +963,7 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
+    TryHookGraphicsResolved();
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;

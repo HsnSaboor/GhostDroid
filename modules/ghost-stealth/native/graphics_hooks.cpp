@@ -20,10 +20,12 @@
 //     wedges Zygote linker locks; the app RenderThread then wedges in
 //     futex_wait at EGL init (ANR, verified 2026-09-21).
 //
-// If the GL driver is not loaded yet when InstallGraphicsHooks() runs, the
-// install is a no-op miss and the real strings show until the next process
-// start. That fail-open miss is the accepted cost of never touching the
-// linker. Must mirror GpuHooks.java + spoof.conf gles.* entries.
+// LAZY RESOLUTION (2026-09-21): libGLESv2.so is NOT loaded in preAppSpecialize,
+// so the install-time TryHookResolved() always misses. my_sp_get / my_open /
+// my_fopen retry TryHookGraphicsResolved() on every probe (cheap: single
+// pointer check once hooked), so the hook lands the moment the game maps the
+// GL driver. That closes the libcubehawk "Mesa Intel UHD 620" tell.
+// Must mirror GpuHooks.java + spoof.conf gles.* entries.
 
 #include "gs_state.h"
 
@@ -55,28 +57,26 @@ constexpr const char kSpoofVersion[] =
 constexpr const char kSpoofShading[] = "GLSL ES 3.20";
 
 const unsigned char* my_glGetString(unsigned int name) {
-    // Caller-sensitive: Android's own HwUI (libhwui.so / libEGL_mesa /
-    // libGLESv2 internals) builds its grContext from the REAL driver
-    // strings; feeding it Adreno strings on Intel Mesa trips
+    // Caller-sensitive: Android's own HwUI (libhwui.so) and the Mesa driver
+    // internals build their grContext from the REAL driver strings; feeding
+    // them Adreno strings on Intel Mesa trips
     // "Assertion failed: !grContext.get()" and aborts the process
-    // (verified 2026-09-21). Only game/ACE callers (libUE4.so, libanogs.so,
-    // libPubGAMS.so, application JNI) see spoofed strings. Everyone else —
-    // including unknown callers — gets the real driver: fail-open rendering,
-    // fail-closed identity only where ACE actually reads.
+    // (verified 2026-09-21). Only system graphics callers get real strings.
+    // EVERYONE else (libcubehawk, libanogs, libUE4, libPubGAMS, JNI, plugins)
+    // sees Adreno 840: fail-open rendering, fail-closed identity.
     Dl_info info{};
-    bool isGameCaller = false;
+    bool isSystemGraphicsCaller = false;
     if (dladdr(__builtin_return_address(0), &info) &&
         info.dli_fname != nullptr) {
         const char* f = info.dli_fname;
-        isGameCaller =
-            strstr(f, "libUE4") != nullptr ||
-            strstr(f, "libanogs") != nullptr ||
-            strstr(f, "libPubGAMS") != nullptr ||
-            strstr(f, "libgcloud") != nullptr ||
-            strstr(f, "libTDataMaster") != nullptr ||
-            strstr(f, "libapp") != nullptr;
+        isSystemGraphicsCaller =
+            strstr(f, "libhwui") != nullptr ||
+            strstr(f, "libEGL") != nullptr ||
+            strstr(f, "libGLES") != nullptr ||
+            strstr(f, "libgallium") != nullptr ||
+            strstr(f, "mesa") != nullptr;
     }
-    if (isGameCaller) {
+    if (!isSystemGraphicsCaller) {
         switch (name) {
             case kGlVendor:
                 return reinterpret_cast<const unsigned char*>(kSpoofVendor);
@@ -109,8 +109,12 @@ bool TryHookResolved() {
 void InstallGraphicsHooks() {
     // Idempotent: TryHookResolved short-circuits once hooked, so this is
     // safe to call on every install path including preAppSpecialize.
+    // NOTE: preAppSpecialize always misses (no GL driver mapped yet); the
+    // lazy retry in my_sp_get/my_open/my_fopen lands it later.
     bool ok = TryHookResolved();
     DS_LOGI("graphics hooks: glGetString=%d", ok ? 1 : 0);
 }
+
+bool TryHookGraphicsResolved() { return TryHookResolved(); }
 
 }  // namespace gs

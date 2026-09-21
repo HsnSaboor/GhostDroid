@@ -1,0 +1,5 @@
+# Per-process PCI revision view (Qualcomm SM8850 function): host Intel
+# iGPU node reports its real revision (probe log pid 3752: ACE fopen+open
+# of /sys/devices/pci0000:00/0000:00:02.0/revision, 6x). 0x00 keeps the
+# Qualcomm story consistent with the vendor/device/uevent/modalias fakes.
+0x00

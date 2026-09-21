@@ -43,4 +43,6 @@ void InstallFileHooks();
 
 void InstallGraphicsHooks();
 
+bool TryHookGraphicsResolved();
+
 }  // namespace gs

@@ -35,6 +35,10 @@ public final class WirelessHooks {
         // WIFI_AP_STATE_DISABLED = 11.
         pinInt(wm, "getWifiApState", 11);
         pinInt(wm, "getVerboseLoggingLevel", 0);
+        // Phone story needs WiFi ON (ACE checks isWifiEnabled/getWifiState;
+        // host reports disabled with no wlan iface). Fail-closed true/ENABLED.
+        pinBoolean(wm, "isWifiEnabled", true);
+        pinInt(wm, "getWifiState", 3);
         hookDhcpInfo(wm, lpparam);
         hookWifiFeatureExtras(wm);
         Legacy.safeHook(TAG, "WifiManager.getCountryCode", () -> {

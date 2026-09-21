@@ -49,7 +49,7 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # gs_fake_platform_drivers_list, gs_fake_sys_module_list,
 # gs_fake_usb_{manufacturer,product,serial,idvendor,idproduct,version,
 # busnum,devnum}, gs_fake_pci_{vendor,device}, gs_fake_pci_{devices,uevent},
-# gs_fake_pci_dev_{uevent,modalias}, gs_fake_kgsl_gpubusy,
+# gs_fake_pci_dev_{uevent,modalias,revision}, gs_fake_kgsl_gpubusy,
 # gs_fake_bat_{charge_full,charge_full_design,model,manufacturer},
 # gs_fake_cpuinfo, gs_fake_build_prop (S26 identity/build subset;
 # overlapping keys match spoof.conf exactly),
@@ -69,7 +69,7 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_usb_idvendor fake_usb_idproduct fake_usb_version \
          fake_usb_busnum fake_usb_devnum \
          fake_pci_vendor fake_pci_device \
-         fake_pci_dev_uevent fake_pci_dev_modalias fake_kgsl_gpubusy \
+         fake_pci_dev_uevent fake_pci_dev_modalias fake_pci_revision fake_kgsl_gpubusy \
          fake_bat_charge_full fake_bat_charge_full_design \
          fake_bat_model fake_bat_manufacturer \
          fake_cpuinfo fake_build_prop \
