@@ -123,25 +123,11 @@ public final class DisplayStateHooks {
         Class<?> wm = Legacy.findClassIfExists(
                 "android.view.WindowManager", lpparam.classLoader);
         if (wm != null) {
-            // getDefaultDisplay removed on API 30+; hookAll keeps every
-            // overload covered where the method still exists. Fail-closed.
-            Legacy.safeHook(TAG, "WindowManager.getDefaultDisplay", () -> {
-                HookFramework.hookAllMethods(wm, "getDefaultDisplay",
-                        new HookFramework.Hook() {
-                            @Override
-                            public void after(HookFramework.HookChain chain,
-                                    Object result, Throwable error) {
-                                try {
-                                    if (error != null) {
-                                        return;
-                                    }
-                                } catch (Throwable t) {
-                                    Legacy.log(TAG + ": getDefaultDisplay failed: "
-                                            + t);
-                                }
-                            }
-                        });
-            });
+            // NOTE: WindowManager.getDefaultDisplay is abstract on the
+            // interface (no body to hook) — hooking it throws
+            // IllegalArgumentException noise. The concrete impl lives on
+            // WindowManagerImpl; Display.* hooks below cover the signal.
+            // Deliberately NOT hooked.
             Legacy.safeHook(TAG, "WindowManager.getCurrentWindowMetrics", () -> {
                 HookFramework.hookAllMethods(wm, "getCurrentWindowMetrics",
                         new HookFramework.Hook() {

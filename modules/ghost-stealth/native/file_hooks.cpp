@@ -866,9 +866,11 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
-    // Lazy GLES hook retry (same rationale as my_sp_get): file probes run
-    // throughout the game lifecycle, long after the GL driver maps.
+    // Lazy GLES + sensor hook retry (same rationale as my_sp_get): file
+    // probes run throughout the game lifecycle, long after the GL driver
+    // and libandroid map.
     TryHookGraphicsResolved();
+    TryHookSensorResolved();
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
@@ -964,6 +966,7 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 
 FILE* my_fopen(const char* path, const char* mode) {
     TryHookGraphicsResolved();
+    TryHookSensorResolved();
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;

@@ -18,6 +18,12 @@ public class GpuHooks {
     private static final int GL_VENDOR = 0x1F00;
     private static final int GL_RENDERER = 0x1F01;
     private static final int GL_VERSION = 0x1F02;
+    private static final int GL_SHADING_LANGUAGE_VERSION = 0x8B8C;
+    private static final int GL_EXTENSIONS = 0x1F03;
+
+    // DEBUG_RENDERER (0x824E): KHR_debug unmasked query that bypasses
+    // glGetString. Same Adreno story or the host leaks through.
+    private static final int GL_DEBUG_RENDERER = 0x824E;
 
     // EGL strings (EGL14.EGL_VENDOR).
     private static final int EGL_VENDOR = 0x3053;
@@ -30,9 +36,15 @@ public class GpuHooks {
     public static void hook(HookContext lpparam) {
         // glGetString is only declared on GLES10/GLES20 (GLES30+ inherit
         // the static from GLES20 — hooking them throws NoSuchMethodError).
+        // GLES30/31/32 DO redeclare glGetStringi (indexed extensions):
+        // hook the declaration site per class.
         hookGlGetString("android.opengl.GLES10", lpparam.classLoader);
         hookGlGetString("android.opengl.GLES20", lpparam.classLoader);
+        hookGlGetStringi("android.opengl.GLES30", lpparam.classLoader);
+        hookGlGetStringi("android.opengl.GLES31", lpparam.classLoader);
+        hookGlGetStringi("android.opengl.GLES32", lpparam.classLoader);
         hookEglQueryString(lpparam.classLoader);
+        hookEglGetString(lpparam.classLoader);
         hookVulkanVersion(lpparam);
     }
 
@@ -96,6 +108,15 @@ public class GpuHooks {
                                 } else if (name == GL_VERSION) {
                                     // String label only — context/config stay real.
                                     chain.replaceResult(ConfigManager.getGpuVersion());
+                                } else if (name == GL_SHADING_LANGUAGE_VERSION) {
+                                    chain.replaceResult(ConfigManager.getGpuShadingVersion());
+                                } else if (name == GL_DEBUG_RENDERER) {
+                                    chain.replaceResult(ConfigManager.getGpuRenderer());
+                                } else if (name == GL_EXTENSIONS) {
+                                    String stripped = stripHostGlTokens((String) result);
+                                    if (stripped != null) {
+                                        chain.replaceResult(stripped);
+                                    }
                                 }
                             } catch (Throwable t) {
                                 Legacy.log(TAG + ": " + className + ".glGetString failed: " + t);
@@ -103,6 +124,69 @@ public class GpuHooks {
                         }
                     });
         });
+    }
+
+    // GLES30/31/32 indexed query (glGetStringi): host extension tokens
+    // leak the Waydroid driver through per-index reads. Strip host tokens;
+    // fail-closed (null keeps the original string).
+    private static void hookGlGetStringi(String className, ClassLoader loader) {
+        Class<?> clazz = Legacy.findClassIfExists(className, loader);
+        if (clazz == null) return;
+        Legacy.safeHook(TAG, className + ".glGetStringi", () -> {
+            Legacy.findAndHookMethod(clazz, "glGetStringi",
+                    int.class, int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null || !(result instanceof String)) {
+                                    return;
+                                }
+                                String stripped = stripHostGlTokens((String) result);
+                                if (stripped == null) {
+                                    chain.replaceResult("");
+                                } else {
+                                    chain.replaceResult(stripped);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": " + className + ".glGetStringi failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // EGL14.eglGetString (unmasked display query): eglQueryString is the
+    // EGL15 form; detectors call this one directly. Same vendor/version
+    // story. Fail-closed.
+    private static void hookEglGetString(ClassLoader loader) {
+        Class<?> egl14 = Legacy.findClassIfExists("android.opengl.EGL14", loader);
+        Class<?> display = Legacy.findClassIfExists("android.opengl.EGLDisplay", loader);
+        if (egl14 == null || display == null) return;
+        try {
+            Legacy.findAndHookMethod(egl14, "eglGetString",
+                    display, int.class,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                int name = chain.arg(1, -1);
+                                if (name == EGL_VENDOR) {
+                                    chain.replaceResult(ConfigManager.getGpuVendor());
+                                } else if (name == EGL_VERSION) {
+                                    chain.replaceResult(ConfigManager.getGpuEglVersion());
+                                } else if (name == EGL_EXTENSIONS) {
+                                    String stripped = stripHostGlTokens((String) result);
+                                    if (stripped != null) {
+                                        chain.replaceResult(stripped);
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": eglGetString failed: " + t);
+                            }
+                        }
+                    });
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": failed to hook EGL14.eglGetString: " + t);
+        }
     }
 
     // Drop host-GPU extension tokens (Mesa/Intel/llvmpipe/swrast) that

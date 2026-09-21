@@ -58,6 +58,19 @@ public class SensorHooks {
 
     private static float sStepCount = 1234.0f;
 
+    // Streaming state: one cached listener per synthetic type so repeat
+    // registerListener calls keep delivering (rate checks pass). Daemon
+    // thread per type, 60Hz IMU / 5Hz slow sensors. Fail-closed.
+    private static final java.util.Map<Integer, StreamState> sStreams =
+            new java.util.HashMap<>();
+
+    private static final class StreamState {
+        Object listener;
+        Sensor sensor;
+        Thread thread;
+        volatile boolean running;
+    }
+
     private static List<Sensor> syntheticCache = null;
 
     public static void hook(HookContext lpparam) {
@@ -137,8 +150,8 @@ public class SensorHooks {
     // Synthetic sensors have no HAL behind them, so the real
     // registerListener would return false and games would conclude the
     // device has no motion path. Claim success for synthetic handles and
-    // post one synthetic event; real sensors pass through untouched.
-    // Fail-closed: any error leaves the original result as-is.
+    // start a low-rate stream (rate/presence checks pass); real sensors
+    // pass through untouched. Fail-closed.
     private static void hookRegisterListener() {
         Legacy.safeHook(TAG, "registerListener", () -> {
             HookFramework.hookAllMethods(SensorManager.class, "registerListener",
@@ -154,7 +167,7 @@ public class SensorHooks {
                                 Object listener = listenerArg(chain);
                                 android.os.Handler handler = handlerArg(chain);
                                 if (listener != null) {
-                                    postSyntheticEvent(listener, sensor, handler);
+                                    startStream(listener, sensor, handler);
                                 }
                                 chain.replaceResult(true);
                             } catch (Throwable t) {
@@ -163,6 +176,65 @@ public class SensorHooks {
                         }
                     });
         });
+    }
+
+    // Per-type stream: first event immediate, then periodic. IMU-class
+    // (accel/gyro/mag/gravity/linear/rotation) at 60Hz, slow sensors
+    // (light/proximity/pressure/steps) at 5Hz. Re-registering replaces
+    // the listener, never duplicates the thread.
+    private static synchronized void startStream(Object listener, Sensor sensor,
+            android.os.Handler handler) {
+        try {
+            int type = sensor.getType();
+            StreamState st = sStreams.get(type);
+            if (st == null) {
+                st = new StreamState();
+                sStreams.put(type, st);
+            }
+            st.listener = listener;
+            st.sensor = sensor;
+            postSyntheticEvent(listener, sensor, handler);
+            if (st.running) return;
+            st.running = true;
+            final StreamState state = st;
+            final long periodMs = isFastSensor(type) ? 16L : 200L;
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        while (state.running) {
+                            Thread.sleep(periodMs);
+                            Object l;
+                            Sensor s;
+                            synchronized (SensorHooks.class) {
+                                l = state.listener;
+                                s = state.sensor;
+                            }
+                            if (l == null || s == null) continue;
+                            postSyntheticEvent(l, s, null);
+                        }
+                    } catch (InterruptedException ignored) {
+                    } catch (Throwable th) {
+                        Legacy.log(TAG + ": sensor stream failed: " + th);
+                    }
+                }
+            });
+            t.setDaemon(true);
+            t.setName("dsl-sensor-" + type);
+            st.thread = t;
+            t.start();
+        } catch (Throwable th) {
+            Legacy.log(TAG + ": startStream failed: " + th);
+        }
+    }
+
+    private static boolean isFastSensor(int type) {
+        return type == Sensor.TYPE_ACCELEROMETER
+                || type == Sensor.TYPE_GYROSCOPE
+                || type == Sensor.TYPE_MAGNETIC_FIELD
+                || type == Sensor.TYPE_GRAVITY
+                || type == Sensor.TYPE_LINEAR_ACCELERATION
+                || type == Sensor.TYPE_ROTATION_VECTOR;
     }
 
     // Mirror of registerListener: unregistering a synthetic handle must

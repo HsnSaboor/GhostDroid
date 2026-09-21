@@ -83,7 +83,7 @@ public class BuildHooks {
         setStringField(buildClass, "SERIAL", ConfigManager.getSerial());
         setStringField(buildClass, "SKU", prop("ro.boot.hardware.sku", ""));
         setStringField(buildClass, "SOC_MANUFACTURER", prop("ro.soc.manufacturer", ConfigManager.getBuildManufacturer()));
-        setStringField(buildClass, "SOC_MODEL", prop("ro.soc.model", "gs201"));
+        setStringField(buildClass, "SOC_MODEL", prop("ro.soc.model", "SM8850"));
         setStringField(buildClass, "TAGS", ConfigManager.getBuildTags());
         setLongField(buildClass, "TIME", getBuildTimeMillis());
         setStringField(buildClass, "TYPE", ConfigManager.getBuildType());

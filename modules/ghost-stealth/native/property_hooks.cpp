@@ -125,10 +125,12 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
-    // Lazy GLES hook: libGLESv2.so maps after preAppSpecialize, so retry the
-    // resolver on every prop probe (single pointer check once hooked).
-    // Lands glGetString the moment the game loads the GL driver.
+    // Lazy GLES + sensor hook: libGLESv2.so / libandroid.so map after
+    // preAppSpecialize, so retry the resolver on every prop probe (single
+    // pointer check once hooked). Lands glGetString + NDK sensor list the
+    // moment the game loads the drivers.
     if (!TryHookGraphicsResolved()) { /* not loaded yet; keep probing */ }
+    TryHookSensorResolved();
     // ro.hardware.gralloc DISABLED 2026-09-21: masking it to empty inside
     // the game process SEGVs GraphicBufferAllocator (verified tombstone:
     // gbm_mesa_bo_import via CrosGralloc4Mapper::importBuffer). The
@@ -537,6 +539,8 @@ void InstallPropertyHooks() {
     // linker work, no load trap. Safe from the preAppSpecialize path; a miss
     // when the GL driver is not loaded yet just leaves real strings.
     InstallGraphicsHooks();
+
+    InstallSensorHooks();
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",

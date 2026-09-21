@@ -266,9 +266,9 @@ public class ConfigManager {
         defaults.put("ro.product.model", "SM-S948B");
         defaults.put("ro.product.name", "m3qxeea");
         defaults.put("ro.product.device", "m3q");
-        defaults.put("ro.product.board", "sm8850");
+        defaults.put("ro.product.board", "kaanapali");
         defaults.put("ro.hardware", "m3q");
-        defaults.put("ro.board.platform", "sm8850");
+        defaults.put("ro.board.platform", "kaanapali");
 
         String[] partitions = {"product", "system", "system_ext", "vendor", "vendor_dlkm", "odm", "bootimage", "system_dlkm"};
         for (String partition : partitions) {
@@ -427,6 +427,7 @@ public class ConfigManager {
         // String labels only — contexts/drivers stay real, games keep accel.
         defaults.put("gpu.version", "OpenGL ES 3.2 V@0530.0");
         defaults.put("gpu.egl_version", "1.5 Android META-EGL");
+        defaults.put("gpu.shading_version", "OpenGL ES GLSL ES 3.20");
 
         defaults.put("wifi.mac", "");
         defaults.put("wifi.bssid", "");
@@ -603,7 +604,7 @@ public class ConfigManager {
                 "wifi.mac", "wifi.bssid", "wifi.ssid", "bluetooth.mac",
                 "bluetooth.name", "webview.user_agent", "gpu.vendor",
                 "gpu.renderer", "gpu.unmasked_vendor", "gpu.unmasked_renderer",
-                "gpu.version", "gpu.egl_version");
+                "gpu.version", "gpu.egl_version", "gpu.shading_version");
 
         appendConfigBlock(sb, defaults, emitted, "Battery, storage, kernel, locale, and install metadata",
                 "battery.capacity_uah", "battery.charge_counter_uah",
@@ -1077,7 +1078,7 @@ public class ConfigManager {
 
     public static String getWifiSsid() {
         String configured = getConfigValue("wifi.ssid");
-        return (configured != null && !configured.isEmpty()) ? configured : "<unknown ssid>";
+        return (configured != null && !configured.isEmpty()) ? configured : "GhostDroid-5G";
     }
 
     public static synchronized String getBluetoothMacAddress() {
@@ -1280,6 +1281,10 @@ public class ConfigManager {
 
     public static String getGpuEglVersion() {
         return propStringDef("gpu.egl_version", "1.5 Android META-EGL");
+    }
+
+    public static String getGpuShadingVersion() {
+        return propStringDef("gpu.shading_version", "OpenGL ES GLSL ES 3.20");
     }
 
     // 0 means "use a default seed".

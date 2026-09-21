@@ -36,6 +36,10 @@ public class NetworkHooks {
 
     private static final String DEFAULT_SSID = "GhostDroid-5G";
 
+    // Phone-plausible LAN IP matching the DhcpInfo/LinkProperties story
+    // (192.168.1.50). Little-endian Android int: 0x3201A8C0.
+    private static final int SPOOF_IP_LITTLE_ENDIAN = 0x3201A8C0;
+
     // NetworkInterface.getName/getDisplayName are native (unhookable), so
     // getNetworkInterfaces()/getByName() record overrides here, mirroring
     // the reference module's WeakHashMap approach.
@@ -107,6 +111,9 @@ public class NetworkHooks {
         pinWifiInt(wifiInfo, "getLinkSpeed", 866);
         pinWifiInt(wifiInfo, "getFrequency", 5180);
         pinWifiInt(wifiInfo, "getNetworkId", 0);
+        // Host eth0 IP (192.168.240.x) leaks via getIpAddress: WifiInfo
+        // carries the int form; pin to the 192.168.1.50 story. Fail-closed.
+        pinWifiInt(wifiInfo, "getIpAddress", SPOOF_IP_LITTLE_ENDIAN);
     }
 
     private static void pinWifiInt(Class<?> wifiInfo, String name, int value) {
@@ -291,6 +298,7 @@ public class NetworkHooks {
             Legacy.setIntField(wifiInfo, "mRssi", -55);
             Legacy.setIntField(wifiInfo, "mLinkSpeed", 866);
             Legacy.setIntField(wifiInfo, "mFrequency", 5180);
+            Legacy.setIntField(wifiInfo, "mIpAddress", SPOOF_IP_LITTLE_ENDIAN);
         } catch (Throwable ignored) {
         }
     }

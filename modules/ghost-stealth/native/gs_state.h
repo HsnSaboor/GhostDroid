@@ -43,6 +43,10 @@ void InstallFileHooks();
 
 void InstallGraphicsHooks();
 
+void InstallSensorHooks();
+
 bool TryHookGraphicsResolved();
+
+bool TryHookSensorResolved();
 
 }  // namespace gs
