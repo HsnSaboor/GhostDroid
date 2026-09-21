@@ -405,7 +405,6 @@ bool IsDeniedProperty(const char* name) {
         "framework.pause_bg_animations.",  // bg-animation flag (absent on retail)
         "heapprofd.",                // heapprofd profiler knobs (absent on retail)
         "hw_sc.",                    // hw_sc platform keys (absent on retail S26)
-        "hwservicemanager.ready",    // single ready flag (HIDL startup waits on it; prefix would wedge boot)
         "libc.debug.gwp_asan.",      // gwp_asan debug knobs (absent on retail)
         "persist.device_config.runtime_native.",  // runtime device_config (absent on retail)
         "persist.libc.debug.gwp_asan.",  // persisted gwp_asan knobs (absent on retail)
