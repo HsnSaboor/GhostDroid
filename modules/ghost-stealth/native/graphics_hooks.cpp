@@ -27,6 +27,10 @@
 
 #include "gs_state.h"
 
+#include <dlfcn.h>
+
+#include <cstring>
+
 #include <dobby.h>
 
 namespace gs {
@@ -51,21 +55,42 @@ constexpr const char kSpoofVersion[] =
 constexpr const char kSpoofShading[] = "GLSL ES 3.20";
 
 const unsigned char* my_glGetString(unsigned int name) {
-    switch (name) {
-        case kGlVendor:
-            return reinterpret_cast<const unsigned char*>(kSpoofVendor);
-        case kGlRenderer:
-            return reinterpret_cast<const unsigned char*>(kSpoofRenderer);
-        case kGlVersion:
-            return reinterpret_cast<const unsigned char*>(kSpoofVersion);
-        case kGlShadingVersion:
-            return reinterpret_cast<const unsigned char*>(kSpoofShading);
-        case kGlExtensions:
-            // Extensions list is driver-build specific; pass through rather
-            // than invent a fingerprintable subset.
-            break;
-        default:
-            break;
+    // Caller-sensitive: Android's own HwUI (libhwui.so / libEGL_mesa /
+    // libGLESv2 internals) builds its grContext from the REAL driver
+    // strings; feeding it Adreno strings on Intel Mesa trips
+    // "Assertion failed: !grContext.get()" and aborts the process
+    // (verified 2026-09-21). Only game/ACE callers (libUE4.so, libanogs.so,
+    // libPubGAMS.so, application JNI) see spoofed strings. Everyone else —
+    // including unknown callers — gets the real driver: fail-open rendering,
+    // fail-closed identity only where ACE actually reads.
+    Dl_info info{};
+    bool isGameCaller = false;
+    if (dladdr(__builtin_return_address(0), &info) &&
+        info.dli_fname != nullptr) {
+        const char* f = info.dli_fname;
+        isGameCaller =
+            strstr(f, "libUE4") != nullptr ||
+            strstr(f, "libanogs") != nullptr ||
+            strstr(f, "libPubGAMS") != nullptr ||
+            strstr(f, "libgcloud") != nullptr ||
+            strstr(f, "libTDataMaster") != nullptr ||
+            strstr(f, "libapp") != nullptr;
+    }
+    if (isGameCaller) {
+        switch (name) {
+            case kGlVendor:
+                return reinterpret_cast<const unsigned char*>(kSpoofVendor);
+            case kGlRenderer:
+                return reinterpret_cast<const unsigned char*>(kSpoofRenderer);
+            case kGlVersion:
+                return reinterpret_cast<const unsigned char*>(kSpoofVersion);
+            case kGlShadingVersion:
+                return reinterpret_cast<const unsigned char*>(kSpoofShading);
+            case kGlExtensions:
+                break;
+            default:
+                break;
+        }
     }
     if (g_orig_gl_get_string != nullptr) return g_orig_gl_get_string(name);
     return nullptr;
