@@ -89,6 +89,10 @@ std::unordered_set<DIR*> g_fakedir_set;
 #define FAKE_PROC_NET_TCP "/data/local/tmp/gs_fake_proc_net_tcp"
 // IPv6 twin (same loopback-only story, v6 table format: 32-hex addrs).
 #define FAKE_PROC_NET_TCP6 "/data/local/tmp/gs_fake_proc_net_tcp6"
+// /proc/net/dev iface tell: real table exposes eth0/veth/waydroid0
+// (container NIC names). Phone view: lo + wlan0 + rmnet_data0 only;
+// exact-node mask, per-process only, fail-open.
+#define FAKE_PROC_NET_DEV "/data/local/tmp/gs_fake_proc_net_dev"
 // /proc/sys/kernel/* file reads: uname hook doesn't cover the file path
 // (probe log pid 2594: ACE reads net + version-class nodes directly).
 // GKI 5.15 S26 values, mirroring spoof.conf kernel.* + fake_version.
@@ -118,8 +122,11 @@ FILE* (*orig_fopen)(const char*, const char*) = nullptr;
 // opendir+readdir, bypassing open/openat entirely. DeviceInfoHW USB tab
 // (o1/a: /sys/bus/usb/drivers/usb), DRIVERS tab (b1/E:
 // /sys/bus/pci/drivers, b1/F: /sys/bus/platform/drivers) all enumerate
-// this way. Hook opendir + readdir + getdents64 and serve synthetic
-// single-Qualcomm listings for masked trees.
+// this way. Hook opendir + readdir and serve synthetic
+// single-Qualcomm listings for masked trees. Direct-fd getdents64 on an
+// O_DIRECTORY open of a masked root stays REAL (fail-open: game-safe;
+// no probe shows that path, and forging kernel dirent buffers risks
+// engine stability).
 // /sys/devices/pci0000:00 stays REAL (minigbm needs Intel GPU node).
 DIR* (*orig_opendir)(const char*) = nullptr;
 struct dirent* (*orig_readdir)(DIR*) = nullptr;
@@ -436,7 +443,8 @@ bool ContainsCI(const char* hay, const char* needle) {
 // Root file-cloak table (fail-CLOSED with ENOENT, mirroring the translator
 // cloak above): any existence/open probe of a root tell reads as absent.
 //
-//   exact:  /system/xbin/su, /system/bin/su, /sbin/su, /su/bin/su,
+//   exact:  /system/xbin/su, /system/bin/su, /system/sbin/su, /sbin/su,
+//           /su/bin/su, /vendor/bin/su,
 //           /dev/qemu_pipe, /dev/socket/qemud, goldfish nodes,
 //           hawk emulator props/bins/libs, hardware_info.txt
 //   prefix: /data/adb/* (magisk dir, modules, ...)
@@ -451,8 +459,10 @@ bool IsRootPath(const char* p) {
     if (strstr(p, "libvulkan.so") != nullptr) return false;
     if (strcmp(p, "/system/xbin/su") == 0 ||
         strcmp(p, "/system/bin/su") == 0 ||
+        strcmp(p, "/system/sbin/su") == 0 ||
         strcmp(p, "/sbin/su") == 0 ||
         strcmp(p, "/su/bin/su") == 0 ||
+        strcmp(p, "/vendor/bin/su") == 0 ||
         strcmp(p, "/dev/qemu_pipe") == 0 ||
         strcmp(p, "/dev/socket/qemud") == 0 ||
         strcmp(p, "/data/share1/hardware_info.txt") == 0 ||
@@ -522,6 +532,14 @@ bool IsContainerTellPath(const char* p) {
     // store ACE reads right after — game-critical fail-open there).
     if (strcmp(p, "/usr/local/ssl/openssl.cnf") == 0) return true;
     if (strcmp(p, "/etc/ssl/certs/ca-certificates.crt") == 0) return true;
+    // Debug-symbol probes (probe log pid 6901: CrashSight fopen+open of
+    // /usr/lib/debug/system/lib64/arm64/libc.so and
+    // /system/lib64/arm64/.debug/libc.so, served REAL). Host debug tree
+    // plus on-device .debug/ lookups exist only on dev/container builds;
+    // no stock S26 ships them, so ENOENT is truth. Per-process only;
+    // symbolication falls back, games keep running (fail-safe).
+    if (PathStartsWith(p, "/usr/lib/debug/")) return true;
+    if (strstr(p, "/.debug/") != nullptr) return true;
     if (PathStartsWith(p, "/Users/")) return true;
     if (PathStartsWith(p, "/cygdrive/")) return true;
     return false;
@@ -765,6 +783,11 @@ const char* Redirect(const char* path) {
         return FAKE_PROC_NET_TCP;
     if (path != nullptr && strcmp(path, "/proc/net/tcp6") == 0)
         return FAKE_PROC_NET_TCP6;
+    // /proc/net/dev iface tell (TrafficStats/DeviceInfo net scan reads it
+    // directly): real rows leak eth0/veth*/waydroid0/docker0 container NICs.
+    // Phone view keeps lo + wlan0 + rmnet_data0; only this exact node masked.
+    if (path != nullptr && strcmp(path, "/proc/net/dev") == 0)
+        return FAKE_PROC_NET_DEV;
     // /proc/sys/kernel/* reads (fail-safe: only the 4 version/identity
     // nodes masked; every other sysctl stays real).
     if (path != nullptr &&
@@ -970,7 +993,7 @@ bool HookExport(const char* sym, void* replace, void** orig) {
 // to DIR* would SIGSEGV if any unhooked libc helper (dirfd, rewinddir,
 // seekdir, telldir, closedir fallback) touches it. Defense in depth:
 //   1. Registry membership check (never range check) in readdir/closedir.
-//   2. Also hook rewinddir/telldir/seekdir/dirfd/getdents64 and route
+//   2. Also hook rewinddir/telldir/seekdir/dirfd and route
 //      registered fakes to safe synthetic behavior / EBADF passthrough.
 //   3. my_opendir falls back to the real opendir if the fake list file
 //      cannot be opened, so we never forge a handle without content.
@@ -1003,7 +1026,7 @@ void UnregisterFakeDir(DIR* d, bool& wasRegistered) {
 
 DIR* my_opendir(const char* path) {
     // Translator dirs (/system/lib/arm, /system/lib64/arm64, binfmt_misc)
-    // enumerate as EMPTY so listFilesInDirectory() finds no bridge files.
+    // enumerate as ABSENT (ENOENT) so listFilesInDirectory() reads false.
     // The loader already has the real fds, so games keep running.
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
@@ -1328,11 +1351,61 @@ bool BuildGetpropDump(char* out, size_t cap) {
     return true;
 }
 
+// Unwrap one `sh -c '<inner>'` layer plus an absolute getprop path into a
+// normalized `getprop ...` command in `buf`. Returns buf, or nullptr when
+// the command is not a getprop form (caller fails open to the real call).
+// Shared by the popen path below (the execve path receives argv[2]
+// already unwrapped, so it parses directly).
+const char* NormalizeGetpropCmd(const char* cmd, char* buf, size_t cap) {
+    if (cmd == nullptr || buf == nullptr || cap == 0) return nullptr;
+    const char* s = SkipSpaces(cmd);
+    if (s != nullptr && strncmp(s, "sh", 2) == 0 &&
+        (s[2] == ' ' || s[2] == '\t')) {
+        const char* p = SkipSpaces(s + 2);
+        if (strncmp(p, "-c", 2) == 0 && (p[2] == ' ' || p[2] == '\t')) {
+            p = SkipSpaces(p + 2);
+            size_t len = strlen(p);
+            if (len >= 2 && ((p[0] == '\'' && p[len - 1] == '\'') ||
+                             (p[0] == '"' && p[len - 1] == '"'))) {
+                len -= 2;
+                if (len > cap - 1) len = cap - 1;
+                memcpy(buf, p + 1, len);
+                buf[len] = '\0';
+                s = buf;
+            } else {
+                s = p;
+            }
+        }
+    }
+    const char* tokEnd = s;
+    while (*tokEnd != '\0' && *tokEnd != ' ' && *tokEnd != '\t') tokEnd++;
+    {
+        char first[256];
+        size_t n = (size_t)(tokEnd - s);
+        if (n > sizeof(first) - 1) n = sizeof(first) - 1;
+        memcpy(first, s, n);
+        first[n] = '\0';
+        if (strcmp(ExecBasename(first), "getprop") == 0 &&
+            strcmp(first, "getprop") != 0) {
+            char norm[1024];
+            snprintf(norm, sizeof(norm), "getprop%s", tokEnd);
+            snprintf(buf, cap, "%s", norm);
+            s = buf;
+        }
+    }
+    if (strncmp(SkipSpaces(s), "getprop", 7) != 0) return nullptr;
+    if (s != buf) snprintf(buf, cap, "%s", s);
+    return buf;
+}
+
 // Popen content builders over the same table (no fork): single key gives
 // `value\n` ("" when denied/missing); bare gives the filtered dump.
 bool BuildPopenGetprop(const char* cmd, std::string& out) {
     char key[PROP_NAME_MAX] = {0};
-    int kind = ParseGetpropShCmd(SkipSpaces(cmd), key, sizeof(key));
+    static thread_local char norm[1024];
+    const char* s = NormalizeGetpropCmd(cmd, norm, sizeof(norm));
+    if (s == nullptr) return false;
+    int kind = ParseGetpropShCmd(SkipSpaces(s), key, sizeof(key));
     if (kind < 0) return false;
     if (kind == 0) {
         out.clear();
@@ -1595,7 +1668,8 @@ long my_ptrace(int request, pid_t pid, void* addr, void* data) {
         TraceProbeFile("ptrace", "traceme-faked");
         return 0;
     }
-    if (request == PTRACE_ATTACH && pid == ::getpid()) {
+    if ((request == PTRACE_ATTACH || request == PTRACE_SEIZE) &&
+        pid == ::getpid()) {
         TraceProbeFile("ptrace", "attach-self-denied");
         errno = EPERM;
         return -1;

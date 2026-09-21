@@ -42,17 +42,22 @@ public class SettingsHooks {
         Class<?> clazz = Legacy.findClassIfExists(className, lpparam.classLoader);
         if (clazz == null) return;
 
-        try {
-            Legacy.findAndHookMethod(clazz, "getString",
-                    ContentResolver.class, String.class,
+        // getString has (ContentResolver,String) only; hookAllMethods
+        // covers it uniformly with getStringForUser. Before-hook so the
+        // provider is never queried. Fail-closed with try/catch + log.
+        Legacy.safeHook(TAG, className + ".getString", () -> {
+            HookFramework.hookAllMethods(clazz, "getString",
                     new HookFramework.BeforeHook() {@Override
                         public void before(HookFramework.HookChain chain) {
-                            String name = (String) chain.arg(1, null);
-                            applySpoof(chain, name, spoofFlags);
+                            try {
+                                String name = (String) chain.arg(1, null);
+                                applySpoof(chain, name, spoofFlags);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getString spoof failed: " + t);
+                            }
                         }
                     });
-        } catch (NoSuchMethodError ignored) {
-        }
+        });
 
         // Per-user variant used by multi-user aware detectors (same key
         // position: arg 1). Before-hook so the provider is never queried.

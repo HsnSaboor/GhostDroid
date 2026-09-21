@@ -38,28 +38,35 @@ public class WebViewHooks {
         }
     }
 
+    // WebView.getSettings: single no-arg overload; exact-signature hook
+    // correct. Fail-closed: try/catch + Legacy.log, original kept.
     private static void hookWebSettings(HookContext lpparam) {
         Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
-        try {
+        Legacy.safeHook(TAG, "WebView.getSettings", () -> {
             Legacy.findAndHookMethod(webViewClass, "getSettings",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            Object settings = result;
-                            if (settings == null) return;
-                            String ua = ConfigManager.getWebViewUserAgent();
-                            if (ua != null) {
-                                try {
-                                    Legacy.callMethod(settings, "setUserAgentString", ua);
-                                } catch (Throwable ignored) {}
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                Object settings = result;
+                                if (settings == null) return;
+                                String ua = ConfigManager.getWebViewUserAgent();
+                                if (ua != null) {
+                                    try {
+                                        Legacy.callMethod(settings, "setUserAgentString", ua);
+                                    } catch (Throwable ignored) {}
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": WebView.getSettings failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook WebView.getSettings: " + t);
-        }
+        });
     }
 
     private static void hookWebViewConstructor(HookContext lpparam) {
@@ -106,9 +113,13 @@ public class WebViewHooks {
                     new HookFramework.BeforeHook() {
                         @Override
                         public void before(HookFramework.HookChain chain) {
-                            WebViewClient orig = (WebViewClient) chain.arg(0, null);
-                            if (orig instanceof SpoofingWebViewClient) return;
-                            chain.setArg(0, new SpoofingWebViewClient(orig));
+                            try {
+                                WebViewClient orig = (WebViewClient) chain.arg(0, null);
+                                if (orig instanceof SpoofingWebViewClient) return;
+                                chain.setArg(0, new SpoofingWebViewClient(orig));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": setWebViewClient failed: " + t);
+                            }
                         }
                     });
         });
@@ -119,22 +130,32 @@ public class WebViewHooks {
                 "android.webkit.WebView", lpparam.classLoader);
         if (webViewClass == null) return;
 
-        try {
+        // getWebViewClient() only exists on API 26+; safeHook covers
+        // absence. Fail-closed: try/catch + Legacy.log.
+        Legacy.safeHook(TAG, "WebView.getWebViewClient", () -> {
             Legacy.findAndHookMethod(webViewClass, "getWebViewClient",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            Object res = result;
-                            if (res instanceof SpoofingWebViewClient) {
-                                WebViewClient delegate = ((SpoofingWebViewClient) res).delegate;
-                                chain.replaceResult(delegate != null ? delegate : new WebViewClient());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                Object res = result;
+                                if (res instanceof SpoofingWebViewClient) {
+                                    WebViewClient delegate = ((SpoofingWebViewClient) res).delegate;
+                                    chain.replaceResult(delegate != null ? delegate : new WebViewClient());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getWebViewClient failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            // getWebViewClient() only exists on API 26+; ignore on older platforms.
-        }
+        });
     }
 
+    // loadUrl(String) / loadUrl(String,Map) / loadDataWithBaseURL(5-arg):
+    // three exact overloads; installs via safeHook so absence is quiet.
+    // Shared injectHook is fail-closed (try/catch + log inside).
     private static void hookLoadUrl(HookContext lpparam) {
         Class<?> webViewClass = Legacy.findClassIfExists(
                 "android.webkit.WebView", lpparam.classLoader);
@@ -142,7 +163,14 @@ public class WebViewHooks {
 
         HookFramework.Hook injectHook = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                injectAsync(chain.thisObject());
+                try {
+                    if (error != null) {
+                        return;
+                    }
+                    injectAsync(chain.thisObject());
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": loadUrl inject failed: " + t);
+                }
             }
         };
 
@@ -151,16 +179,16 @@ public class WebViewHooks {
                     String.class, injectHook);
         });
 
-        try {
+        Legacy.safeHook(TAG, "WebView.loadUrl(String,Map)", () -> {
             Legacy.findAndHookMethod(webViewClass, "loadUrl",
                     String.class, java.util.Map.class, injectHook);
-        } catch (Throwable t) { /* overload */ }
+        });
 
-        try {
+        Legacy.safeHook(TAG, "WebView.loadDataWithBaseURL", () -> {
             Legacy.findAndHookMethod(webViewClass, "loadDataWithBaseURL",
                     String.class, String.class, String.class, String.class, String.class,
                     injectHook);
-        } catch (Throwable t) { /* overload */ }
+        });
     }
 
     private static void injectAsync(Object webView) {

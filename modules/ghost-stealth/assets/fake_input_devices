@@ -18,13 +18,3 @@ B: PROP=2
 B: EV=b
 B: ABS=260800000000003
 B: KEY=400 0 0 0 0
-
-I: Bus=0000 Vendor=04e8 Product=4ee1 Version=0000
-N: Name="Audio Device"
-P: Phys=
-S: Sysfs=/devices/virtual/input/input2
-U: Uniq=
-H: Handlers=event2
-B: PROP=0
-B: EV=40001
-B: SND=6

@@ -59,40 +59,57 @@ public class AppSetIdHooks {
         Class<?> appSetIdInfoClass = Legacy.findClassIfExists(
                 "com.google.android.gms.appset.AppSetIdInfo", lpparam.classLoader);
         if (appSetIdInfoClass != null) {
-            try {
-                Legacy.findAndHookMethod(appSetIdInfoClass, "getId",
+            // Single no-arg overloads; hookAllMethods keeps the install
+            // uniform with siblings. Fail-closed with try/catch + log.
+            Legacy.safeHook(TAG, "AppSetIdInfo.getId", () -> {
+                HookFramework.hookAllMethods(appSetIdInfoClass, "getId",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                String v = ConfigManager.getAppSetId();
-                                if (v != null) chain.replaceResult(v);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    String v = ConfigManager.getAppSetId();
+                                    if (v != null) chain.replaceResult(v);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetIdInfo.getId failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
-            try {
+            });
+            Legacy.safeHook(TAG, "AppSetIdInfo.getScope", () -> {
                 // Scope: 1 = APP (per-app id), 2 = DEVELOPER (shared).
-                Legacy.findAndHookMethod(appSetIdInfoClass, "getScope",
+                HookFramework.hookAllMethods(appSetIdInfoClass, "getScope",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                chain.replaceResult(1);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    chain.replaceResult(1);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetIdInfo.getScope failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
             // Rewrite constructor args so reflective field reads also see
             // the spoofed value.
-            try {
+            Legacy.safeHook(TAG, "AppSetIdInfo.ctor", () -> {
                 Legacy.findAndHookConstructor(appSetIdInfoClass,
                         String.class, int.class,
                         new HookFramework.BeforeHook() {@Override
                             public void before(HookFramework.HookChain chain) {
-                                String v = ConfigManager.getAppSetId();
-                                if (v != null) chain.setArg(0, v);
-                                chain.setArg(1, 1);
+                                try {
+                                    String v = ConfigManager.getAppSetId();
+                                    if (v != null) chain.setArg(0, v);
+                                    chain.setArg(1, 1);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetIdInfo.ctor failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
         }
 
         // AIDL service proxy — for callers that bypass AppSetIdInfo entirely.
@@ -100,23 +117,29 @@ public class AppSetIdHooks {
                 "com.google.android.gms.appset.internal.IAppSetService$Stub$Proxy",
                 lpparam.classLoader);
         if (appSetServiceStub != null) {
-            try {
-                Legacy.findAndHookMethod(appSetServiceStub, "getAppSetIdInfo",
+            Legacy.safeHook(TAG, "StubProxy.getAppSetIdInfo", () -> {
+                HookFramework.hookAllMethods(appSetServiceStub, "getAppSetIdInfo",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                Object info = result;
-                                if (info == null) return;
-                                String v = ConfigManager.getAppSetId();
-                                if (v == null) return;
                                 try {
-                                    Legacy.setObjectField(info, "id", v);
-                                    Legacy.setIntField(info, "scope", 1);
-                                } catch (Throwable ignored) {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    Object info = result;
+                                    if (info == null) return;
+                                    String v = ConfigManager.getAppSetId();
+                                    if (v == null) return;
+                                    try {
+                                        Legacy.setObjectField(info, "id", v);
+                                        Legacy.setIntField(info, "scope", 1);
+                                    } catch (Throwable ignored) {
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": StubProxy.getAppSetIdInfo failed: " + t);
                                 }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
         }
 
         // Android 14+ Privacy Sandbox AppSetId. The framework constructs this
@@ -125,36 +148,52 @@ public class AppSetIdHooks {
         Class<?> systemAppSetId = Legacy.findClassIfExists(
                 "android.adservices.appsetid.AppSetId", lpparam.classLoader);
         if (systemAppSetId != null) {
-            try {
-                Legacy.findAndHookMethod(systemAppSetId, "getId",
+            Legacy.safeHook(TAG, "AppSetId.getId", () -> {
+                HookFramework.hookAllMethods(systemAppSetId, "getId",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                String v = ConfigManager.getAppSetId();
-                                if (v != null) chain.replaceResult(v);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    String v = ConfigManager.getAppSetId();
+                                    if (v != null) chain.replaceResult(v);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetId.getId failed: " + t);
+                                }
                             }
                         });
-            } catch (Throwable ignored) {
-            }
-            try {
-                Legacy.findAndHookMethod(systemAppSetId, "getScope",
+            });
+            Legacy.safeHook(TAG, "AppSetId.getScope", () -> {
+                HookFramework.hookAllMethods(systemAppSetId, "getScope",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                chain.replaceResult(1);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    chain.replaceResult(1);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetId.getScope failed: " + t);
+                                }
                             }
                         });
-            } catch (Throwable ignored) {
-            }
+            });
             for (Constructor<?> c : systemAppSetId.getDeclaredConstructors()) {
                 Class<?>[] types = c.getParameterTypes();
                 if (types.length >= 1 && types[0] == String.class) {
                     try {
                         Legacy.hookMethod(c, new HookFramework.BeforeHook() {@Override
                             public void before(HookFramework.HookChain chain) {
-                                String v = ConfigManager.getAppSetId();
-                                if (v != null) chain.setArg(0, v);
-                                if (chain.argCount() > 1
-                                        && chain.arg(1, null) instanceof Integer) {
-                                    chain.setArg(1, 1);
+                                try {
+                                    String v = ConfigManager.getAppSetId();
+                                    if (v != null) chain.setArg(0, v);
+                                    if (chain.argCount() > 1
+                                            && chain.arg(1, null) instanceof Integer) {
+                                        chain.setArg(1, 1);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": AppSetId.ctor failed: " + t);
                                 }
                             }
                         });
@@ -181,10 +220,17 @@ public class AppSetIdHooks {
             Legacy.findAndHookMethod(android.os.Binder.class, "attachInterface",
                     IInterface.class, String.class, new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            if (!IAPPSET_SERVICE_DESCRIPTOR.equals(chain.arg(1, null))) return;
-                            Object stub = chain.arg(0, null);
-                            if (stub != null) {
-                                installAppSetStubHooks(stub.getClass());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (!IAPPSET_SERVICE_DESCRIPTOR.equals(chain.arg(1, null))) return;
+                                Object stub = chain.arg(0, null);
+                                if (stub != null) {
+                                    installAppSetStubHooks(stub.getClass());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": attachInterface watcher failed: " + t);
                             }
                         }
                     });
@@ -215,13 +261,17 @@ public class AppSetIdHooks {
                 Legacy.hookMethod(m, new HookFramework.BeforeHook() {
                     @Override
                     public void before(HookFramework.HookChain chain) {
-                        int count = chain.argCount();
-                        for (int i = 0; i < count; i++) {
-                            Object a = chain.arg(i, null);
-                            if (a instanceof IInterface) {
-                                Object wrapped = wrapCallback(a);
-                                if (wrapped != null) chain.setArg(i, wrapped);
+                        try {
+                            int count = chain.argCount();
+                            for (int i = 0; i < count; i++) {
+                                Object a = chain.arg(i, null);
+                                if (a instanceof IInterface) {
+                                    Object wrapped = wrapCallback(a);
+                                    if (wrapped != null) chain.setArg(i, wrapped);
+                                }
                             }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": AppSet stub before failed: " + t);
                         }
                     }
                 });

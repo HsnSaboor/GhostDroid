@@ -74,21 +74,63 @@ const prop_info* MakeSynthetic(const char* name) {
     return opaque;
 }
 
+// Spoofed value for a synthetic prop_info*. The spoof table is read-only
+// post-install, so a miss is impossible; serve fail-closed empty instead
+// of handing our opaque pointer to the real libc read path (crash/garbage).
+std::string SyntheticValue(const std::string& synthName) {
+    std::string spoofed;
+    LookupProperty(synthName.c_str(), spoofed);
+    return spoofed;
+}
+
+// Truncated copy with NUL termination. cap includes NUL (PROP_*_MAX).
+// dst may be null (length query): no write, still returns truncated len.
+int CopyPropString(const std::string& s, char* dst, size_t cap) {
+    size_t n = s.size();
+    if (cap == 0) return 0;
+    if (n > cap - 1) n = cap - 1;
+    if (dst != nullptr) {
+        memcpy(dst, s.data(), n);
+        dst[n] = '\0';
+    }
+    return (int)n;
+}
+
+// Deny wins, then spoof, else the original rc. value==nullptr is a
+// length query: denied/spoofed keys report 0 without touching libc,
+// so existence never leaks through a length oracle.
+int ServeValue(const char* name, char* value, int origRc) {
+    if (value == nullptr) {
+        // Length query: denied reads as absent (0); spoofed reports its
+        // truncated length without writing; else the original rc.
+        if (IsDeniedProperty(name)) return 0;
+        std::string probe;
+        if (LookupProperty(name, probe)) {
+            return CopyPropString(probe, nullptr, PROP_VALUE_MAX);
+        }
+        return origRc;
+    }
+    if (IsDeniedProperty(name)) {
+        value[0] = '\0';
+        return 0;
+    }
+    std::string spoofed;
+    if (LookupProperty(name, spoofed)) {
+        return CopyPropString(spoofed, value, PROP_VALUE_MAX);
+    }
+    return origRc;
+}
+
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
+    if (name == nullptr) return 0;
     if (IsDeniedProp(name)) {
         if (value != nullptr) value[0] = '\0';
         return 0;
     }
     std::string spoofed;
     if (LookupProperty(name, spoofed)) {
-        size_t n = spoofed.size();
-        if (n > PROP_VALUE_MAX - 1) n = PROP_VALUE_MAX - 1;
-        if (value != nullptr) {
-            memcpy(value, spoofed.data(), n);
-            value[n] = '\0';
-        }
-        return (int)n;
+        return CopyPropString(spoofed, value, PROP_VALUE_MAX);
     }
     if (orig_sp_get) return orig_sp_get(name, value);
     return 0;
@@ -96,12 +138,13 @@ int my_sp_get(const char* name, char* value) {
 
 const prop_info* my_sp_find(const char* name) {
     TraceProbeProp(name);
+    if (name == nullptr) return nullptr;
     if (IsDeniedProp(name)) return nullptr;
-    if (name != nullptr) {
-        std::string spoofed;
-        if (LookupProperty(name, spoofed)) {
-            return MakeSynthetic(name);
-        }
+    std::string spoofed;
+    if (LookupProperty(name, spoofed)) {
+        // Empty spoof = absent on retail: null, not a handle.
+        if (spoofed.empty()) return nullptr;
+        return MakeSynthetic(name);
     }
     if (orig_sp_find) return orig_sp_find(name);
     return nullptr;
@@ -110,43 +153,38 @@ const prop_info* my_sp_find(const char* name) {
 int my_sp_read(const prop_info* pi, char* name, char* value) {
     std::string synthName;
     if (IsSynthetic(pi, synthName)) {
-        std::string spoofed;
-        if (LookupProperty(synthName.c_str(), spoofed)) {
-            if (name != nullptr) {
-                size_t nlen = synthName.size();
-                if (nlen > PROP_NAME_MAX - 1) nlen = PROP_NAME_MAX - 1;
-                memcpy(name, synthName.data(), nlen);
-                name[nlen] = '\0';
-            }
-            size_t vlen = spoofed.size();
-            if (vlen > PROP_VALUE_MAX - 1) vlen = PROP_VALUE_MAX - 1;
-            if (value != nullptr) {
-                memcpy(value, spoofed.data(), vlen);
-                value[vlen] = '\0';
-            }
-            return (int)vlen;
+        if (IsDeniedProp(synthName.c_str())) {
+            CopyPropString(synthName, name, PROP_NAME_MAX);
+            if (value != nullptr) value[0] = '\0';
+            return 0;
         }
+        const std::string spoofed = SyntheticValue(synthName);
+        CopyPropString(synthName, name, PROP_NAME_MAX);
+        return CopyPropString(spoofed, value, PROP_VALUE_MAX);
     }
 
     int rc = 0;
     if (orig_sp_read != nullptr) {
         rc = orig_sp_read(pi, name, value);
     }
-    if (name != nullptr && value != nullptr) {
-        if (IsDeniedProp(name)) {
-            value[0] = '\0';
-            return 0;
+    // name==nullptr gives no key to evaluate: fall through to orig rc.
+    if (name == nullptr) return rc;
+    if (name[0] == '\0') {
+        // Real read hands back handles without names for some indices;
+        // resolve against the area instead of leaking rc/value as-is.
+        if (orig_sp_find_nth == nullptr) return rc;
+        for (unsigned i = 0; i < 8192; i++) {
+            const prop_info* cand = orig_sp_find_nth(i);
+            if (cand == nullptr) break;
+            if (cand != pi) continue;
+            char rname[PROP_NAME_MAX] = {};
+            char rval[PROP_VALUE_MAX] = {};
+            if (orig_sp_read(cand, rname, rval) < 0) return rc;
+            return ServeValue(rname, value, rc);
         }
-        std::string spoofed;
-        if (LookupProperty(name, spoofed)) {
-            size_t vlen = spoofed.size();
-            if (vlen > PROP_VALUE_MAX - 1) vlen = PROP_VALUE_MAX - 1;
-            memcpy(value, spoofed.data(), vlen);
-            value[vlen] = '\0';
-            return (int)vlen;
-        }
+        return rc;
     }
-    return rc;
+    return ServeValue(name, value, rc);
 }
 
 // read_callback invokes the user callback synchronously, so this can live on
@@ -160,6 +198,7 @@ struct CbWrapper {
 void CbTrampoline(void* cookie, const char* name, const char* value,
                   uint32_t serial) {
     auto* w = reinterpret_cast<CbWrapper*>(cookie);
+    if (w == nullptr || w->orig == nullptr) return;
     const char* effective_name = (w->synth_name != nullptr) ? w->synth_name : name;
 
     if (IsDeniedProperty(effective_name)) {
@@ -185,11 +224,13 @@ void my_sp_read_callback(const prop_info* pi,
 
     std::string synthName;
     if (IsSynthetic(pi, synthName)) {
-        std::string spoofed;
-        if (LookupProperty(synthName.c_str(), spoofed)) {
-            callback(cookie, synthName.c_str(), spoofed.c_str(), /*serial=*/0);
+        if (IsDeniedProp(synthName.c_str())) {
+            callback(cookie, synthName.c_str(), "", /*serial=*/0);
             return;
         }
+        const std::string spoofed = SyntheticValue(synthName);
+        callback(cookie, synthName.c_str(), spoofed.c_str(), /*serial=*/0);
+        return;
     }
 
     CbWrapper w{};
@@ -214,13 +255,15 @@ struct ForeachCtx {
 void ForeachTrampoline(const prop_info* pi, void* vctx) {
     auto* c = reinterpret_cast<ForeachCtx*>(vctx);
     if (c == nullptr || c->user == nullptr) return;
-    char name[PROP_NAME_MAX];
-    if (orig_sp_read != nullptr) {
-        orig_sp_read(pi, name, nullptr);
-    } else {
+    if (orig_sp_read == nullptr) {
         c->user(pi, c->cookie);
         return;
     }
+    char name[PROP_NAME_MAX] = {};
+    char value[PROP_VALUE_MAX] = {};
+    // orig read with a value buffer: libc only writes name when it can
+    // also deliver a value; guarantees name is NUL-set on success.
+    if (orig_sp_read(pi, name, value) < 0) return;
     if (IsDeniedProp(name)) return;
     c->user(pi, c->cookie);
 }
@@ -242,9 +285,10 @@ const prop_info* my_sp_find_nth(unsigned n) {
     for (unsigned i = 0; i < 8192; i++) {
         const prop_info* pi = orig_sp_find_nth(i);
         if (pi == nullptr) return nullptr;
-        char name[PROP_NAME_MAX];
         if (orig_sp_read != nullptr) {
-            orig_sp_read(pi, name, nullptr);
+            char name[PROP_NAME_MAX] = {};
+            char value[PROP_VALUE_MAX] = {};
+            if (orig_sp_read(pi, name, value) < 0) continue;
             if (IsDeniedProp(name)) continue;
         }
         if (seen == n) return pi;

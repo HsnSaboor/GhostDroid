@@ -59,8 +59,7 @@ public final class DeviceStateHooks {
             return;
         }
         Legacy.safeHook(TAG, "MediaDrm.getPropertyString", () -> {
-            Legacy.findAndHookMethod(drm, "getPropertyString",
-                    String.class,
+            HookFramework.hookAllMethods(drm, "getPropertyString",
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
@@ -71,6 +70,12 @@ public final class DeviceStateHooks {
                                     chain.replaceResult("L1");
                                 } else if ("vendor".equals(key)) {
                                     chain.replaceResult("Google");
+                                } else if ("oemCryptoApiVersion".equals(key)
+                                        && result instanceof String) {
+                                    String v = (String) result;
+                                    if (v == null || v.isEmpty()) {
+                                        chain.replaceResult("15");
+                                    }
                                 } else if ("version".equals(key
                                         ) && result instanceof String) {
                                     String v = (String) result;

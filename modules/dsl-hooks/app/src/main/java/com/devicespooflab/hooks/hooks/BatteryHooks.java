@@ -9,6 +9,9 @@ import com.devicespooflab.hooks.bridge.HookFramework;
 import com.devicespooflab.hooks.bridge.HookContext;
 
 // Live charge level is passthrough; only the design counters are overridden.
+// Every after-hook is fail-closed: try/catch + Legacy.log, original kept
+// on error. getIntProperty/getLongProperty take a single int id (one
+// overload each); isCharging/computeChargeTimeRemaining are no-arg.
 public class BatteryHooks {
 
     private static final String TAG = "DeviceSpoofLab-Battery";
@@ -19,14 +22,21 @@ public class BatteryHooks {
                     int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            int id = chain.arg(0, -1);
-                            if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
-                                long capUah = ConfigManager.getBatteryChargeCounterUah();
-                                chain.replaceResult((int) Math.min(Integer.MAX_VALUE, capUah));
-                            } else if (id == BatteryManager.BATTERY_PROPERTY_CAPACITY) {
-                                chain.replaceResult(85);
-                            } else if (id == BatteryManager.BATTERY_PROPERTY_STATUS) {
-                                chain.replaceResult(BatteryManager.BATTERY_STATUS_DISCHARGING);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                int id = chain.arg(0, -1);
+                                if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
+                                    long capUah = ConfigManager.getBatteryChargeCounterUah();
+                                    chain.replaceResult((int) Math.min(Integer.MAX_VALUE, capUah));
+                                } else if (id == BatteryManager.BATTERY_PROPERTY_CAPACITY) {
+                                    chain.replaceResult(85);
+                                } else if (id == BatteryManager.BATTERY_PROPERTY_STATUS) {
+                                    chain.replaceResult(BatteryManager.BATTERY_STATUS_DISCHARGING);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getIntProperty failed: " + t);
                             }
                         }
                     });
@@ -37,11 +47,18 @@ public class BatteryHooks {
                     int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            int id = chain.arg(0, -1);
-                            if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
-                                chain.replaceResult(ConfigManager.getBatteryChargeCounterUah());
-                            } else if (id == BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER) {
-                                chain.replaceResult(ConfigManager.getBatteryEnergyCounterNwh());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                int id = chain.arg(0, -1);
+                                if (id == BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) {
+                                    chain.replaceResult(ConfigManager.getBatteryChargeCounterUah());
+                                } else if (id == BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER) {
+                                    chain.replaceResult(ConfigManager.getBatteryEnergyCounterNwh());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getLongProperty failed: " + t);
                             }
                         }
                     });
@@ -53,7 +70,34 @@ public class BatteryHooks {
             Legacy.findAndHookMethod(BatteryManager.class, "isCharging",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(false);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(false);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isCharging failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        // BatteryManager.computeChargeTimeRemaining: host rail reports a
+        // bogus remaining-time; a discharging phone with 85% reports -1
+        // (unknown). Fail-closed.
+        Legacy.safeHook(TAG, "BatteryManager.computeChargeTimeRemaining", () -> {
+            Legacy.findAndHookMethod(BatteryManager.class,
+                    "computeChargeTimeRemaining",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(-1L);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": computeChargeTimeRemaining failed: " + t);
+                            }
                         }
                     });
         });
@@ -69,7 +113,14 @@ public class BatteryHooks {
             HookFramework.hookAllMethods(profile, "getBatteryCapacity",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(5000.0);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(5000.0);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getBatteryCapacity failed: " + t);
+                            }
                         }
                     });
         });

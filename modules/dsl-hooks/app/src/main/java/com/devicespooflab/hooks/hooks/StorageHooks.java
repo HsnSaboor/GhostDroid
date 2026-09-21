@@ -14,11 +14,21 @@ public class StorageHooks {
     private static final long BLOCK_SIZE = 4096L;
 
     public static void hook(HookContext lpparam) {
+        // StatFs getters are single-overload each; exact-signature hooks
+        // are correct here (no overloads exist). Every after-hook is
+        // fail-closed: try/catch + Legacy.log, original kept on error.
         Legacy.safeHook(TAG, "StatFs.getBlockSizeLong", () -> {
             Legacy.findAndHookMethod(StatFs.class, "getBlockSizeLong",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(BLOCK_SIZE);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(BLOCK_SIZE);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getBlockSizeLong failed: " + t);
+                            }
                         }
                     });
         });
@@ -27,7 +37,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getBlockCountLong",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageTotalBytes() / BLOCK_SIZE);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageTotalBytes() / BLOCK_SIZE);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getBlockCountLong failed: " + t);
+                            }
                         }
                     });
         });
@@ -36,7 +53,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getAvailableBlocksLong",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAvailableBlocksLong failed: " + t);
+                            }
                         }
                     });
         });
@@ -45,7 +69,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getFreeBlocksLong",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getFreeBlocksLong failed: " + t);
+                            }
                         }
                     });
         });
@@ -54,7 +85,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getTotalBytes",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageTotalBytes());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageTotalBytes());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getTotalBytes failed: " + t);
+                            }
                         }
                     });
         });
@@ -63,7 +101,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getAvailableBytes",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageAvailableBytes());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageAvailableBytes());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAvailableBytes failed: " + t);
+                            }
                         }
                     });
         });
@@ -72,7 +117,14 @@ public class StorageHooks {
             Legacy.findAndHookMethod(StatFs.class, "getFreeBytes",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(ConfigManager.getStorageAvailableBytes());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(ConfigManager.getStorageAvailableBytes());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getFreeBytes failed: " + t);
+                            }
                         }
                     });
         });

@@ -25,7 +25,9 @@ public class PackageInfoHooks {
     private static void hookPackageInfoFields(HookContext lpparam) {
         Class<?> appPm = Legacy.findClassIfExists(
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
-        if (appPm == null) return;
+        if (appPm == null) {
+            return;
+        }
 
         HookFramework.Hook patcher = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
@@ -39,20 +41,19 @@ public class PackageInfoHooks {
             }
         };
 
-        // getPackageInfo(String, int) and getPackageInfo(String, PackageInfoFlags)
-        Legacy.safeHook(TAG, "getPackageInfo(String,int)", () -> {
-            Legacy.findAndHookMethod(appPm, "getPackageInfo",
-                    String.class, int.class, patcher);
+        // getPackageInfo: hook ALL overloads (String,int / String,flags /
+        // getPackageInfoAsUser variants). A per-signature hook misses the
+        // AsUser path detectors use to bypass the base patch. Every
+        // overload returns PackageInfo so one shared patcher covers all.
+        // Fail-closed: patch errors keep the original object.
+        Legacy.safeHook(TAG, "getPackageInfo", () -> {
+            HookFramework.hookAllMethods(appPm, "getPackageInfo", patcher);
         });
-
-        try {
-            Class<?> flags = Legacy.findClassIfExists(
-                    "android.content.pm.PackageManager$PackageInfoFlags", lpparam.classLoader);
-            if (flags != null) {
-                Legacy.findAndHookMethod(appPm, "getPackageInfo",
-                        String.class, flags, patcher);
-            }
-        } catch (Throwable t) { /* Android 13+ overload */ }
+        // AsUser sibling bypasses the base patch on multi-user aware
+        // detectors: same PackageInfo patcher covers every overload.
+        Legacy.safeHook(TAG, "getPackageInfoAsUser", () -> {
+            HookFramework.hookAllMethods(appPm, "getPackageInfoAsUser", patcher);
+        });
 
         // ApplicationInfo.FLAG_DEBUGGABLE leaks a debuggable/eng build:
         // clear it on every getApplicationInfo overload (fail-closed).
@@ -79,15 +80,23 @@ public class PackageInfoHooks {
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
         if (appPm == null) return;
 
+        // Single (String) overload; fail-closed with try/catch + log.
         Legacy.safeHook(TAG, "getInstallerPackageName", () -> {
             Legacy.findAndHookMethod(appPm, "getInstallerPackageName",
                     String.class,
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String packageName = (String) chain.arg(0, null);
-                            if (shouldSpoofInstaller(lpparam, packageName)) {
-                                chain.replaceResult(ConfigManager.getInstallerPackage());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String packageName = (String) chain.arg(0, null);
+                                if (shouldSpoofInstaller(lpparam, packageName)) {
+                                    chain.replaceResult(ConfigManager.getInstallerPackage());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getInstallerPackageName failed: " + t);
                             }
                         }
                     });
@@ -121,11 +130,19 @@ public class PackageInfoHooks {
                 "android.content.pm.InstallSourceInfo", lpparam.classLoader);
         if (sourceInfo == null) return;
 
-        // InstallSourceInfo getters — hook each accessor to return Play Store.
+        // InstallSourceInfo getters — hook each accessor to return Play
+        // Store. No-arg accessors; fail-closed with try/catch + log.
         HookFramework.Hook playStoreHook = new HookFramework.Hook() {
             @Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                chain.replaceResult(ConfigManager.getInstallerPackage());
+                try {
+                    if (error != null) {
+                        return;
+                    }
+                    chain.replaceResult(ConfigManager.getInstallerPackage());
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": InstallSourceInfo getter failed: " + t);
+                }
             }
         };
 

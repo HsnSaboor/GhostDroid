@@ -18,216 +18,36 @@ public class TelephonyHooks {
             return;
         }
 
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getDeviceId",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMEI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
+        // Identity strings pinned to the profile. hookAllMethods covers
+        // every overload at once (no-arg + slot-index + future int/int
+        // forms), so per-overload findAndHookMethod clones cannot drift.
+        // Every after-hook is fail-closed: try/catch + Legacy.log, original
+        // kept on error.
+        pinIdentity(telephonyManager, "getDeviceId", ConfigManager.getIMEI());
+        pinIdentity(telephonyManager, "getImei", ConfigManager.getIMEI());
+        pinIdentity(telephonyManager, "getMeid", ConfigManager.getMEID());
+        pinIdentity(telephonyManager, "getSubscriberId", ConfigManager.getIMSI());
+        pinIdentity(telephonyManager, "getSimSerialNumber", ConfigManager.getICCID());
+        pinIdentity(telephonyManager, "getLine1Number", ConfigManager.getPhoneNumber());
+        // getPhoneNumber (API 33+ TelephonyManager direct): same spoofed
+        // number; hookAllMethods is a no-op where the method is absent.
+        pinIdentity(telephonyManager, "getPhoneNumber", ConfigManager.getPhoneNumber());
 
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getDeviceId", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMEI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getImei",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMEI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getImei", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMEI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getMeid",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getMEID();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getMeid", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getMEID();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSubscriberId",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMSI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSubscriberId", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getIMSI();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSimSerialNumber",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getICCID();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSimSerialNumber", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getICCID();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getLine1Number",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getPhoneNumber();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getLine1Number", int.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String v = ConfigManager.getPhoneNumber();
-                            if (v != null) chain.replaceResult(v);
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        // Hook network operator methods (MCC/MNC)
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getNetworkOperator",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String mccMnc = ConfigManager.getSystemProperty("gsm.operator.numeric", null);
-                            if (mccMnc != null) {
-                                chain.replaceResult(mccMnc);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getNetworkOperatorName",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String operatorName = ConfigManager.getSystemProperty("gsm.operator.alpha", null);
-                            if (operatorName != null) {
-                                chain.replaceResult(operatorName);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSimOperator",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String simMccMnc = ConfigManager.getSystemProperty("gsm.sim.operator.numeric", null);
-                            if (simMccMnc != null) {
-                                chain.replaceResult(simMccMnc);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSimOperatorName",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String simOperatorName = ConfigManager.getSystemProperty("gsm.sim.operator.alpha", null);
-                            if (simOperatorName != null) {
-                                chain.replaceResult(simOperatorName);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getSimCountryIso",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String simCountry = ConfigManager.getSystemProperty("gsm.sim.operator.iso-country", null);
-                            if (simCountry != null) {
-                                chain.replaceResult(simCountry);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
-
-        try {
-            Legacy.findAndHookMethod(telephonyManager, "getNetworkCountryIso",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String networkCountry = ConfigManager.getSystemProperty("gsm.operator.iso-country", null);
-                            if (networkCountry != null) {
-                                chain.replaceResult(networkCountry);
-                            }
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        }
+        // Operator strings pinned to the profile. TelephonyCellHooks owns
+        // the int/subId overloads; hookAllMethods here covers every overload
+        // of each name so no-arg and int forms cannot drift.
+        pinOperator(telephonyManager, "getNetworkOperator",
+                ConfigManager.getSystemProperty("gsm.operator.numeric", null));
+        pinOperator(telephonyManager, "getNetworkOperatorName",
+                ConfigManager.getSystemProperty("gsm.operator.alpha", null));
+        pinOperator(telephonyManager, "getSimOperator",
+                ConfigManager.getSystemProperty("gsm.sim.operator.numeric", null));
+        pinOperator(telephonyManager, "getSimOperatorName",
+                ConfigManager.getSystemProperty("gsm.sim.operator.alpha", null));
+        pinOperator(telephonyManager, "getSimCountryIso",
+                ConfigManager.getSystemProperty("gsm.sim.operator.iso-country", null));
+        pinOperator(telephonyManager, "getNetworkCountryIso",
+                ConfigManager.getSystemProperty("gsm.operator.iso-country", null));
 
         // Android 13+ replaced TelephonyManager.getLine1Number() with
         // SubscriptionManager.getPhoneNumber(int) and getPhoneNumber(int, int).
@@ -236,6 +56,44 @@ public class TelephonyHooks {
         hookPhoneCount(telephonyManager);
         hookHasIccCard(telephonyManager);
         hookNetworkOperatorForPhone(telephonyManager);
+    }
+
+    // Single shared identity pin: covers no-arg + slot-index overloads
+    // via hookAllMethods (delegates to pinTelephonyString).
+    // Fail-closed: errors keep the original value.
+    private static void pinIdentity(Class<?> tm, String name, String value) {
+        pinTelephonyString(tm, name, value);
+    }
+
+    private static void pinOperator(Class<?> tm, String name, String value) {
+        pinTelephonyString(tm, name, value);
+    }
+
+    // Shared TelephonyManager string pin: hookAllMethods covers no-arg
+    // + slot-index + future overloads (identity + operator share it).
+    // Fail-closed: errors keep the original value.
+    private static void pinTelephonyString(Class<?> tm, String name, String value) {
+        final String method = name;
+        Legacy.safeHook("DeviceSpoofLab-Telephony", method, () -> {
+            HookFramework.hookAllMethods(tm, method,
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (value != null) {
+                                    chain.replaceResult(value);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log("DeviceSpoofLab-Telephony"
+                                        + ": " + method + " failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static void hookSimState(Class<?> telephonyManager) {
@@ -334,16 +192,21 @@ public class TelephonyHooks {
                     }
                 }
             };
-            try {
-                Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
-                        int.class, phoneNumberHook);
-            } catch (NoSuchMethodError ignored) {
-            }
-            try {
-                Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
-                        int.class, int.class, phoneNumberHook);
-            } catch (NoSuchMethodError ignored) {
-            }
+            // Exact (int) + (int,int) forms (two overloads only);
+            // fail-closed install with try/catch + Legacy.log.
+            Legacy.safeHook("DeviceSpoofLab-Telephony",
+                    "SubscriptionManager.getPhoneNumber", () -> {
+                try {
+                    Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
+                            int.class, phoneNumberHook);
+                } catch (Throwable ignored) {
+                }
+                try {
+                    Legacy.findAndHookMethod(subscriptionManager, "getPhoneNumber",
+                            int.class, int.class, phoneNumberHook);
+                } catch (Throwable ignored) {
+                }
+            });
 
             Legacy.safeHook("DeviceSpoofLab-Telephony",
                     "getActiveSubscriptionInfoList", () -> {

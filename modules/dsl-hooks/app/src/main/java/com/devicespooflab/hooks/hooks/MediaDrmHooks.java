@@ -20,20 +20,59 @@ public class MediaDrmHooks {
             return;
         }
 
-        try {
-            Legacy.findAndHookMethod(mediaDrmClass, "getPropertyByteArray",
-                    String.class,
+        // getPropertyByteArray has no overloads but hookAllMethods keeps
+        // the install uniform with the sibling hooks (fail-closed).
+        Legacy.safeHook("DeviceSpoofLab-MediaDrm", "getPropertyByteArray", () -> {
+            HookFramework.hookAllMethods(mediaDrmClass, "getPropertyByteArray",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String propertyName = (String) chain.arg(0, null);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String propertyName = (String) chain.arg(0, null);
 
-                            if (DEVICE_UNIQUE_ID.equals(propertyName)) {
-                                byte[] v = ConfigManager.getMediaDrmId();
-                                if (v != null) chain.replaceResult(v);
+                                if (DEVICE_UNIQUE_ID.equals(propertyName)) {
+                                    byte[] v = ConfigManager.getMediaDrmId();
+                                    if (v != null) chain.replaceResult(v);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log("DeviceSpoofLab-MediaDrm"
+                                        + ": getPropertyByteArray failed: " + t);
                             }
                         }
                     });
-        } catch (NoSuchMethodError ignored) {
-        }
+        });
+        // getPropertyString: vendor/securityLevel/oemCryptoApiVersion leak
+        // Widevine SW tags; pin to L1 + stable vendor label. Fail-closed.
+        Legacy.safeHook("DeviceSpoofLab-MediaDrm", "getPropertyString", () -> {
+            HookFramework.hookAllMethods(mediaDrmClass, "getPropertyString",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String key = chain.arg(0, null);
+                                if ("securityLevel".equals(key)) {
+                                    chain.replaceResult("L1");
+                                } else if ("vendor".equals(key)) {
+                                    chain.replaceResult("Google");
+                                } else if ("oemCryptoApiVersion".equals(key)
+                                        && result instanceof String) {
+                                    String v = (String) result;
+                                    if (v == null || v.isEmpty()) {
+                                        chain.replaceResult("15");
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log("DeviceSpoofLab-MediaDrm"
+                                        + ": getPropertyString failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 }

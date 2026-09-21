@@ -120,107 +120,92 @@ public class PackageManagerHooks {
         }
     }
 
+    // hasSystemFeature has (String) + (String,int) overloads: one shared
+    // hookAllMethods install covers both so they cannot drift.
+    // Fail-closed: try/catch + Legacy.log, original kept on error.
     private static void hookHasSystemFeature(Class<?> pmClass) {
-        try {
-            Legacy.findAndHookMethod(pmClass, "hasSystemFeature",
-                String.class,
-                new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String feature = (String) chain.arg(0, null);
+        final HookFramework.Hook featureHook = new HookFramework.Hook() {
+            @Override
+            public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                try {
+                    if (error != null) {
+                        return;
+                    }
+                    String feature = (String) chain.arg(0, null);
 
-                        if (feature == null) {
+                    if (feature == null) {
+                        return;
+                    }
+
+                    for (String denied : DENIED_FEATURES) {
+                        if (feature.toLowerCase(java.util.Locale.US)
+                                .contains(denied.toLowerCase(java.util.Locale.US))) {
+                            chain.replaceResult(false);
                             return;
                         }
-
-                        for (String denied : DENIED_FEATURES) {
-                            if (feature.toLowerCase().contains(denied.toLowerCase())) {
-                                chain.replaceResult(false);
-                                return;
-                            }
-                        }
-
-                        if (PIXEL_7_PRO_FEATURES.contains(feature)) {
-                            chain.replaceResult(true);
-                        }
                     }
-                });
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook hasSystemFeature(String): " + e.getMessage());
-        }
 
-        try {
-            Legacy.findAndHookMethod(pmClass, "hasSystemFeature",
-                String.class, int.class,
-                new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        String feature = (String) chain.arg(0, null);
-
-                        if (feature == null) {
-                            return;
-                        }
-
-                        for (String denied : DENIED_FEATURES) {
-                            if (feature.toLowerCase().contains(denied.toLowerCase())) {
-                                chain.replaceResult(false);
-                                return;
-                            }
-                        }
-
-                        if (PIXEL_7_PRO_FEATURES.contains(feature)) {
-                            chain.replaceResult(true);
-                        }
+                    if (PIXEL_7_PRO_FEATURES.contains(feature)) {
+                        chain.replaceResult(true);
                     }
-                });
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook hasSystemFeature(String, int): " + e.getMessage());
-        }
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": hasSystemFeature failed: " + t);
+                }
+            }
+        };
+        Legacy.safeHook(TAG, "hasSystemFeature", () -> {
+            HookFramework.hookAllMethods(pmClass, "hasSystemFeature", featureHook);
+        });
     }
 
     private static void hookGetSystemAvailableFeatures(Class<?> pmClass) {
-        try {
-            Legacy.findAndHookMethod(pmClass, "getSystemAvailableFeatures",
+        Legacy.safeHook(TAG, "getSystemAvailableFeatures", () -> {
+            HookFramework.hookAllMethods(pmClass, "getSystemAvailableFeatures",
                 new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        Object[] features = (Object[]) result;
-                        if (features == null) {
-                            return;
-                        }
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null
+                                    || !(result instanceof Object[])) {
+                                return;
+                            }
+                            Object[] features = (Object[]) result;
 
-                        Class<?> featureInfoClass = features.getClass().getComponentType();
+                            Class<?> featureInfoClass = features.getClass().getComponentType();
 
-                        List<Object> filtered = new ArrayList<>();
-                        for (Object feature : features) {
-                            try {
-                                String name = (String) Legacy.getObjectField(feature, "name");
-                                if (name != null) {
-                                    boolean isDenied = false;
-                                    for (String denied : DENIED_FEATURES) {
-                                        if (name.toLowerCase().contains(denied.toLowerCase())) {
-                                            isDenied = true;
-                                            break;
+                            List<Object> filtered = new ArrayList<>();
+                            for (Object feature : features) {
+                                try {
+                                    String name = (String) Legacy.getObjectField(feature, "name");
+                                    if (name != null) {
+                                        boolean isDenied = false;
+                                        for (String denied : DENIED_FEATURES) {
+                                            if (name.toLowerCase(java.util.Locale.US).contains(denied.toLowerCase(java.util.Locale.US))) {
+                                                isDenied = true;
+                                                break;
+                                            }
                                         }
-                                    }
-                                    if (!isDenied) {
+                                        if (!isDenied) {
+                                            filtered.add(feature);
+                                        }
+                                    } else {
                                         filtered.add(feature);
                                     }
-                                } else {
+                                } catch (Exception e) {
                                     filtered.add(feature);
                                 }
-                            } catch (Exception e) {
-                                filtered.add(feature);
                             }
-                        }
 
-                        Object typedArray = java.lang.reflect.Array.newInstance(
-                            featureInfoClass, filtered.size());
-                        for (int i = 0; i < filtered.size(); i++) {
-                            java.lang.reflect.Array.set(typedArray, i, filtered.get(i));
+                            Object typedArray = java.lang.reflect.Array.newInstance(
+                                featureInfoClass, filtered.size());
+                            for (int i = 0; i < filtered.size(); i++) {
+                                java.lang.reflect.Array.set(typedArray, i, filtered.get(i));
+                            }
+                            chain.replaceResult(typedArray);
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getSystemAvailableFeatures failed: " + t);
                         }
-                        chain.replaceResult(typedArray);
                     }
                 });
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook getSystemAvailableFeatures(): " + e.getMessage());
-        }
+        });
     }
 }

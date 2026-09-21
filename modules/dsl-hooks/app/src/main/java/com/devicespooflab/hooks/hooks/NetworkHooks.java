@@ -82,42 +82,72 @@ public class NetworkHooks {
                 "android.net.wifi.WifiInfo", lpparam.classLoader);
         if (wifiInfo == null) return;
 
-        Legacy.safeHook(TAG, "WifiInfo.getMacAddress", () -> {
-            Legacy.findAndHookMethod(wifiInfo, "getMacAddress",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                String v = ConfigManager.getWifiMacAddress();
-                                if (v != null) chain.replaceResult(v);
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": WifiInfo.getMacAddress failed: " + t);
-                            }
-                        }
-                    });
-        });
-
-        Legacy.safeHook(TAG, "WifiInfo.getBSSID", () -> {
-            Legacy.findAndHookMethod(wifiInfo, "getBSSID",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                String v = ConfigManager.getWifiBssid();
-                                if (v != null) chain.replaceResult(v);
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": WifiInfo.getBSSID failed: " + t);
-                            }
-                        }
-                    });
-        });
-
+        pinWifiString(wifiInfo, "getMacAddress", ConfigManager.getWifiMacAddress());
+        pinWifiString(wifiInfo, "getBSSID", ConfigManager.getWifiBssid());
+        // getSSID / getRssi / getLinkSpeed / getFrequency / getNetworkId:
+        // sibling scalars detectors read off the same WifiInfo object.
+        // SSID keeps the quoted form; RSSI/link/freq pinned to match the
+        // synthetic AP + spoofWifiInfo field injection. Fail-closed.
         Legacy.safeHook(TAG, "WifiInfo.getSSID", () -> {
-            Legacy.findAndHookMethod(wifiInfo, "getSSID",
+            HookFramework.hookAllMethods(wifiInfo, "getSSID",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
+                                if (error != null) {
+                                    return;
+                                }
                                 chain.replaceResult("\"" + ConfigManager.getWifiSsid() + "\"");
                             } catch (Throwable t) {
                                 Legacy.log(TAG + ": WifiInfo.getSSID failed: " + t);
+                            }
+                        }
+                    });
+        });
+        pinWifiInt(wifiInfo, "getRssi", -55);
+        pinWifiInt(wifiInfo, "getLinkSpeed", 866);
+        pinWifiInt(wifiInfo, "getFrequency", 5180);
+        pinWifiInt(wifiInfo, "getNetworkId", 0);
+    }
+
+    private static void pinWifiInt(Class<?> wifiInfo, String name, int value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "WifiInfo." + method, () -> {
+            HookFramework.hookAllMethods(wifiInfo, method,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(value);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": WifiInfo." + method + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // (SSID hook folded into the block above; pinWifiString shared helper
+    // lives below.)
+
+    // Single shared WifiInfo string pin: hookAllMethods covers every
+    // overload so future (int)-suffixed forms cannot bypass. Fail-closed.
+    private static void pinWifiString(Class<?> wifiInfo, String name, String value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "WifiInfo." + method, () -> {
+            HookFramework.hookAllMethods(wifiInfo, method,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (value != null) {
+                                    chain.replaceResult(value);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": WifiInfo." + method + " failed: " + t);
                             }
                         }
                     });
@@ -129,8 +159,10 @@ public class NetworkHooks {
                 "android.net.wifi.WifiManager", lpparam.classLoader);
         if (wm == null) return;
 
+        // getScanResults: hookAllMethods covers all overloads; same
+        // single-AP synthetic policy for each.
         Legacy.safeHook(TAG, "WifiManager.getScanResults", () -> {
-            Legacy.findAndHookMethod(wm, "getScanResults",
+            HookFramework.hookAllMethods(wm, "getScanResults",
                     new HookFramework.Hook() {@Override
                         @SuppressWarnings("unchecked")
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
@@ -154,8 +186,10 @@ public class NetworkHooks {
                     });
         });
 
+        // isWifiEnabled: hookAllMethods covers all overloads (some
+        // releases add a calling-package variant).
         Legacy.safeHook(TAG, "WifiManager.isWifiEnabled", () -> {
-            Legacy.findAndHookMethod(wm, "isWifiEnabled",
+            HookFramework.hookAllMethods(wm, "isWifiEnabled",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -180,8 +214,9 @@ public class NetworkHooks {
                     });
         });
 
+        // getWifiState: hookAllMethods covers all overloads.
         Legacy.safeHook(TAG, "WifiManager.getWifiState", () -> {
-            Legacy.findAndHookMethod(wm, "getWifiState",
+            HookFramework.hookAllMethods(wm, "getWifiState",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -193,8 +228,10 @@ public class NetworkHooks {
                     });
         });
 
+        // getConnectionInfo: hookAllMethods covers all overloads; field
+        // injection on the delivered WifiInfo.
         Legacy.safeHook(TAG, "WifiManager.getConnectionInfo", () -> {
-            Legacy.findAndHookMethod(wm, "getConnectionInfo",
+            HookFramework.hookAllMethods(wm, "getConnectionInfo",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -383,40 +420,48 @@ public class NetworkHooks {
                 "android.bluetooth.BluetoothAdapter", lpparam.classLoader);
         if (ba == null) return;
 
-        Legacy.safeHook(TAG, "BluetoothAdapter.getAddress", () -> {
-            Legacy.findAndHookMethod(ba, "getAddress",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                String mac = ConfigManager.getBluetoothMacAddress();
-                                if (mac != null) chain.replaceResult(mac.toUpperCase());
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": BluetoothAdapter.getAddress failed: " + t);
-                            }
-                        }
-                    });
-        });
-
-        Legacy.safeHook(TAG, "BluetoothAdapter.getName", () -> {
-            Legacy.findAndHookMethod(ba, "getName",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                chain.replaceResult(ConfigManager.getBluetoothName());
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": BluetoothAdapter.getName failed: " + t);
-                            }
-                        }
-                    });
-        });
+        pinBtString(ba, "getAddress", true);
+        pinBtString(ba, "getName", false);
 
         // Settings.Secure.bluetooth_address path — settings hook handles strings,
         // but BluetoothAdapter.getAddress hides the well-known reflection too.
     }
 
+    // Single shared BluetoothAdapter string pin: hookAllMethods covers all
+    // overloads. MAC upper-cased to match framework form; name verbatim.
+    // Fail-closed: errors keep the original value.
+    private static void pinBtString(Class<?> ba, String name, boolean isMac) {
+        final String method = name;
+        final boolean mac = isMac;
+        Legacy.safeHook(TAG, "BluetoothAdapter." + method, () -> {
+            HookFramework.hookAllMethods(ba, method,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (mac) {
+                                    String addr = ConfigManager.getBluetoothMacAddress();
+                                    if (addr != null) {
+                                        chain.replaceResult(addr.toUpperCase(
+                                                java.util.Locale.US));
+                                    }
+                                } else {
+                                    chain.replaceResult(ConfigManager.getBluetoothName());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": BluetoothAdapter." + method + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
     private static void hookNetworkInterface() {
+        // getHardwareAddress: hookAllMethods covers all overloads.
         Legacy.safeHook(TAG, "NetworkInterface.getHardwareAddress", () -> {
-            Legacy.findAndHookMethod(NetworkInterface.class, "getHardwareAddress",
+            HookFramework.hookAllMethods(NetworkInterface.class, "getHardwareAddress",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -446,8 +491,9 @@ public class NetworkHooks {
                     });
         });
 
+        // getNetworkInterfaces: hookAllMethods covers all overloads.
         Legacy.safeHook(TAG, "NetworkInterface.getNetworkInterfaces", () -> {
-            Legacy.findAndHookMethod(NetworkInterface.class, "getNetworkInterfaces",
+            HookFramework.hookAllMethods(NetworkInterface.class, "getNetworkInterfaces",
                     new HookFramework.Hook() {@Override
                         @SuppressWarnings("unchecked")
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
@@ -756,8 +802,10 @@ public class NetworkHooks {
         if (caps == null) {
             return;
         }
+        // NetworkCapabilities.hasTransport has (int) and (int,int)
+        // overloads on newer releases: hookAllMethods covers both.
         Legacy.safeHook(TAG, "NetworkCapabilities.hasTransport", () -> {
-            Legacy.findAndHookMethod(caps, "hasTransport", int.class,
+            HookFramework.hookAllMethods(caps, "hasTransport",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -776,6 +824,11 @@ public class NetworkHooks {
         });
     }
 
+    // NetworkInfo getters: single no-arg overloads each, but installed
+    // via hookAllMethods so signature drift cannot leave a gap.
+    // isConnectedOrConnecting / isAvailable / isRoaming / isFailover
+    // complete the boolean state shape ACE reads.
+    // Fail-closed: errors keep the original value.
     private static void hookNetworkInfo(HookContext lpparam) {
         Class<?> ni = Legacy.findClassIfExists(
                 "android.net.NetworkInfo", lpparam.classLoader);
@@ -783,66 +836,68 @@ public class NetworkHooks {
             return;
         }
 
-        Legacy.safeHook(TAG, "NetworkInfo.getType", () -> {
-            Legacy.findAndHookMethod(ni, "getType",
+        pinNetworkInt(ni, "getType", TYPE_WIFI);
+        pinNetworkString(ni, "getTypeName", "WIFI");
+        pinNetworkInt(ni, "getSubtype", NETWORK_TYPE_LTE);
+        pinNetworkString(ni, "getSubtypeName", "LTE");
+        pinNetworkBoolean(ni, "isConnected", true);
+        pinNetworkBoolean(ni, "isConnectedOrConnecting", true);
+        pinNetworkBoolean(ni, "isAvailable", true);
+        pinNetworkBoolean(ni, "isRoaming", false);
+        pinNetworkBoolean(ni, "isFailover", false);
+    }
+
+    private static void pinNetworkInt(Class<?> ni, String name, int value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "NetworkInfo." + method, () -> {
+            HookFramework.hookAllMethods(ni, method,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
-                                chain.replaceResult(TYPE_WIFI);
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(value);
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": NetworkInfo.getType failed: " + t);
+                                Legacy.log(TAG + ": NetworkInfo." + method + " failed: " + t);
                             }
                         }
                     });
         });
+    }
 
-        Legacy.safeHook(TAG, "NetworkInfo.getTypeName", () -> {
-            Legacy.findAndHookMethod(ni, "getTypeName",
+    private static void pinNetworkString(Class<?> ni, String name, String value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "NetworkInfo." + method, () -> {
+            HookFramework.hookAllMethods(ni, method,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
-                                chain.replaceResult("WIFI");
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(value);
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": NetworkInfo.getTypeName failed: " + t);
+                                Legacy.log(TAG + ": NetworkInfo." + method + " failed: " + t);
                             }
                         }
                     });
         });
+    }
 
-        Legacy.safeHook(TAG, "NetworkInfo.getSubtype", () -> {
-            Legacy.findAndHookMethod(ni, "getSubtype",
+    private static void pinNetworkBoolean(Class<?> ni, String name, boolean value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "NetworkInfo." + method, () -> {
+            HookFramework.hookAllMethods(ni, method,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
-                                chain.replaceResult(NETWORK_TYPE_LTE);
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(value);
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": NetworkInfo.getSubtype failed: " + t);
-                            }
-                        }
-                    });
-        });
-
-        Legacy.safeHook(TAG, "NetworkInfo.getSubtypeName", () -> {
-            Legacy.findAndHookMethod(ni, "getSubtypeName",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                chain.replaceResult("LTE");
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": NetworkInfo.getSubtypeName failed: " + t);
-                            }
-                        }
-                    });
-        });
-
-        Legacy.safeHook(TAG, "NetworkInfo.isConnected", () -> {
-            Legacy.findAndHookMethod(ni, "isConnected",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            try {
-                                chain.replaceResult(true);
-                            } catch (Throwable t) {
-                                Legacy.log(TAG + ": NetworkInfo.isConnected failed: " + t);
+                                Legacy.log(TAG + ": NetworkInfo." + method + " failed: " + t);
                             }
                         }
                     });
@@ -856,7 +911,7 @@ public class NetworkHooks {
             return;
         }
         Legacy.safeHook(TAG, "LinkProperties.getInterfaceName", () -> {
-            Legacy.findAndHookMethod(lp, "getInterfaceName",
+            HookFramework.hookAllMethods(lp, "getInterfaceName",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -870,6 +925,109 @@ public class NetworkHooks {
                         }
                     });
         });
+        // getLinkAddresses / getDnsServers / getRoutes / getDomains /
+        // getDhcpServerAddress: host LAN values leak through these lists.
+        // Rewrite eth-anchored entries to the phone-plausible 192.168.1.x
+        // LAN; fail-closed (errors keep the original list).
+        rewriteLinkAddressList(lp, "getLinkAddresses", "192.168.1.50", 24);
+        rewriteLinkAddressList(lp, "getDnsServers", "8.8.8.8", -1);
+        pinLinkString(lp, "getDomains", "lan");
+        pinLinkString(lp, "getDhcpServerAddress", "192.168.1.1");
+    }
+
+    // Rewrites an InetAddress-returning LinkProperties getter: replaces any
+    // host-leak entry with the spoofed literal. Fail-closed.
+    private static void pinLinkString(Class<?> lp, String name, String literal) {
+        final String method = name;
+        Legacy.safeHook(TAG, "LinkProperties." + method, () -> {
+            HookFramework.hookAllMethods(lp, method,
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null || result == null) {
+                                    return;
+                                }
+                                Object spoofed = Legacy.callStaticMethod(
+                                        java.net.InetAddress.class,
+                                        "getByName", literal);
+                                if (spoofed != null) {
+                                    chain.replaceResult(spoofed);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": LinkProperties." + method
+                                        + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void rewriteLinkAddressList(Class<?> lp, String name,
+            String literal, int prefix) {
+        final String method = name;
+        Legacy.safeHook(TAG, "LinkProperties." + method, () -> {
+            HookFramework.hookAllMethods(lp, method,
+                    new HookFramework.Hook() {
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof java.util.List)) {
+                                    return;
+                                }
+                                java.util.List<?> orig =
+                                        (java.util.List<?>) result;
+                                if (orig.isEmpty()) {
+                                    return;
+                                }
+                                Object spoofedAddr = Legacy.callStaticMethod(
+                                        java.net.InetAddress.class,
+                                        "getByName", literal);
+                                if (spoofedAddr == null) {
+                                    return;
+                                }
+                                java.util.List<Object> out =
+                                        new java.util.ArrayList<>(orig.size());
+                                for (Object entry : orig) {
+                                    if (entry instanceof java.net.InetAddress) {
+                                        out.add(spoofAddrFor(entry,
+                                                (java.net.InetAddress) spoofedAddr,
+                                                prefix));
+                                    } else {
+                                        out.add(entry);
+                                    }
+                                }
+                                chain.replaceResult(out);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": LinkProperties." + method
+                                        + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Preserves the entry shape: LinkAddress stays a LinkAddress (with the
+    // spoofed prefix), plain InetAddress entries become the spoofed addr.
+    private static Object spoofAddrFor(Object entry,
+            java.net.InetAddress spoofed, int prefix) {
+        try {
+            if (prefix >= 0
+                    && "android.net.LinkAddress".equals(
+                            entry.getClass().getName())) {
+                java.lang.reflect.Constructor<?> c =
+                        entry.getClass().getDeclaredConstructor(
+                                java.net.InetAddress.class, int.class);
+                c.setAccessible(true);
+                return c.newInstance(spoofed, prefix);
+            }
+        } catch (Throwable ignored) {
+        }
+        return spoofed;
     }
 
     private static void hookTelephonyNet(HookContext lpparam) {

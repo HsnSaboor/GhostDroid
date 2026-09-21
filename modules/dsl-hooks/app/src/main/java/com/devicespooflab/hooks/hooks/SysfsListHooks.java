@@ -73,109 +73,138 @@ public class SysfsListHooks {
         return fakeListing(path) != null;
     }
 
+    // File.listFiles/list: three + two overloads respectively, each
+    // exact-signature (overloads differ by filter type). Fail-closed:
+    // every after-hook wrapped in try/catch + Legacy.log, installs via
+    // safeHook, original listing kept on error.
     private static void hookListFiles() {
-        try {
+        Legacy.safeHook(TAG, "File.listFiles", () -> {
             Legacy.findAndHookMethod(File.class, "listFiles",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            File self = (File) chain.thisObject();
-                            if (self == null) return;
-                            String[] fake = fakeListing(self.getPath());
-                            if (fake == null) return;
-                            File[] out = new File[fake.length];
-                            for (int i = 0; i < fake.length; i++) {
-                                out[i] = new File(self, fake[i]);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                File self = (File) chain.thisObject();
+                                if (self == null) return;
+                                String[] fake = fakeListing(self.getPath());
+                                if (fake == null) return;
+                                File[] out = new File[fake.length];
+                                for (int i = 0; i < fake.length; i++) {
+                                    out[i] = new File(self, fake[i]);
+                                }
+                                chain.replaceResult(out);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": File.listFiles failed: " + t);
                             }
-                            chain.replaceResult(out);
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook File.listFiles: " + t);
-        }
-        try {
+        });
+        Legacy.safeHook(TAG, "File.listFiles(FileFilter)", () -> {
             Legacy.findAndHookMethod(File.class, "listFiles",
                     FileFilter.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            File self = (File) chain.thisObject();
-                            if (self == null) return;
-                            String[] fake = fakeListing(self.getPath());
-                            if (fake == null) return;
-                            FileFilter filter = (FileFilter) chain.arg(0, null);
-                            java.util.ArrayList<File> out = new java.util.ArrayList<>();
-                            for (String name : fake) {
-                                File f = new File(self, name);
-                                if (filter == null || filter.accept(f)) out.add(f);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                File self = (File) chain.thisObject();
+                                if (self == null) return;
+                                String[] fake = fakeListing(self.getPath());
+                                if (fake == null) return;
+                                FileFilter filter = (FileFilter) chain.arg(0, null);
+                                java.util.ArrayList<File> out = new java.util.ArrayList<>();
+                                for (String name : fake) {
+                                    File f = new File(self, name);
+                                    if (filter == null || filter.accept(f)) out.add(f);
+                                }
+                                chain.replaceResult(out.toArray(new File[0]));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": File.listFiles(FileFilter) failed: " + t);
                             }
-                            chain.replaceResult(out.toArray(new File[0]));
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook File.listFiles(FileFilter): " + t);
-        }
-        try {
+        });
+        Legacy.safeHook(TAG, "File.listFiles(FilenameFilter)", () -> {
             Legacy.findAndHookMethod(File.class, "listFiles",
                     FilenameFilter.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            File self = (File) chain.thisObject();
-                            if (self == null) return;
-                            String[] fake = fakeListing(self.getPath());
-                            if (fake == null) return;
-                            FilenameFilter filter = (FilenameFilter) chain.arg(0, null);
-                            java.util.ArrayList<File> out = new java.util.ArrayList<>();
-                            for (String name : fake) {
-                                if (filter == null
-                                        || filter.accept(self, name)) {
-                                    out.add(new File(self, name));
+                            try {
+                                if (error != null) {
+                                    return;
                                 }
+                                File self = (File) chain.thisObject();
+                                if (self == null) return;
+                                String[] fake = fakeListing(self.getPath());
+                                if (fake == null) return;
+                                FilenameFilter filter = (FilenameFilter) chain.arg(0, null);
+                                java.util.ArrayList<File> out = new java.util.ArrayList<>();
+                                for (String name : fake) {
+                                    if (filter == null
+                                            || filter.accept(self, name)) {
+                                        out.add(new File(self, name));
+                                    }
+                                }
+                                chain.replaceResult(out.toArray(new File[0]));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": File.listFiles(FilenameFilter) failed: " + t);
                             }
-                            chain.replaceResult(out.toArray(new File[0]));
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook File.listFiles(FilenameFilter): " + t);
-        }
+        });
     }
 
     private static void hookList() {
-        try {
+        Legacy.safeHook(TAG, "File.list", () -> {
             Legacy.findAndHookMethod(File.class, "list",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            File self = (File) chain.thisObject();
-                            if (self == null) return;
-                            String[] fake = fakeListing(self.getPath());
-                            if (fake == null) return;
-                            chain.replaceResult(fake.clone());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                File self = (File) chain.thisObject();
+                                if (self == null) return;
+                                String[] fake = fakeListing(self.getPath());
+                                if (fake == null) return;
+                                chain.replaceResult(fake.clone());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": File.list failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook File.list: " + t);
-        }
-        try {
+        });
+        Legacy.safeHook(TAG, "File.list(FilenameFilter)", () -> {
             Legacy.findAndHookMethod(File.class, "list",
                     FilenameFilter.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            File self = (File) chain.thisObject();
-                            if (self == null) return;
-                            if (!isMasked(self.getPath())) return;
-                            String[] fake = fakeListing(self.getPath());
-                            FilenameFilter filter = (FilenameFilter) chain.arg(0, null);
-                            if (filter == null) {
-                                chain.replaceResult(fake.clone());
-                                return;
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                File self = (File) chain.thisObject();
+                                if (self == null) return;
+                                if (!isMasked(self.getPath())) return;
+                                String[] fake = fakeListing(self.getPath());
+                                FilenameFilter filter = (FilenameFilter) chain.arg(0, null);
+                                if (filter == null) {
+                                    chain.replaceResult(fake.clone());
+                                    return;
+                                }
+                                java.util.ArrayList<String> out = new java.util.ArrayList<>();
+                                for (String name : fake) {
+                                    if (filter.accept(self, name)) out.add(name);
+                                }
+                                chain.replaceResult(out.toArray(new String[0]));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": File.list(FilenameFilter) failed: " + t);
                             }
-                            java.util.ArrayList<String> out = new java.util.ArrayList<>();
-                            for (String name : fake) {
-                                if (filter.accept(self, name)) out.add(name);
-                            }
-                            chain.replaceResult(out.toArray(new String[0]));
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook File.list(FilenameFilter): " + t);
-        }
+        });
     }
 }

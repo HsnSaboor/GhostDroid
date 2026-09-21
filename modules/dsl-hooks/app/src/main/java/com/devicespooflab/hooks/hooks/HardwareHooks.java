@@ -156,79 +156,111 @@ public class HardwareHooks {
         if (!RUNTIME_CORES_HOOKED.compareAndSet(false, true)) {
             return;
         }
-        try {
-            Legacy.findAndHookMethod(Runtime.class, "availableProcessors",
+        // availableProcessors: single no-arg overload; hookAllMethods
+        // covers uniformly. Fail-closed: try/catch + Legacy.log.
+        Legacy.safeHook(TAG, "Runtime.availableProcessors", () -> {
+            HookFramework.hookAllMethods(Runtime.class, "availableProcessors",
                 new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        chain.replaceResult(ConfigManager.getCpuCoreCount());
-                    }
-                });
-        } catch (Exception e) {
-            RUNTIME_CORES_HOOKED.set(false);
-            Legacy.log(TAG + ": Failed to hook Runtime.availableProcessors(): " + e.getMessage());
-        }
-    }
-
-    private static void hookActivityManagerMemory(HookContext lpparam) {
-        try {
-            Class<?> activityManagerClass = Legacy.findClassIfExists(
-                "android.app.ActivityManager", lpparam.classLoader);
-
-            if (activityManagerClass == null) {
-                return;
-            }
-            if (!HOOKED_ACTIVITY_MANAGER_CLASSES.add(activityManagerClass)) {
-                return;
-            }
-
-            Legacy.findAndHookMethod(activityManagerClass, "getMemoryInfo",
-                ActivityManager.MemoryInfo.class,
-                new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        ActivityManager.MemoryInfo memInfo = (ActivityManager.MemoryInfo) chain.arg(0, null);
-                        if (memInfo != null) {
-                            long originalTotal = memInfo.totalMem;
-                            long configuredTotal = Math.max(0L, ConfigManager.getMemoryTotalBytes());
-                            long configuredAvailable = Math.max(0L, ConfigManager.getMemoryAvailableKb() * 1024L);
-                            memInfo.totalMem = configuredTotal;
-                            if (originalTotal > 0) {
-                                long originalAvailable = Math.max(0L,
-                                        Math.min(originalTotal, memInfo.availMem));
-                                double availableRatio = (double) originalAvailable / originalTotal;
-                                memInfo.availMem = Math.min(configuredTotal,
-                                        (long) (configuredTotal * availableRatio));
-                            } else {
-                                memInfo.availMem = Math.min(configuredTotal, configuredAvailable);
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null) {
+                                return;
                             }
+                            chain.replaceResult(ConfigManager.getCpuCoreCount());
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": availableProcessors failed: " + t);
                         }
                     }
                 });
+        });
+    }
 
+    private static void hookActivityManagerMemory(HookContext lpparam) {
+        Class<?> activityManagerClass = Legacy.findClassIfExists(
+            "android.app.ActivityManager", lpparam.classLoader);
+
+        if (activityManagerClass == null) {
+            return;
+        }
+        if (!HOOKED_ACTIVITY_MANAGER_CLASSES.add(activityManagerClass)) {
+            return;
+        }
+
+        // getMemoryInfo(MemoryInfo) single overload; no-arg memory-class
+        // getters likewise. Fail-closed: try/catch + Legacy.log inside
+        // every after-hook, installs via safeHook.
+        Legacy.safeHook(TAG, "ActivityManager.getMemoryInfo", () -> {
+            Legacy.findAndHookMethod(activityManagerClass, "getMemoryInfo",
+                ActivityManager.MemoryInfo.class,
+                new HookFramework.Hook() {@Override
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null) {
+                                return;
+                            }
+                            ActivityManager.MemoryInfo memInfo = (ActivityManager.MemoryInfo) chain.arg(0, null);
+                            if (memInfo != null) {
+                                long originalTotal = memInfo.totalMem;
+                                long configuredTotal = Math.max(0L, ConfigManager.getMemoryTotalBytes());
+                                long configuredAvailable = Math.max(0L, ConfigManager.getMemoryAvailableKb() * 1024L);
+                                memInfo.totalMem = configuredTotal;
+                                if (originalTotal > 0) {
+                                    long originalAvailable = Math.max(0L,
+                                            Math.min(originalTotal, memInfo.availMem));
+                                    double availableRatio = (double) originalAvailable / originalTotal;
+                                    memInfo.availMem = Math.min(configuredTotal,
+                                            (long) (configuredTotal * availableRatio));
+                                } else {
+                                    memInfo.availMem = Math.min(configuredTotal, configuredAvailable);
+                                }
+                            }
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getMemoryInfo failed: " + t);
+                        }
+                    }
+                });
+        });
+
+        Legacy.safeHook(TAG, "ActivityManager.getMemoryClass", () -> {
             Legacy.findAndHookMethod(activityManagerClass, "getMemoryClass",
                 new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        chain.replaceResult(ConfigManager.getMemoryClassMb());
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null) {
+                                return;
+                            }
+                            chain.replaceResult(ConfigManager.getMemoryClassMb());
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getMemoryClass failed: " + t);
+                        }
                     }
                 });
+        });
 
+        Legacy.safeHook(TAG, "ActivityManager.getLargeMemoryClass", () -> {
             Legacy.findAndHookMethod(activityManagerClass, "getLargeMemoryClass",
                 new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        chain.replaceResult(ConfigManager.getLargeMemoryClassMb());
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null) {
+                                return;
+                            }
+                            chain.replaceResult(ConfigManager.getLargeMemoryClassMb());
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getLargeMemoryClass failed: " + t);
+                        }
                     }
                 });
-
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook ActivityManager memory: " + e.getMessage());
-        }
+        });
     }
 
     private static void hookDebuggerState() {
         // ACE DEX anti-debug: isDebuggerConnected / waitingForDebugger leak
         // the LSPosed/Vector JDWP session. A user build has no debugger.
-        // Fail-closed: errors keep the original value.
+        // Single no-arg overloads each; hookAllMethods keeps the install
+        // uniform. Fail-closed: errors keep the original value.
         Legacy.safeHook(TAG, "Debug.isDebuggerConnected", () -> {
-            Legacy.findAndHookMethod(Debug.class, "isDebuggerConnected",
+            HookFramework.hookAllMethods(Debug.class, "isDebuggerConnected",
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
@@ -246,7 +278,7 @@ public class HardwareHooks {
                     });
         });
         Legacy.safeHook(TAG, "Debug.waitingForDebugger", () -> {
-            Legacy.findAndHookMethod(Debug.class, "waitingForDebugger",
+            HookFramework.hookAllMethods(Debug.class, "waitingForDebugger",
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
@@ -269,16 +301,23 @@ public class HardwareHooks {
         if (!DEBUG_MEMORY_HOOKED.compareAndSet(false, true)) {
             return;
         }
-        try {
+        // getNativeHeapSize: single no-arg overload. Fail-closed.
+        Legacy.safeHook(TAG, "Debug.getNativeHeapSize", () -> {
             Legacy.findAndHookMethod(Debug.class, "getNativeHeapSize",
                 new HookFramework.Hook() {@Override
-                    public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                        long originalSize = (Long) result;
-                        chain.replaceResult(originalSize * Math.max(1, ConfigManager.getNativeHeapScale()));
+                    public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                        try {
+                            if (error != null
+                                    || !(result instanceof Long)) {
+                                return;
+                            }
+                            long originalSize = (Long) result;
+                            chain.replaceResult(originalSize * Math.max(1, ConfigManager.getNativeHeapScale()));
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getNativeHeapSize failed: " + t);
+                        }
                     }
                 });
-        } catch (Exception e) {
-            DEBUG_MEMORY_HOOKED.set(false);
-        }
+        });
     }
 }

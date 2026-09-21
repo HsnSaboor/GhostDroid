@@ -34,7 +34,14 @@ public class BatteryIntentHooks {
     private static void hookRegisterReceiver(HookContext lpparam) {
         HookFramework.Hook rewrite = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                rewriteBatteryIntent((Intent) result);
+                try {
+                    if (error != null || !(result instanceof Intent)) {
+                        return;
+                    }
+                    rewriteBatteryIntent((Intent) result);
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": registerReceiver rewrite failed: " + t);
+                }
             }
         };
         // registerReceiver overloads vary by SDK — hook all, not each one.
@@ -67,13 +74,20 @@ public class BatteryIntentHooks {
         if (intentClass == null) return;
         HookFramework.Hook intSpoof = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                Object self = chain.thisObject();
-                if (!(self instanceof Intent)) return;
-                Intent intent = (Intent) self;
-                if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
-                String key = (String) chain.arg(0, null);
-                Integer spoofed = spoofedIntExtra(key);
-                if (spoofed != null) chain.replaceResult(spoofed);
+                try {
+                    if (error != null) {
+                        return;
+                    }
+                    Object self = chain.thisObject();
+                    if (!(self instanceof Intent)) return;
+                    Intent intent = (Intent) self;
+                    if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
+                    String key = (String) chain.arg(0, null);
+                    Integer spoofed = spoofedIntExtra(key);
+                    if (spoofed != null) chain.replaceResult(spoofed);
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": getIntExtra spoof failed: " + t);
+                }
             }
         };
         Legacy.safeHook(TAG, "Intent.getIntExtra", () -> {
@@ -82,13 +96,20 @@ public class BatteryIntentHooks {
         });
         HookFramework.Hook stringSpoof = new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                Object self = chain.thisObject();
-                if (!(self instanceof Intent)) return;
-                Intent intent = (Intent) self;
-                if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
-                String key = (String) chain.arg(0, null);
-                if (BatteryManager.EXTRA_TECHNOLOGY.equals(key)) {
-                    chain.replaceResult("Li-ion");
+                try {
+                    if (error != null) {
+                        return;
+                    }
+                    Object self = chain.thisObject();
+                    if (!(self instanceof Intent)) return;
+                    Intent intent = (Intent) self;
+                    if (!Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) return;
+                    String key = (String) chain.arg(0, null);
+                    if (BatteryManager.EXTRA_TECHNOLOGY.equals(key)) {
+                        chain.replaceResult("Li-ion");
+                    }
+                } catch (Throwable t) {
+                    Legacy.log(TAG + ": getStringExtra spoof failed: " + t);
                 }
             }
         };

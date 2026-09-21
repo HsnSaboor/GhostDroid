@@ -45,30 +45,44 @@ public class AdvertisingIdHooks {
                 "com.google.android.gms.ads.identifier.AdvertisingIdClient$Info",
                 lpparam.classLoader);
         if (advertisingIdInfoClass != null) {
-            try {
-                Legacy.findAndHookMethod(advertisingIdInfoClass, "getId",
+            // Client-side GAID: Info.getId single no-arg overload +
+            // (String,boolean) ctor arg rewrite. hookAllMethods keeps the
+            // install uniform; fail-closed with try/catch + Legacy.log.
+            Legacy.safeHook("DeviceSpoofLab-GAID", "Info.getId", () -> {
+                HookFramework.hookAllMethods(advertisingIdInfoClass, "getId",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                String v = ConfigManager.getGAID();
-                                if (v != null) chain.replaceResult(v);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    String v = ConfigManager.getGAID();
+                                    if (v != null) chain.replaceResult(v);
+                                } catch (Throwable t) {
+                                    Legacy.log("DeviceSpoofLab-GAID"
+                                            + ": Info.getId failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
             // Some callers read the adId field via reflection or through the
             // cached Info instance without invoking getId(). Rewriting the
             // constructor argument means any accessor sees the spoofed value.
-            try {
+            Legacy.safeHook("DeviceSpoofLab-GAID", "Info.ctor", () -> {
                 Legacy.findAndHookConstructor(advertisingIdInfoClass,
                         String.class, boolean.class,
                         new HookFramework.BeforeHook() {@Override
                             public void before(HookFramework.HookChain chain) {
-                                String v = ConfigManager.getGAID();
-                                if (v != null) chain.setArg(0, v);
+                                try {
+                                    String v = ConfigManager.getGAID();
+                                    if (v != null) chain.setArg(0, v);
+                                } catch (Throwable t) {
+                                    Legacy.log("DeviceSpoofLab-GAID"
+                                            + ": Info.ctor failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
         }
 
         // AIDL stub proxy — covers callers that bypass the Info class and
@@ -77,16 +91,23 @@ public class AdvertisingIdHooks {
                 "com.google.android.gms.ads.identifier.internal.IAdvertisingIdService$Stub$Proxy",
                 lpparam.classLoader);
         if (adIdServiceStub != null) {
-            try {
-                Legacy.findAndHookMethod(adIdServiceStub, "getId",
+            Legacy.safeHook("DeviceSpoofLab-GAID", "StubProxy.getId", () -> {
+                HookFramework.hookAllMethods(adIdServiceStub, "getId",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                String v = ConfigManager.getGAID();
-                                if (v != null) chain.replaceResult(v);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    String v = ConfigManager.getGAID();
+                                    if (v != null) chain.replaceResult(v);
+                                } catch (Throwable t) {
+                                    Legacy.log("DeviceSpoofLab-GAID"
+                                            + ": StubProxy.getId failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
         }
 
         // Android 14+ Privacy Sandbox AdId. The framework constructs this
@@ -95,24 +116,36 @@ public class AdvertisingIdHooks {
         Class<?> adIdClass = Legacy.findClassIfExists(
                 "android.adservices.adid.AdId", lpparam.classLoader);
         if (adIdClass != null) {
-            try {
-                Legacy.findAndHookMethod(adIdClass, "getAdId",
+            Legacy.safeHook("DeviceSpoofLab-GAID", "AdId.getAdId", () -> {
+                HookFramework.hookAllMethods(adIdClass, "getAdId",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                String v = ConfigManager.getGAID();
-                                if (v != null) chain.replaceResult(v);
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    String v = ConfigManager.getGAID();
+                                    if (v != null) chain.replaceResult(v);
+                                } catch (Throwable t) {
+                                    Legacy.log("DeviceSpoofLab-GAID"
+                                            + ": AdId.getAdId failed: " + t);
+                                }
                             }
                         });
-            } catch (NoSuchMethodError ignored) {
-            }
+            });
             for (java.lang.reflect.Constructor<?> c : adIdClass.getDeclaredConstructors()) {
                 Class<?>[] types = c.getParameterTypes();
                 if (types.length >= 1 && types[0] == String.class) {
                     try {
                         Legacy.hookMethod(c, new HookFramework.BeforeHook() {@Override
                             public void before(HookFramework.HookChain chain) {
-                                String v = ConfigManager.getGAID();
-                                if (v != null) chain.setArg(0, v);
+                                try {
+                                    String v = ConfigManager.getGAID();
+                                    if (v != null) chain.setArg(0, v);
+                                } catch (Throwable t) {
+                                    Legacy.log("DeviceSpoofLab-GAID"
+                                            + ": AdId.ctor failed: " + t);
+                                }
                             }
                         });
                     } catch (Throwable ignored) {
@@ -201,16 +234,19 @@ public class AdvertisingIdHooks {
     private static HookFramework.Hook watchForStub() {
         return new HookFramework.Hook() {@Override
             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                if (sWatcherRetired.get()) return;
-                // Retire on a time budget so a renamed (never-matching) service
-                // can't keep us intercepting class loads for the whole process.
-                // Overflow-safe nanoTime comparison.
-                if (System.nanoTime() - sWatcherDeadlineNanos > 0) {
-                    removeWatchers();
-                    return;
-                }
                 try {
-                                        if (!(result instanceof Class)) return;
+                    if (error != null) {
+                        return;
+                    }
+                    if (sWatcherRetired.get()) return;
+                    // Retire on a time budget so a renamed (never-matching) service
+                    // can't keep us intercepting class loads for the whole process.
+                    // Overflow-safe nanoTime comparison.
+                    if (System.nanoTime() - sWatcherDeadlineNanos > 0) {
+                        removeWatchers();
+                        return;
+                    }
+                    if (!(result instanceof Class)) return;
                     Class<?> cls = (Class<?>) result;
                     // Hot path is String-only (getName + equals): it touches no
                     // uninitialised classes, so it never re-enters findClass().
@@ -247,32 +283,38 @@ public class AdvertisingIdHooks {
 
     private static void installChimeraServiceOnBindHook(Class<?> cls) {
         if (!sChimeraOnBindInstalled.compareAndSet(false, true)) return;
-        try {
+        // onBind(Intent) single overload; exact-signature hook is correct.
+        // Fail-closed: try/catch + Legacy.log, original kept on error.
+        Legacy.safeHook("DeviceSpoofLab-GAID", "Chimera.onBind", () -> {
             Legacy.findAndHookMethod(cls, "onBind",
                     android.content.Intent.class, new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            Object binder = result;
-                            if (binder == null) return;
-                            Class<?> bc = binder.getClass();
-                            Method m = findGetIdInHierarchy(bc);
-                            if (m != null) {
-                                hookGetIdMethod(m);
-                                return;
-                            }
-                            // R8 may rename getId(); rewrite the reply on the
-                            // AIDL onTransact dispatcher instead.
-                            Class<?> dispatcher = findOnTransactDeclaringClass(bc);
-                            if (dispatcher != null) {
-                                installStubOnTransactHook(dispatcher);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                Object binder = result;
+                                if (binder == null) return;
+                                Class<?> bc = binder.getClass();
+                                Method m = findGetIdInHierarchy(bc);
+                                if (m != null) {
+                                    hookGetIdMethod(m);
+                                    return;
+                                }
+                                // R8 may rename getId(); rewrite the reply on the
+                                // AIDL onTransact dispatcher instead.
+                                Class<?> dispatcher = findOnTransactDeclaringClass(bc);
+                                if (dispatcher != null) {
+                                    installStubOnTransactHook(dispatcher);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log("DeviceSpoofLab-GAID"
+                                        + ": Chimera.onBind failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            sChimeraOnBindInstalled.set(false);
-            Legacy.log("DeviceSpoofLab-GAID: ChimeraService.onBind hook failed: "
-                    + t.getMessage());
-        }
+        });
     }
 
     private static Class<?> findOnTransactDeclaringClass(Class<?> cls) {
@@ -310,8 +352,16 @@ public class AdvertisingIdHooks {
         try {
             Legacy.hookMethod(m, new HookFramework.Hook() {@Override
                 public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                    String v = ConfigManager.getGAID();
-                    if (v != null) chain.replaceResult(v);
+                    try {
+                        if (error != null) {
+                            return;
+                        }
+                        String v = ConfigManager.getGAID();
+                        if (v != null) chain.replaceResult(v);
+                    } catch (Throwable t) {
+                        Legacy.log("DeviceSpoofLab-GAID"
+                                + ": binder.getId failed: " + t);
+                    }
                 }
             });
         } catch (Throwable t) {
@@ -321,29 +371,37 @@ public class AdvertisingIdHooks {
 
     private static void installStubOnTransactHook(Class<?> stub) {
         if (!sStubHookInstalled.compareAndSet(false, true)) return;
-        try {
+        // onTransact(int,Parcel,Parcel,int) single overload; exact-signature
+        // hook is correct. Fail-closed: errors keep the original parcel.
+        Legacy.safeHook("DeviceSpoofLab-GAID", "Stub.onTransact", () -> {
             Legacy.findAndHookMethod(stub, "onTransact",
                     int.class, android.os.Parcel.class, android.os.Parcel.class, int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            int code = chain.arg(0, -1);
-                            android.os.Parcel reply = (android.os.Parcel) chain.arg(2, null);
-                            if (reply == null) return;
-                            // AIDL: getId() = TX code 1.
-                            if (code != 1) return;
-                            String spoof = ConfigManager.getGAID();
-                            if (spoof == null) return;
                             try {
-                                reply.setDataSize(0);
-                                reply.setDataPosition(0);
-                                reply.writeNoException();
-                                reply.writeString(spoof);
-                            } catch (Throwable ignored) {
+                                if (error != null) {
+                                    return;
+                                }
+                                int code = chain.arg(0, -1);
+                                android.os.Parcel reply = (android.os.Parcel) chain.arg(2, null);
+                                if (reply == null) return;
+                                // AIDL: getId() = TX code 1.
+                                if (code != 1) return;
+                                String spoof = ConfigManager.getGAID();
+                                if (spoof == null) return;
+                                try {
+                                    reply.setDataSize(0);
+                                    reply.setDataPosition(0);
+                                    reply.writeNoException();
+                                    reply.writeString(spoof);
+                                } catch (Throwable ignored) {
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log("DeviceSpoofLab-GAID"
+                                        + ": Stub.onTransact failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            sStubHookInstalled.set(false);
-        }
+        });
     }
 }

@@ -142,72 +142,89 @@ public class BuildHooks {
         setObjectField(versionClass, "KNOWN_CODENAMES", knownCodenames);
     }
 
+    // getSerial / getRadioVersion: single no-arg overloads each (API 26+
+    // / 14+); hookAllMethods covers uniformly. Fail-closed: before-hook
+    // wrapped in try/catch + Legacy.log, install via safeHook.
     private static void hookGetSerial(Class<?> buildClass) {
-        try {
-            Legacy.findAndHookMethod(buildClass, "getSerial",
+        Legacy.safeHook(TAG, "Build.getSerial", () -> {
+            HookFramework.hookAllMethods(buildClass, "getSerial",
                 new HookFramework.BeforeHook() {@Override
-                    public void before(HookFramework.HookChain chain) throws Throwable {
-                        String v = ConfigManager.getSerial();
-                        if (v != null) chain.replaceResult(v);
+                    public void before(HookFramework.HookChain chain) {
+                        try {
+                            String v = ConfigManager.getSerial();
+                            if (v != null) chain.replaceResult(v);
+                        } catch (Throwable t) {
+                            Legacy.log(TAG + ": getSerial failed: " + t);
+                        }
                     }
                 });
-        } catch (NoSuchMethodError e) {
-            // Method doesn't exist on Android < 8
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook getSerial(): " + e.getMessage());
-        }
+        });
     }
 
     private static void hookGetRadioVersion(Class<?> buildClass) {
-        try {
-            Legacy.findAndHookMethod(buildClass, "getRadioVersion",
+        Legacy.safeHook(TAG, "Build.getRadioVersion", () -> {
+            HookFramework.hookAllMethods(buildClass, "getRadioVersion",
                     new HookFramework.BeforeHook() {@Override
-                        public void before(HookFramework.HookChain chain) throws Throwable {
-                            chain.replaceResult(getRadioVersion());
-                        }
-                    });
-        } catch (NoSuchMethodError ignored) {
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook getRadioVersion(): " + e.getMessage());
-        }
-    }
-
-    private static void hookPartitionMethods(ClassLoader classLoader) {
-        Class<?> partitionClass = Legacy.findClassIfExists("android.os.Build$Partition", classLoader);
-        if (partitionClass == null) {
-            partitionClass = Legacy.findClassIfExists("android.os.Build$Partition", ClassLoader.getSystemClassLoader());
-        }
-        if (partitionClass == null) {
-            return;
-        }
-
-        try {
-            Legacy.findAndHookMethod(partitionClass, "getFingerprint",
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                            String partitionName = getPartitionName(chain.thisObject());
-                            String spoofedValue = getPartitionFingerprint(partitionName);
-                            if (spoofedValue != null) {
-                                chain.replaceResult(spoofedValue);
+                        public void before(HookFramework.HookChain chain) {
+                            try {
+                                chain.replaceResult(getRadioVersion());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getRadioVersion failed: " + t);
                             }
                         }
                     });
-        } catch (NoSuchMethodError ignored) {
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook Partition.getFingerprint(): " + e.getMessage());
-        }
+        });
+    }
 
-        try {
-            Legacy.findAndHookMethod(partitionClass, "getBuildTimeMillis",
+    private static void hookPartitionMethods(ClassLoader classLoader) {
+        Class<?> found = Legacy.findClassIfExists("android.os.Build$Partition", classLoader);
+        if (found == null) {
+            found = Legacy.findClassIfExists("android.os.Build$Partition", ClassLoader.getSystemClassLoader());
+        }
+        if (found == null) {
+            return;
+        }
+        final Class<?> partitionClass = found;
+
+        // Partition.getFingerprint / getBuildTimeMillis: single no-arg
+        // overloads each; hookAllMethods covers uniformly. Fail-closed:
+        // after-hooks wrapped in try/catch + Legacy.log, installs via
+        // safeHook.
+        Legacy.safeHook(TAG, "Partition.getFingerprint", () -> {
+            HookFramework.hookAllMethods(partitionClass, "getFingerprint",
                     new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) throws Throwable {
-                            chain.replaceResult(getBuildTimeMillis());
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String partitionName = getPartitionName(chain.thisObject());
+                                String spoofedValue = getPartitionFingerprint(partitionName);
+                                if (spoofedValue != null) {
+                                    chain.replaceResult(spoofedValue);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Partition.getFingerprint failed: " + t);
+                            }
                         }
                     });
-        } catch (NoSuchMethodError ignored) {
-        } catch (Exception e) {
-            Legacy.log(TAG + ": Failed to hook Partition.getBuildTimeMillis(): " + e.getMessage());
-        }
+        });
+
+        Legacy.safeHook(TAG, "Partition.getBuildTimeMillis", () -> {
+            HookFramework.hookAllMethods(partitionClass, "getBuildTimeMillis",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(getBuildTimeMillis());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Partition.getBuildTimeMillis failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static String getPartitionName(Object partition) {

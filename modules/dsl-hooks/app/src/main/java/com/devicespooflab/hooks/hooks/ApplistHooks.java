@@ -37,6 +37,10 @@ public class ApplistHooks {
         hookResolveService(appPm);
         hookDirectLookup(appPm, "getPackageInfo");
         hookDirectLookup(appPm, "getApplicationInfo");
+        // AsUser direct lookups bypass the base deny check on multi-user
+        // aware detectors: same NameNotFound policy per overload.
+        hookDirectLookup(appPm, "getPackageInfoAsUser");
+        hookDirectLookup(appPm, "getApplicationInfoAsUser");
         hookDirectLookup(appPm, "getActivityInfo");
         hookDirectLookup(appPm, "getServiceInfo");
         hookDirectLookup(appPm, "getReceiverInfo");
@@ -227,9 +231,11 @@ public class ApplistHooks {
     }
 
     // Direct lookups (getPackageInfo/getApplicationInfo/getActivityInfo/
-    // getServiceInfo/getReceiverInfo/getProviderInfo): every overload takes
-    // the package (or a ComponentName whose package is arg 0/derived) as
-    // arg 0, so one shared deny check covers all overloads via hookAll.
+    // getServiceInfo/getReceiverInfo/getProviderInfo + AsUser siblings):
+    // every overload takes the package (or a ComponentName whose package
+    // is arg 0/derived) as arg 0, so one shared deny check covers all
+    // overloads via hookAll. Fail-closed: reflection errors keep the
+    // original result; denied packages throw NameNotFoundException.
     private static void hookDirectLookup(Class<?> appPm, String method) {
         Legacy.safeHook(TAG, method, () -> {
             HookFramework.hookAllMethods(appPm, method,

@@ -65,7 +65,7 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_cpufreq_prime fake_cpufreq_perf fake_cpufreq_min \
          fake_cpu_online fake_kallsyms fake_iomem fake_ioports \
          fake_proc_misc fake_meminfo fake_thermal_zone0 fake_proc_stat \
-         fake_version fake_proc_net_tcp fake_proc_net_tcp6 \
+         fake_version fake_proc_net_tcp fake_proc_net_tcp6 fake_proc_net_dev \
          fake_sys_kernel_ostype fake_sys_kernel_osrelease \
          fake_sys_kernel_version fake_sys_kernel_hostname; do
     cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true

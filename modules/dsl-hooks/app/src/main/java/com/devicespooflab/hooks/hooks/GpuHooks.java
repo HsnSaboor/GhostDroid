@@ -77,25 +77,32 @@ public class GpuHooks {
     private static void hookGlGetString(String className, ClassLoader loader) {
         Class<?> clazz = Legacy.findClassIfExists(className, loader);
         if (clazz == null) return;
-        try {
+        // glGetString(int) single overload; exact-signature hook correct.
+        // Fail-closed: try/catch + Legacy.log, original kept on error.
+        Legacy.safeHook(TAG, className + ".glGetString", () -> {
             Legacy.findAndHookMethod(clazz, "glGetString",
                     int.class,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            int name = chain.arg(0, -1);
-                            if (name == GL_VENDOR) {
-                                chain.replaceResult(ConfigManager.getGpuVendor());
-                            } else if (name == GL_RENDERER) {
-                                chain.replaceResult(ConfigManager.getGpuRenderer());
-                            } else if (name == GL_VERSION) {
-                                // String label only — context/config stay real.
-                                chain.replaceResult(ConfigManager.getGpuVersion());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                int name = chain.arg(0, -1);
+                                if (name == GL_VENDOR) {
+                                    chain.replaceResult(ConfigManager.getGpuVendor());
+                                } else if (name == GL_RENDERER) {
+                                    chain.replaceResult(ConfigManager.getGpuRenderer());
+                                } else if (name == GL_VERSION) {
+                                    // String label only — context/config stay real.
+                                    chain.replaceResult(ConfigManager.getGpuVersion());
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": " + className + ".glGetString failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook " + className + ".glGetString: " + t);
-        }
+        });
     }
 
     // Drop host-GPU extension tokens (Mesa/Intel/llvmpipe/swrast) that
@@ -167,19 +174,25 @@ public class GpuHooks {
         // libc open hooks — covered natively by dir_hooks). Return empty so
         // the Java path shows a phone-like "no host USB" view.
         // ADB/function state untouched — debugging keeps working.
+        // Single no-arg overload. Fail-closed: try/catch + Legacy.log.
         Class<?> usbManager = Legacy.findClassIfExists(
                 "android.hardware.usb.UsbManager", loader);
         if (usbManager != null) {
-            try {
+            Legacy.safeHook(TAG, "UsbManager.getDeviceList", () -> {
                 Legacy.findAndHookMethod(usbManager, "getDeviceList",
                         new HookFramework.Hook() {@Override
                             public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                                chain.replaceResult(new java.util.HashMap<String, Object>());
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    chain.replaceResult(new java.util.HashMap<String, Object>());
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": UsbManager.getDeviceList failed: " + t);
+                                }
                             }
                         });
-            } catch (Throwable t) {
-                Legacy.log(TAG + ": failed to hook UsbManager.getDeviceList: " + t);
-            }
+            });
         }
     }
 }

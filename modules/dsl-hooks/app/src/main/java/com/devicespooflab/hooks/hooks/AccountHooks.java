@@ -22,26 +22,39 @@ public class AccountHooks {
                 "android.accounts.AccountManager", lpparam.classLoader);
         if (am == null) return;
 
-        try {
-            Legacy.findAndHookMethod(am, "getAccounts",
+        // getAccounts / getAccountsAsUser: hookAllMethods covers all
+        // overloads; empty-account policy. Fail-closed with try/catch + log.
+        Legacy.safeHook(TAG, "AccountManager.getAccounts", () -> {
+            HookFramework.hookAllMethods(am, "getAccounts",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(new Account[0]);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(new Account[0]);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAccounts failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook getAccounts: " + t);
-        }
+        });
 
-        try {
-            Legacy.findAndHookMethod(am, "getAccountsAsUser",
-                    int.class,
+        Legacy.safeHook(TAG, "AccountManager.getAccountsAsUser", () -> {
+            HookFramework.hookAllMethods(am, "getAccountsAsUser",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(new Account[0]);
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(new Account[0]);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAccountsAsUser failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) { /* hidden API; may be missing */ }
+        });
 
         // Sibling enumeration paths that bypass getAccounts():
         // getAccountsByType / getAccountsByTypeForPackage / getAccountsForPackage

@@ -24,66 +24,82 @@ public class LocaleHooks {
         }
     }
 
+    // TimeZone.getDefault / Locale.getDefault(+Category) /
+    // LocaleList.getDefault+getAdjustedDefault: hookAllMethods covers
+    // every overload (Locale.getDefault has no-arg + Category forms).
+    // Fail-closed: try/catch + Legacy.log, original kept on error.
     private static void hookTimeZone() {
-        try {
-            Legacy.findAndHookMethod(TimeZone.class, "getDefault",
+        Legacy.safeHook(TAG, "TimeZone.getDefault", () -> {
+            HookFramework.hookAllMethods(TimeZone.class, "getDefault",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            String tz = ConfigManager.getSystemProperty(
-                                    "persist.sys.timezone", "America/Los_Angeles");
-                            if (tz != null && !tz.isEmpty()) {
-                                chain.replaceResult(TimeZone.getTimeZone(tz));
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String tz = ConfigManager.getSystemProperty(
+                                        "persist.sys.timezone", "America/Los_Angeles");
+                                if (tz != null && !tz.isEmpty()) {
+                                    chain.replaceResult(TimeZone.getTimeZone(tz));
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": TimeZone.getDefault failed: " + t);
                             }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook TimeZone.getDefault: " + t);
-        }
+        });
     }
 
     private static void hookLocale() {
-        try {
-            Legacy.findAndHookMethod(Locale.class, "getDefault",
+        Legacy.safeHook(TAG, "Locale.getDefault", () -> {
+            HookFramework.hookAllMethods(Locale.class, "getDefault",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(buildLocale());
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(buildLocale());
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Locale.getDefault failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook Locale.getDefault: " + t);
-        }
-
-        try {
-            Legacy.findAndHookMethod(Locale.class, "getDefault",
-                    Locale.Category.class,
-                    new HookFramework.Hook() {@Override
-                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(buildLocale());
-                        }
-                    });
-        } catch (Throwable t) { /* Category overload is API 24+ */ }
+        });
     }
 
     private static void hookLocaleList() {
-        try {
-            Legacy.findAndHookMethod(LocaleList.class, "getDefault",
+        Legacy.safeHook(TAG, "LocaleList.getDefault", () -> {
+            HookFramework.hookAllMethods(LocaleList.class, "getDefault",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(new LocaleList(buildLocale()));
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(new LocaleList(buildLocale()));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": LocaleList.getDefault failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook LocaleList.getDefault: " + t);
-        }
+        });
 
-        try {
-            Legacy.findAndHookMethod(LocaleList.class, "getAdjustedDefault",
+        Legacy.safeHook(TAG, "LocaleList.getAdjustedDefault", () -> {
+            HookFramework.hookAllMethods(LocaleList.class, "getAdjustedDefault",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
-                            chain.replaceResult(new LocaleList(buildLocale()));
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                chain.replaceResult(new LocaleList(buildLocale()));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": LocaleList.getAdjustedDefault failed: " + t);
+                            }
                         }
                     });
-        } catch (Throwable t) { /* may be missing on some forks */ }
+        });
     }
 
     private static Locale buildLocale() {
