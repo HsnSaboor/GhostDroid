@@ -1,5 +1,6 @@
 #include "gs_state.h"
 
+#include <dlfcn.h>
 #include <sys/system_properties.h>
 #include <cstring>
 #include <memory>
@@ -124,6 +125,28 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
+    // ro.hardware.gralloc: caller-sensitive. Mesa/EGL/HWUI/hal-loader
+    // callers need the real minigbm_gbm_mesa value or eglInitialize
+    // SIGSEGVs (isHostHalAllowed null FirstChildElement). Game/ACE callers
+    // must see absent (no retail S26 ships minigbm). dladdr on the return
+    // address distinguishes the two without touching any global state.
+    if (strcmp(name, "ro.hardware.gralloc") == 0) {
+        Dl_info info{};
+        if (dladdr(__builtin_return_address(0), &info) &&
+            info.dli_fname != nullptr) {
+            const char* f = info.dli_fname;
+            if (strstr(f, "libEGL") != nullptr ||
+                strstr(f, "libGLES") != nullptr ||
+                strstr(f, "libhidlbase") != nullptr ||
+                strstr(f, "libhwui") != nullptr ||
+                strstr(f, "libutils") != nullptr ||
+                strstr(f, "gralloc") != nullptr) {
+                if (orig_sp_get) return orig_sp_get(name, value);
+            }
+        }
+        if (value != nullptr) value[0] = '\0';
+        return 0;
+    }
     if (IsDeniedProp(name)) {
         if (value != nullptr) value[0] = '\0';
         return 0;
@@ -396,6 +419,11 @@ bool IsDeniedProperty(const char* name) {
         "dalvik.vm.dexopt.",         // dexopt tuning knobs (absent on retail user builds)
         "dalvik.vm.my-feature-test.",  // feature-test keys (absent on retail)
         "debug.allocTracker.",       // alloc tracker knobs (absent on retail)
+        "debug.am.",                   // am trim knobs (absent on retail, probe 8955/10750)
+        "debug.sqlite.",               // sqlite debug knobs (absent on retail, probe 8955/10750)
+        "debug.hwui.",                 // hwui debug knobs (absent on retail, probe 8955/10750)
+        "dalvik.vm.metrics.",          // metrics knobs (absent on retail, probe 8955/10750)
+        "media.metrics.",              // metrics flag (absent on retail, probe 8955/10750)
         "debug.atrace.",             // atrace app flags (absent on retail)
         "debug.egl.",                // egl debug knobs (absent on retail)
         "debug.firebase.",           // firebase debug keys (absent on retail)
@@ -514,6 +542,8 @@ void InstallPropertyHooks() {
     InstallSystemHooks();
 
     InstallFileHooks();
+
+    InstallGraphicsHooks();
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",

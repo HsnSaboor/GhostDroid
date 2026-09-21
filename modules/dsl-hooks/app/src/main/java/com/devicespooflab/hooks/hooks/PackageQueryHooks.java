@@ -35,11 +35,22 @@ public final class PackageQueryHooks {
         hookInstallerSessions(appPm);
         hookExtraQueries(appPm);
         hookInstalledModules(appPm);
+        hookResolveContentProvider(appPm);
     }
 
     private static String packageOf(Object entry) {
         try {
             Object pkg = Legacy.getObjectField(entry, "packageName");
+            if (pkg instanceof String) {
+                return (String) pkg;
+            }
+        } catch (Throwable ignored) {
+        }
+        // ResolveInfo carries no packageName/applicationInfo: resolve via
+        // resolvePackageName + the activity/service/provider slots, mirroring
+        // ApplistHooks.packageOf so the deny set cannot drift.
+        try {
+            Object pkg = Legacy.getObjectField(entry, "resolvePackageName");
             if (pkg instanceof String) {
                 return (String) pkg;
             }
@@ -54,6 +65,19 @@ public final class PackageQueryHooks {
                 }
             }
         } catch (Throwable ignored) {
+        }
+        for (String slot : new String[]{
+                "activityInfo", "serviceInfo", "providerInfo"}) {
+            try {
+                Object info = Legacy.getObjectField(entry, slot);
+                if (info != null) {
+                    Object pkg = Legacy.getObjectField(info, "packageName");
+                    if (pkg instanceof String) {
+                        return (String) pkg;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
         }
         return null;
     }
@@ -143,7 +167,8 @@ public final class PackageQueryHooks {
 
     private static void hookAsUserResolve(Class<?> appPm) {
         for (String method : new String[]{
-                "resolveActivityAsUser", "resolveServiceAsUser"}) {
+                "resolveActivityAsUser", "resolveServiceAsUser",
+                "resolveContentProviderAsUser"}) {
             final String name = method;
             Legacy.safeHook(TAG, name, () -> {
                 HookFramework.hookAllMethods(appPm, name,
@@ -367,5 +392,32 @@ public final class PackageQueryHooks {
         } catch (Throwable ignored) {
         }
         return null;
+    }
+
+    // resolveContentProvider(name) / resolveContentProviderAsUser: direct
+    // provider handle bypassing queryContentProviders. Same deny policy as
+    // the AsUser resolve siblings — null when denied, passthrough
+    // otherwise. Fail-closed throughout.
+    private static void hookResolveContentProvider(Class<?> appPm) {
+        Legacy.safeHook(TAG, "resolveContentProvider", () -> {
+            HookFramework.hookAllMethods(appPm, "resolveContentProvider",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result != null
+                                        && com.devicespooflab.hooks.utils
+                                                .DenyTokens.isDeniedPackage(
+                                                        providerPackage(result))) {
+                                    chain.replaceResult(null);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": resolveContentProvider"
+                                        + " deny check failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 }

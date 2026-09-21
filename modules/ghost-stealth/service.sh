@@ -42,7 +42,8 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # busnum,devnum}, gs_fake_pci_{vendor,device}, gs_fake_pci_{devices,uevent},
 # gs_fake_pci_dev_{uevent,modalias}, gs_fake_kgsl_gpubusy,
 # gs_fake_bat_{charge_full,charge_full_design,model,manufacturer},
-# gs_fake_cpuinfo, gs_fake_build_prop (S26 view, mirrors spoof.conf),
+# gs_fake_cpuinfo, gs_fake_build_prop (S26 identity/build subset;
+# overlapping keys match spoof.conf exactly),
 # gs_fake_cpufreq_{prime,perf,min}, gs_fake_cpu_online,
 # gs_fake_{kallsyms,iomem,ioports,proc_misc},
 # gs_fake_{meminfo,thermal_zone0,proc_stat} (pid 2594 perf-loop

@@ -131,6 +131,7 @@ public class StorageHooks {
 
         hookStorageVolume(lpparam);
         hookStatFsIntVariants();
+        hookFileSize(lpparam);
     }
 
     // StorageManager.getStorageVolumes / getPrimaryStorageVolume /
@@ -218,5 +219,75 @@ public class StorageHooks {
                         }
                     });
         });
+    }
+
+    // java.io.File.getTotalSpace/getFreeSpace/getUsableSpace: detectors
+    // cross-check StatFs totals against File totals for the same mount.
+    // Scale host values by the configured-to-host total ratio so both
+    // surfaces agree; skip when the host value is unusable. Fail-closed.
+    private static void hookFileSize(HookContext lpparam) {
+        Class<?> file = Legacy.findClassIfExists(
+                "java.io.File", lpparam.classLoader);
+        if (file == null) {
+            file = java.io.File.class;
+        }
+        final Class<?> fileClass = file;
+        for (String name : new String[]{
+                "getTotalSpace", "getFreeSpace", "getUsableSpace"}) {
+            final String method = name;
+            Legacy.safeHook(TAG, "File." + method, () -> {
+                HookFramework.hookAllMethods(fileClass, method,
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null
+                                            || !(result instanceof Long)) {
+                                        return;
+                                    }
+                                    long host = (Long) result;
+                                    if (host <= 0L) {
+                                        return;
+                                    }
+                                    Long scaled = scaledFileSize(chain, host);
+                                    if (scaled != null) {
+                                        chain.replaceResult(scaled);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": " + method
+                                            + " failed: " + t);
+                                }
+                            }
+                        });
+            });
+        }
+    }
+
+    private static Long scaledFileSize(HookFramework.HookChain chain, long host) {
+        try {
+            Object self = chain.thisObject();
+            if (!(self instanceof java.io.File)) {
+                return null;
+            }
+            String path = ((java.io.File) self).getAbsolutePath();
+            if (path == null || !(path.startsWith("/data")
+                    || path.startsWith("/sdcard")
+                    || path.startsWith("/storage"))) {
+                return null;
+            }
+            long configured = ConfigManager.getStorageTotalBytes();
+            if (configured <= 0L) {
+                return null;
+            }
+            double ratio = (double) configured / (double) host;
+            if (ratio <= 0.0 || ratio > 64.0) {
+                return null;
+            }
+            return (long) (host * ratio);
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": scaledFileSize failed: " + t);
+            return null;
+        }
     }
 }

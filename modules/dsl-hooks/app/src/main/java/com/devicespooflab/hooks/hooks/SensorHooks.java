@@ -131,6 +131,7 @@ public class SensorHooks {
         hookRegisterListener();
         hookUnregisterListener();
         hookDynamicSensorList();
+        hookSensorDetails(lpparam);
     }
 
     // Synthetic sensors have no HAL behind them, so the real
@@ -215,6 +216,85 @@ public class SensorHooks {
                         }
                     });
         });
+    }
+
+    // Sensor scalar accessors detectors call per-sensor: getName /
+    // getVendor / getStringType / getMaximumRange carry host leak strings
+    // on real (non-synthetic) sensors. Synthetics already carry Samsung
+    // names — leave them untouched; scrub only emulator-token values on
+    // real sensors to the matching synthetic's neutral label. Fail-closed.
+    private static void hookSensorDetails(HookContext lpparam) {
+        Legacy.safeHook(TAG, "Sensor.getName", () -> {
+            HookFramework.hookAllMethods(Sensor.class, "getName",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof String)) {
+                                    return;
+                                }
+                                Object self = chain.thisObject();
+                                if (!(self instanceof Sensor)
+                                        || isSyntheticHandle((Sensor) self)) {
+                                    return;
+                                }
+                                String name = (String) result;
+                                if (isEmulatorToken(name)) {
+                                    Sensor synth = syntheticFor(
+                                            ((Sensor) self).getType());
+                                    if (synth != null) {
+                                        chain.replaceResult(synth.getName());
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Sensor.getName failed: " + t);
+                            }
+                        }
+                    });
+            HookFramework.hookAllMethods(Sensor.class, "getVendor",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof String)) {
+                                    return;
+                                }
+                                Object self = chain.thisObject();
+                                if (!(self instanceof Sensor)
+                                        || isSyntheticHandle((Sensor) self)) {
+                                    return;
+                                }
+                                String vendor = (String) result;
+                                if (isEmulatorToken(vendor)) {
+                                    Sensor synth = syntheticFor(
+                                            ((Sensor) self).getType());
+                                    if (synth != null) {
+                                        chain.replaceResult(synth.getVendor());
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": Sensor.getVendor failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static boolean isEmulatorToken(String value) {
+        if (value == null) {
+            return false;
+        }
+        String lower = value.toLowerCase(java.util.Locale.US);
+        for (String token : DENY) {
+            if (lower.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Sensor sensorArg(HookFramework.HookChain chain) {

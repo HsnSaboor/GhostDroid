@@ -6,8 +6,9 @@ import com.devicespooflab.hooks.bridge.Legacy;
 
 // Power / device-state queries ACE reads directly:
 // PowerManager.isPowerSaveMode (probe line 6783 cache_key.is_power_save_mode),
-// isDeviceIdleMode / isIgnoringBatteryOptimizations / isInteractive /
-// isScreenOn / getLocationMode-style low-power tells. A flagship gaming
+// isDeviceIdleMode / isDeviceLightIdleMode /
+// isIgnoringBatteryOptimizations / isInteractive / isScreenOn /
+// getLocationMode-style low-power tells. A flagship gaming
 // phone is not in power-save: report full-power state everywhere.
 // Fail-closed: any reflection error keeps the original value.
 public final class PowerHooks {
@@ -29,6 +30,9 @@ public final class PowerHooks {
         }
         pinBoolean(pm, "isPowerSaveMode", false);
         pinBoolean(pm, "isDeviceIdleMode", false);
+        // API 23+ low-power sibling of isDeviceIdleMode: same full-power
+        // story. hookAllMethods is a no-op where the method is absent.
+        pinBoolean(pm, "isDeviceLightIdleMode", false);
         pinBoolean(pm, "isIgnoringBatteryOptimizations", true);
         pinBoolean(pm, "isInteractive", true);
         // Deprecated alias of isInteractive on older releases.

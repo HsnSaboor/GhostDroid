@@ -41,4 +41,6 @@ void InstallSystemHooks();
 
 void InstallFileHooks();
 
+void InstallGraphicsHooks();
+
 }  // namespace gs

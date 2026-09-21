@@ -95,6 +95,51 @@ public final class TelephonyCellHooks {
         if (sm == null) {
             return;
         }
+        // Active-subscription count siblings: detectors check
+        // getActiveSubscriptionInfoCount() >= 1 before trusting the list.
+        // Waydroid's SIM-less build reports 0; pin to the synthetic
+        // single-entry story (count 1, max 2 for the dual-SIM phoneCount).
+        // Fail-closed: only lift sub-1 values, never downgrade.
+        Legacy.safeHook(TAG, "SubscriptionManager.getActiveSubscriptionInfoCount", () -> {
+            HookFramework.hookAllMethods(sm, "getActiveSubscriptionInfoCount",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (result instanceof Integer
+                                        && (Integer) result < 1) {
+                                    chain.replaceResult(1);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getActiveSubscriptionInfoCount failed: "
+                                        + t);
+                            }
+                        }
+                    });
+            HookFramework.hookAllMethods(sm, "getActiveSubscriptionInfoCountMax",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (result instanceof Integer
+                                        && (Integer) result < 2) {
+                                    chain.replaceResult(2);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getActiveSubscriptionInfoCountMax failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
         Legacy.safeHook(TAG, "SubscriptionManager.getDefaultSubscriptionId-extra", () -> {
             for (String name : new String[]{
                     "getDefaultSubscription", "getPreferredDataSubscriptionId",
@@ -261,10 +306,15 @@ public final class TelephonyCellHooks {
     }
 
     // Radio-state siblings the operator pin misses: manual/auto selection,
-    // roaming, CDMA/EvDo leak branches, and forbidden-PLMN enumeration.
+    // roaming, CDMA/EvDo leak branches, forbidden-PLMN enumeration, and
+    // the data/voice network-type NAME strings (e.g. getNetworkTypeName()
+    // returns "LTE" on the phone; Waydroid's SIM-less radio returns
+    // "UNKNOWN"). Fail-closed throughout.
     private static void hookRadioState(Class<?> tm) {
         pinBooleanMethod(tm, "isNetworkRoaming", false);
         pinBooleanMethod(tm, "isDataRoamingEnabled", false);
+        pinTypeName(tm, "getNetworkTypeName", "LTE");
+        pinTypeName(tm, "getDataNetworkTypeName", "LTE");
         for (String name : new String[]{
                 "getCdmaMdn", "getCdmaMin", "getCdmaPrlVersion",
                 "getForbiddenPlmns", "getEquivalentHomePlmns"}) {
@@ -369,6 +419,39 @@ public final class TelephonyCellHooks {
     }
 
     private static void pinStringMethod(Class<?> tm, String name, String value) {
+        pinTelephonyName(tm, name, value);
+    }
+
+    // Network-type NAME siblings (getNetworkTypeName /
+    // getDataNetworkTypeName): same hookAllMethods shape as the operator
+    // strings, but unconditional — a SIM-less "UNKNOWN" is itself the
+    // tell, so pin to the LTE name. Fail-closed.
+    private static void pinTypeName(Class<?> tm, String name, String value) {
+        final String method = name;
+        Legacy.safeHook(TAG, "TelephonyManager." + method, () -> {
+            HookFramework.hookAllMethods(tm, method,
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (!(value == null
+                                        || value.equals(result))) {
+                                    chain.replaceResult(value);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": " + method
+                                        + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void pinTelephonyName(Class<?> tm, String name, String value) {
         final String method = name;
         Legacy.safeHook(TAG, "TelephonyManager." + method, () -> {
             HookFramework.hookAllMethods(tm, method,

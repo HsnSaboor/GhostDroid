@@ -56,10 +56,10 @@ public class PackageInfoHooks {
         });
 
         // ApplicationInfo.FLAG_DEBUGGABLE leaks a debuggable/eng build:
-        // clear it on every getApplicationInfo overload (fail-closed).
+        // clear it on every getApplicationInfo + getApplicationInfoAsUser
+        // overload (fail-closed).
         Legacy.safeHook(TAG, "getApplicationInfo", () -> {
-            HookFramework.hookAllMethods(appPm, "getApplicationInfo",
-                    new HookFramework.Hook() {
+            HookFramework.Hook clearFlags = new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain,
                                 Object result, Throwable error) {
@@ -71,7 +71,13 @@ public class PackageInfoHooks {
                                 Legacy.log(TAG + ": getApplicationInfo flag clear failed: " + t);
                             }
                         }
-                    });
+                    };
+            HookFramework.hookAllMethods(appPm, "getApplicationInfo",
+                    clearFlags);
+            // AsUser sibling bypasses the base clear on multi-user aware
+            // detectors; hookAllMethods is a no-op where absent.
+            HookFramework.hookAllMethods(appPm, "getApplicationInfoAsUser",
+                    clearFlags);
         });
     }
 
@@ -80,10 +86,11 @@ public class PackageInfoHooks {
                 "android.app.ApplicationPackageManager", lpparam.classLoader);
         if (appPm == null) return;
 
-        // Single (String) overload; fail-closed with try/catch + log.
+        // getInstallerPackageName has (String) + hidden (String,int)
+        // overloads; hookAllMethods covers both so user-id variants cannot
+        // bypass. Fail-closed with try/catch + log.
         Legacy.safeHook(TAG, "getInstallerPackageName", () -> {
-            Legacy.findAndHookMethod(appPm, "getInstallerPackageName",
-                    String.class,
+            HookFramework.hookAllMethods(appPm, "getInstallerPackageName",
                     new HookFramework.Hook() {
                         @Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {

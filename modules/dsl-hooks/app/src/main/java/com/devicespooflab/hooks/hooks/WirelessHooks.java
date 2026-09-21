@@ -89,6 +89,30 @@ public final class WirelessHooks {
         pinBoolean(wm, "isEnhancedOpenSupported", true);
         pinBoolean(wm, "isStaApConcurrencySupported", true);
         pinBoolean(wm, "isTdlsSupported", true);
+        // API 29+ randomized-MAC sibling: Waydroid reports the real eth0
+        // MAC; pin to the spoofed WiFi MAC so scans cannot disagree with
+        // WifiInfo.getMacAddress. Fail-closed.
+        Legacy.safeHook(TAG, "WifiManager.getFactoryMacAddresses", () -> {
+            HookFramework.hookAllMethods(wm, "getFactoryMacAddresses",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                String mac = ConfigManager.getWifiMacAddress();
+                                if (mac != null && !mac.isEmpty()) {
+                                    chain.replaceResult(new String[]{mac});
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getFactoryMacAddresses failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static void hookBluetoothState(HookContext lpparam) {
@@ -178,6 +202,36 @@ public final class WirelessHooks {
         // DEVICE_TYPE_CLASSIC = 1; BOND_NONE = 10.
         pinInt(bd, "getType", 1);
         pinInt(bd, "getBondState", 10);
+        // BluetoothClass.getDeviceClass service bits: Waydroid exposes a
+        // computer-class (laptop) device class that DeviceInfoHW BLUETOOTH
+        // tab reads; a phone reports PHONE_SMART (536). Fail-closed.
+        Legacy.safeHook(TAG, "BluetoothClass.getDeviceClass", () -> {
+            Class<?> bc;
+            try {
+                bc = Class.forName("android.bluetooth.BluetoothClass");
+            } catch (Throwable ignored) {
+                return;
+            }
+            HookFramework.hookAllMethods(bc, "getDeviceClass",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof Integer)) {
+                                    return;
+                                }
+                                if ((Integer) result != 536) {
+                                    chain.replaceResult(536);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": BTClass.getDeviceClass failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static void hookNfc(HookContext lpparam) {
@@ -195,7 +249,10 @@ public final class WirelessHooks {
     private static void hookDhcpInfo(Class<?> wm, HookContext lpparam) {
         // getDhcpInfo(): Waydroid eth0 DHCP leaks host gateway/DNS. Rewrite
         // to a phone-plausible 192.168.1.x LAN via field injection on the
-        // returned DhcpInfo (public int fields, no ctor needed).
+        // returned DhcpInfo (public int fields, no ctor needed). Android IP
+        // ints are little-endian: 192.168.1.50 = 0x3201A8C0,
+        // 192.168.1.1 = 0x0101A8C0. Never derive one address from another
+        // with integer arithmetic (octet carries break); use literals.
         Legacy.safeHook(TAG, "WifiManager.getDhcpInfo", () -> {
             Legacy.findAndHookMethod(wm, "getDhcpInfo",
                     new HookFramework.Hook() {
@@ -207,9 +264,9 @@ public final class WirelessHooks {
                                     return;
                                 }
                                 Legacy.setIntField(result, "ipAddress",
-                                        0x0101A8C0);
+                                        0x3201A8C0);
                                 Legacy.setIntField(result, "gateway",
-                                        0x0101A8C0 - 254);
+                                        0x0101A8C0);
                                 Legacy.setIntField(result, "netmask",
                                         0x00FFFFFF);
                                 Legacy.setIntField(result, "dns1",
@@ -217,7 +274,7 @@ public final class WirelessHooks {
                                 Legacy.setIntField(result, "dns2",
                                         0x08080404);
                                 Legacy.setIntField(result, "serverAddress",
-                                        0x0101A8C0 - 254);
+                                        0x0101A8C0);
                                 Legacy.setIntField(result, "leaseDuration",
                                         86400);
                             } catch (Throwable t) {
@@ -228,7 +285,8 @@ public final class WirelessHooks {
         });
     }
 
-    private static void pinInt(Class<?> cls, String name, int value) {        Legacy.safeHook(TAG, cls.getSimpleName() + "." + name, () -> {
+    private static void pinInt(Class<?> cls, String name, int value) {
+        Legacy.safeHook(TAG, cls.getSimpleName() + "." + name, () -> {
             HookFramework.hookAllMethods(cls, name,
                     new HookFramework.Hook() {
                         @Override

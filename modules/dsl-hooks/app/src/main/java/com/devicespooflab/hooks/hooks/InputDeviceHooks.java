@@ -24,6 +24,8 @@ public class InputDeviceHooks {
     public static void hook(HookContext lpparam) {
         hookNames();
         hookSources();
+        hookSupportsSource();
+        hookKeyboardType();
         hookDeviceInventory(lpparam);
         hookInputManager(lpparam);
         hookVirtualFlag();
@@ -291,6 +293,75 @@ public class InputDeviceHooks {
                 & ~InputDevice.SOURCE_BLUETOOTH_STYLUS
                 & ~InputDevice.SOURCE_HDMI;
         return stripped | InputDevice.SOURCE_TOUCHSCREEN;
+    }
+
+    // InputDevice.supportsSource(int): detectors probe SOURCE_MOUSE /
+    // SOURCE_KEYBOARD support directly instead of reading getSources().
+    // Same cloak: strip peripheral bits from the query, force touchscreen
+    // true; errors keep the original value. Fail-closed throughout.
+    private static void hookSupportsSource() {
+        Legacy.safeHook(TAG, "InputDevice.supportsSource", () -> {
+            HookFramework.hookAllMethods(InputDevice.class, "supportsSource",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof Boolean)) {
+                                    return;
+                                }
+                                int query = chain.arg(0, -1);
+                                int stripped = cloakedSources(query);
+                                if (query != stripped) {
+                                    chain.replaceResult(
+                                            cloakedSupports(query,
+                                                    (Boolean) result));
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": supportsSource failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static boolean cloakedSupports(int query, boolean original) {
+        if ((query & InputDevice.SOURCE_TOUCHSCREEN) != 0) {
+            return true;
+        }
+        int peripheral = query
+                & (InputDevice.SOURCE_MOUSE | InputDevice.SOURCE_KEYBOARD);
+        if (peripheral != 0) {
+            return false;
+        }
+        return original;
+    }
+
+    // InputDevice.getKeyboardType(): a fullscreen gaming phone has no
+    // hardware keyboard (KEYBOARD_TYPE_NONE = 0); the virtual -1 keyboard
+    // is already dropped from the inventory. Fail-closed.
+    private static void hookKeyboardType() {
+        Legacy.safeHook(TAG, "InputDevice.getKeyboardType", () -> {
+            HookFramework.hookAllMethods(InputDevice.class, "getKeyboardType",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof Integer)) {
+                                    return;
+                                }
+                                if ((Integer) result != 0) {
+                                    chain.replaceResult(0);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getKeyboardType failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     // Touchscreen axis ranges (X/Y); MotionRange has no public ctor so it is

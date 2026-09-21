@@ -218,7 +218,31 @@ public final class ProcessHooks {
     // so there is nothing host-specific to scrub — and trimming the array
     // would break the parallel-to-pids contract. Passthrough guard retained
     // so the surface is audited and fail-closed. Real numbers stay real.
+    // ActivityManager.isLowRamDevice: a 12GB flagship is never low-RAM;
+    // emulators/container builds sometimes report true. Pin false.
+    // Fail-closed: errors keep the original value.
     private static void hookProcessMemory(Class<?> am, HookContext lpparam) {
+        Legacy.safeHook(TAG, "ActivityManager.isLowRamDevice", () -> {
+            HookFramework.hookAllMethods(am, "isLowRamDevice",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (result instanceof Boolean
+                                        && (Boolean) result) {
+                                    chain.replaceResult(false);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isLowRamDevice failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
         // lpparam scopes future per-caller filtering; nothing to pin today.
         if (lpparam == null || lpparam.classLoader == null) {
             return;

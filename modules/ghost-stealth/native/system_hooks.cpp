@@ -84,8 +84,33 @@ int my_getifaddrs(struct ifaddrs** ifap) {
     bool haveWifi = !wifiMac.empty() && ParseMac(wifiMac, wifiBytes);
     bool haveBt   = !btMac.empty()   && ParseMac(btMac,   btBytes);
 
-    for (struct ifaddrs* it = *ifap; it != nullptr; it = it->ifa_next) {
-        if (it->ifa_name == nullptr || it->ifa_addr == nullptr) continue;
+    // eth* unlink: retail phones expose wlan0/rmnet_data0. eth0 with active
+    // traffic is an emulator tell, so unlink every eth node per-process.
+    // (getifaddrs list is caller-freed via freeifaddrs, so unlink is safe;
+    // the underlying buffer outlives the call in libc.) Java WirelessHooks
+    // already reports wlan0 NetworkInfo, so the native list stays coherent.
+    struct ifaddrs* prev = nullptr;
+    struct ifaddrs* it = *ifap;
+    while (it != nullptr) {
+        struct ifaddrs* next = it->ifa_next;
+        if (it->ifa_name != nullptr && strncmp(it->ifa_name, "eth", 3) == 0) {
+            if (prev != nullptr) {
+                prev->ifa_next = next;
+            } else {
+                *ifap = next;
+            }
+            if (*ifap == nullptr) break;
+            it = next;
+            continue;
+        }
+        prev = it;
+        it = next;
+    }
+    if (*ifap == nullptr) return rc;
+
+    for (struct ifaddrs* cur = *ifap; cur != nullptr; cur = cur->ifa_next) {
+        if (cur->ifa_name == nullptr) continue;
+        if (cur->ifa_addr == nullptr) continue;
         if (it->ifa_addr->sa_family != AF_PACKET) continue;
         auto* sll = reinterpret_cast<struct sockaddr_ll*>(it->ifa_addr);
         if (sll->sll_halen != 6) continue;

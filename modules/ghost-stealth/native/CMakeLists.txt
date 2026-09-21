@@ -28,6 +28,7 @@ add_library(gs_native SHARED
     property_hooks.cpp
     system_hooks.cpp
     file_hooks.cpp
+    graphics_hooks.cpp
 )
 
 target_include_directories(gs_native PRIVATE ${DOBBY_SOURCE_DIR}/include)

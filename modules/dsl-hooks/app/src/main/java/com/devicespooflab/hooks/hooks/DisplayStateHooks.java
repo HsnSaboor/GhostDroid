@@ -30,6 +30,55 @@ public final class DisplayStateHooks {
         if (display == null) {
             return;
         }
+        // Display.getSupportedRefreshRates (API 33+ float[]): host panels
+        // report odd rates; clamp any out-of-phone-range entry into the
+        // 60/90/120 bucket set. Resolution untouched — Waydroid owns it.
+        // Fail-closed: errors keep the original array.
+        Legacy.safeHook(TAG, "Display.getSupportedRefreshRates", () -> {
+            HookFramework.hookAllMethods(display, "getSupportedRefreshRates",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof float[])) {
+                                    return;
+                                }
+                                float[] rates = (float[]) result;
+                                float[] clamped = clampRefreshRates(rates);
+                                if (clamped != null) {
+                                    chain.replaceResult(clamped);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getSupportedRefreshRates failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
+        // Display.getSupportedModes (Mode[]): same clamp policy per mode
+        // refresh rate; Mode objects are patched in place (no safe ctor).
+        // Fail-closed: errors keep the original array.
+        Legacy.safeHook(TAG, "Display.getSupportedModes", () -> {
+            HookFramework.hookAllMethods(display, "getSupportedModes",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null
+                                        || !(result instanceof Object[])) {
+                                    return;
+                                }
+                                clampDisplayModes((Object[]) result);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getSupportedModes failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
         // Refresh rate: normalize absurd host values into a phone bucket.
         // Real panels report 60/90/120; only clamp out-of-range leaks.
         Legacy.safeHook(TAG, "Display.getRefreshRate", () -> {
@@ -122,7 +171,8 @@ public final class DisplayStateHooks {
             return;
         }
         for (String name : new String[]{
-                "getMetrics", "getRealMetrics", "getSize", "getRealSize"}) {
+                "getMetrics", "getRealMetrics", "getSize", "getRealSize",
+                "getRectSize"}) {
             final String method = name;
             Legacy.safeHook(TAG, "Display." + method, () -> {
                 HookFramework.hookAllMethods(display, method,
@@ -220,5 +270,72 @@ public final class DisplayStateHooks {
             }
         }
         return best;
+    }
+
+    private static float[] clampRefreshRates(float[] rates) {
+        try {
+            boolean changed = false;
+            float[] out = rates.clone();
+            for (int i = 0; i < out.length; i++) {
+                float clamped = clampRate(out[i]);
+                if (clamped != out[i]) {
+                    out[i] = clamped;
+                    changed = true;
+                }
+            }
+            return changed ? out : null;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": clampRefreshRates failed: " + t);
+            return null;
+        }
+    }
+
+    private static float clampRate(float hz) {
+        if (hz <= 0.0f || hz > 240.0f) {
+            return 60.0f;
+        }
+        float[] buckets = {60.0f, 90.0f, 120.0f};
+        float best = buckets[0];
+        float bestDist = Math.abs(hz - best);
+        for (float b : buckets) {
+            float dist = Math.abs(hz - b);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = b;
+            }
+        }
+        return best;
+    }
+
+    private static void clampDisplayModes(Object[] modes) {
+        try {
+            for (Object mode : modes) {
+                if (mode == null) {
+                    continue;
+                }
+                float rate;
+                try {
+                    Object boxed = Legacy.callMethod(mode, "getRefreshRate");
+                    if (!(boxed instanceof Float)) {
+                        continue;
+                    }
+                    rate = (Float) boxed;
+                } catch (Throwable ignored) {
+                    continue;
+                }
+                float clamped = clampRate(rate);
+                if (clamped == rate) {
+                    continue;
+                }
+                // Display.Mode has no public mutator; patch the hidden
+                // mRefreshRate field reflectively. Absent field = skip.
+                try {
+                    Legacy.setObjectField(mode, "mRefreshRate", clamped);
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": clampDisplayModes failed: " + t);
+        }
     }
 }

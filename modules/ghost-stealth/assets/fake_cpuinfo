@@ -5,7 +5,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd05
+CPU part	: 0xd44
 CPU revision	: 0
 
 processor	: 1
@@ -14,7 +14,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd05
+CPU part	: 0xd44
 CPU revision	: 0
 
 processor	: 2
@@ -23,7 +23,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd05
+CPU part	: 0xd41
 CPU revision	: 0
 
 processor	: 3
@@ -32,7 +32,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd05
+CPU part	: 0xd41
 CPU revision	: 0
 
 processor	: 4
@@ -59,7 +59,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd44
+CPU part	: 0xd41
 CPU revision	: 0
 
 processor	: 7
@@ -68,7 +68,7 @@ Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid
 CPU implementer	: 0x41
 CPU architecture: 8
 CPU variant	: 0x1
-CPU part	: 0xd44
+CPU part	: 0xd41
 CPU revision	: 0
 
 Hardware : Qualcomm SM8850

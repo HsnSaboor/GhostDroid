@@ -869,8 +869,12 @@ int my_open(const char* path, int flags, ...) {
     const char* eff = Redirect(path);
     if (eff != path) {
         // Read-only view: strip write/creat so apps can't corrupt the fake.
-        flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-        return orig_open(eff, flags | O_RDONLY, (mode_t)0);
+        int rflags = (flags & ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC |
+                                O_APPEND)) |
+                     O_RDONLY;
+        int fd = orig_open(eff, rflags, (mode_t)0);
+        if (fd >= 0) return fd;
+        // Fail open: snapshot missing (stale service.sh run) -> real file.
     }
     if ((flags & O_CREAT) != 0) {
         va_list ap;
@@ -892,8 +896,12 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
     }
     if (dirfd == AT_FDCWD) TraceProbeFile("openat", path);
     if (IsMountsPath(effPath)) {
-        flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-        return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
+        int rflags = (flags & ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC |
+                                O_APPEND)) |
+                     O_RDONLY;
+        int fd = orig_openat(dirfd, FAKE_MOUNTS, rflags, (mode_t)0);
+        if (fd >= 0) return fd;
+        // Fail open: mounts snapshot missing -> real call below.
     }
     // dirfd-relative views must see the same filter: detectors open
     // "status"/"maps" relative to a /proc/<pid> fd to dodge absolute-path
@@ -916,8 +924,12 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
         // absolute (fail-open: unresolved falls through to the real call).
         const char* eff = Redirect(effPath);
         if (eff != effPath) {
-            flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-            return orig_openat(AT_FDCWD, eff, flags | O_RDONLY, (mode_t)0);
+            int rflags = (flags & ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC |
+                                    O_APPEND)) |
+                         O_RDONLY;
+            int fd = orig_openat(AT_FDCWD, eff, rflags, (mode_t)0);
+            if (fd >= 0) return fd;
+            // Fail open: snapshot missing -> real call below.
         }
     }
     if ((flags & O_CREAT) != 0) {
@@ -962,12 +974,15 @@ FILE* my_fopen(const char* path, const char* mode) {
     const char* eff = Redirect(path);
     if (eff != path) {
         // Force read mode; fake mounts are a read-only view.
-        if (mode != nullptr && (strchr(mode, 'w') != nullptr ||
-                                strchr(mode, 'a') != nullptr ||
-                                strchr(mode, '+') != nullptr)) {
-            mode = "r";
+        const char* rmode = mode;
+        if (rmode != nullptr && (strchr(rmode, 'w') != nullptr ||
+                                 strchr(rmode, 'a') != nullptr ||
+                                 strchr(rmode, '+') != nullptr)) {
+            rmode = "r";
         }
-        return orig_fopen(eff, mode);
+        FILE* rf = orig_fopen(eff, rmode);
+        if (rf != nullptr) return rf;
+        // Fail open: snapshot missing -> real path below.
     }
     return orig_fopen(path, mode);
 }

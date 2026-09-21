@@ -1,5 +1,6 @@
-# Per-process /system/build.prop view (S26 Ultra). Values mirror
-# config/spoof.conf; kept in sync by hand (file slice owns this copy).
+# Per-process /system/build.prop view (S26 Ultra): identity/build subset.
+# Overlapping keys match config/spoof.conf exactly; boot/verified-boot and
+# partition keys live in the property table only (not file keys on stock).
 ro.product.manufacturer=samsung
 ro.product.brand=samsung
 ro.product.model=SM-S948B

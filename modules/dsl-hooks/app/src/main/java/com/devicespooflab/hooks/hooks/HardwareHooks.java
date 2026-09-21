@@ -259,6 +259,8 @@ public class HardwareHooks {
         // the LSPosed/Vector JDWP session. A user build has no debugger.
         // Single no-arg overloads each; hookAllMethods keeps the install
         // uniform. Fail-closed: errors keep the original value.
+        // Debug.isNativeDebuggerConnected (API 34+): same policy for the
+        // native-debugger sibling; hookAllMethods is a no-op where absent.
         Legacy.safeHook(TAG, "Debug.isDebuggerConnected", () -> {
             HookFramework.hookAllMethods(Debug.class, "isDebuggerConnected",
                     new HookFramework.Hook() {
@@ -290,6 +292,24 @@ public class HardwareHooks {
                                 }
                             } catch (Throwable t) {
                                 Legacy.log(TAG + ": waitingForDebugger failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
+        Legacy.safeHook(TAG, "Debug.isNativeDebuggerConnected", () -> {
+            HookFramework.hookAllMethods(Debug.class, "isNativeDebuggerConnected",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof Boolean
+                                        && (Boolean) result) {
+                                    chain.replaceResult(false);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isNativeDebuggerConnected failed: "
                                         + t);
                             }
                         }
