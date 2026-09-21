@@ -113,11 +113,11 @@ int my_getifaddrs(struct ifaddrs** ifap) {
     for (struct ifaddrs* cur = *ifap; cur != nullptr; cur = cur->ifa_next) {
         if (cur->ifa_name == nullptr) continue;
         if (cur->ifa_addr == nullptr) continue;
-        if (it->ifa_addr->sa_family != AF_PACKET) continue;
-        auto* sll = reinterpret_cast<struct sockaddr_ll*>(it->ifa_addr);
+        if (cur->ifa_addr->sa_family != AF_PACKET) continue;
+        auto* sll = reinterpret_cast<struct sockaddr_ll*>(cur->ifa_addr);
         if (sll->sll_halen != 6) continue;
 
-        const char* n = it->ifa_name;
+        const char* n = cur->ifa_name;
         if (haveWifi && (strncmp(n, "wlan", 4) == 0)) {
             memcpy(sll->sll_addr, wifiBytes, 6);
         } else if (haveBt && (strncmp(n, "bt", 2) == 0 || strncmp(n, "bnep", 4) == 0)) {
