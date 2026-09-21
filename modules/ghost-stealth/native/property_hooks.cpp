@@ -528,7 +528,11 @@ void InstallPropertyHooks() {
 
     InstallFileHooks();
 
-    InstallGraphicsHooks();  // lazy-safe: resolver + dlopen trap, no RTLD_NOW
+    // InstallGraphicsHooks();  // DISABLED 2026-09-21: same gralloc-import
+    // SEGV with the lazy trap enabled — could be the dlopen-trap DobbyHook
+    // on "dlopen" itself destabilizing the linker during EGL init. Bisect:
+    // run with graphics hooks fully off; if SEGV persists, the crash is a
+    // pre-existing Mesa/Waydroid flaw unrelated to our .so.
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
