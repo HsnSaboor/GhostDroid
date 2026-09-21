@@ -20,9 +20,13 @@
             android:authorities="com.devicespooflab.hooks.XposedService"
             android:exported="true" />
 
-        <!-- Legacy discovery tags for VectorLegacyBridge scanner (manager
-             only lists packages with xposedmodule=true + assets/xposed_init).
-             Modern path (XposedProvider/libxposed) stays primary. -->
+        <!-- Legacy discovery tags: Vector/LSPosed manager lists packages with
+             xposedmodule=true. The daemon classifies modern vs legacy purely
+             by APK contents (java_init.list present => modern). Do NOT add
+             assets/xposed_init: that single file flips the module to legacy,
+             kills the modern binder (SEND_BINDER), and VectorLegacyBridge
+             then looks for a de.robv entry that does not exist. Modern path
+             (XposedProvider/libxposed) stays primary. -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
