@@ -113,6 +113,7 @@ std::unordered_set<DIR*> g_fakedir_set;
 // S26 story is 8 cores, matching cpu_online 0-7). Exact-node mask only;
 // /proc/self/stat stays real (per-process identity, engine frame pacing).
 #define FAKE_PROC_STAT "/data/local/tmp/gs_fake_proc_stat"
+#define FAKE_CGROUP "/data/local/tmp/gs_fake_cgroup"
 
 int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
@@ -444,7 +445,8 @@ bool ContainsCI(const char* hay, const char* needle) {
 // cloak above): any existence/open probe of a root tell reads as absent.
 //
 //   exact:  /system/xbin/su, /system/bin/su, /system/sbin/su, /sbin/su,
-//           /su/bin/su, /vendor/bin/su,
+//           /su/bin/su, /vendor/bin/su, /product/bin/su,
+//           /product/bin/magisk,
 //           /dev/qemu_pipe, /dev/socket/qemud, goldfish nodes,
 //           hawk emulator props/bins/libs, hardware_info.txt
 //   prefix: /data/adb/* (magisk dir, modules, ...)
@@ -463,6 +465,8 @@ bool IsRootPath(const char* p) {
         strcmp(p, "/sbin/su") == 0 ||
         strcmp(p, "/su/bin/su") == 0 ||
         strcmp(p, "/vendor/bin/su") == 0 ||
+        strcmp(p, "/product/bin/su") == 0 ||
+        strcmp(p, "/product/bin/magisk") == 0 ||
         strcmp(p, "/dev/qemu_pipe") == 0 ||
         strcmp(p, "/dev/socket/qemud") == 0 ||
         strcmp(p, "/data/share1/hardware_info.txt") == 0 ||
@@ -585,6 +589,14 @@ bool IsHiddenModuleLine(const char* p) {
 // pids is zeroed the same way, everything else passes through verbatim).
 bool IsStatusPath(const char* p) {
     return IsProcPidView(p, "/status");
+}
+
+// LXC/container tell (libcubehawk reads /proc/self/cgroup,
+// /proc/<pid>/cgroup, /proc/%d/cgroup): host view carries
+// "/.lxc" / "lxc.payload" / "kubepods" segments. Serve the
+// clean phone view (app-uid cgroups + root cpuset/pids) instead.
+bool IsCgroupPath(const char* p) {
+    return IsProcPidView(p, "/cgroup");
 }
 
 
@@ -808,6 +820,9 @@ const char* Redirect(const char* path) {
     // Perf-loop staple with meminfo: /proc/stat (host cpuN lines) polled
     // dozens of times. Same S26 story (8 cores); self/stat stays real.
     if (path != nullptr && strcmp(path, "/proc/stat") == 0) return FAKE_PROC_STAT;
+    // LXC tell: /proc/<pid>/cgroup carries "/.lxc" on containers.
+    // Any-pid view via IsProcPidView (self/task/sibling); phone cgroups.
+    if (IsCgroupPath(path)) return FAKE_CGROUP;
     if (path != nullptr &&
         strcmp(path, "/sys/devices/virtual/thermal/thermal_zone0/temp") == 0)
         return FAKE_THERMAL_ZONE0;

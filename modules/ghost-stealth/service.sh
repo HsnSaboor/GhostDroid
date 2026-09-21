@@ -7,6 +7,15 @@
 # - cpufreq binds report Oryon V3 clocks (2x4.74GHz + 6x3.62GHz).
 # Idempotent: re-run safe (remount over existing bind).
 MODDIR=${0%/*}
+# ACE cache purge: PUBG anti-cheat fingerprints persist in files/ano_tmp
+# (comm.dat emu_tp, ace_cache_db.dat, fake_uiui.dat) + top-level
+# ace_shell_di.dat across reboots. Purge at boot so each launch looks
+# fresh. Guarded + idempotent; NEVER touches UE4Game (pak downloads).
+PUBG_FILES=/data/data/com.tencent.ig/files
+if [ -d "$PUBG_FILES" ]; then
+  rm -rf "$PUBG_FILES"/ano_tmp/* 2>/dev/null || true
+  rm -f "$PUBG_FILES"/ace_cache_db.dat "$PUBG_FILES"/ace_shell_di.dat "$PUBG_FILES"/SpeedUpCCH.dat "$PUBG_FILES"/fake_uiui.dat 2>/dev/null || true
+fi
 FAKE="$MODDIR/fake_cpuinfo"
 cp "$MODDIR"/assets/fake_cpuinfo "$FAKE" 2>/dev/null || true
 mount -o bind "$FAKE" /proc/cpuinfo 2>/dev/null || true
@@ -46,8 +55,9 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # overlapping keys match spoof.conf exactly),
 # gs_fake_cpufreq_{prime,perf,min}, gs_fake_cpu_online,
 # gs_fake_{kallsyms,iomem,ioports,proc_misc},
-# gs_fake_{meminfo,thermal_zone0,proc_stat} (pid 2594 perf-loop
-# RAM/thermal/stat tells: host cpuN lines + swap totals),
+# gs_fake_{meminfo,thermal_zone0,proc_stat,cgroup} (pid 2594 perf-loop
+# RAM/thermal/stat tells: host cpuN lines + swap totals; libcubehawk
+# cgroup reads: host "/.lxc" leak),
 # gs_fake_version (System tab /proc/version file read), gs_fake_proc_net_tcp
 # (ACE net-scan entry point: /proc/net/tcp+6), gs_fake_sys_kernel_{ostype,
 # osrelease,version,hostname} (/proc/sys/kernel/* uname-class file reads).
@@ -65,7 +75,7 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_cpuinfo fake_build_prop \
          fake_cpufreq_prime fake_cpufreq_perf fake_cpufreq_min \
          fake_cpu_online fake_kallsyms fake_iomem fake_ioports \
-         fake_proc_misc fake_meminfo fake_thermal_zone0 fake_proc_stat \
+         fake_proc_misc fake_meminfo fake_thermal_zone0 fake_proc_stat fake_cgroup \
          fake_version fake_proc_net_tcp fake_proc_net_tcp6 fake_proc_net_dev \
          fake_sys_kernel_ostype fake_sys_kernel_osrelease \
          fake_sys_kernel_version fake_sys_kernel_hostname; do

@@ -435,6 +435,7 @@ bool IsDeniedProperty(const char* name) {
     // One-off emulator/cloud tells: real S26 leaves these absent.
     static const char* const kDeniedExact[] = {
         "ro.hardware.camera",        // v4l2 camera HAL key, VMM-only
+        "ro.hardware.alter",         // libcubehawk probe; absent on retail S26
         "ro.hardware.wifi",          // unsourceable wifi HAL key (absent on retail)
         "ro.input.resampling",       // input-resampling knob (absent on retail)
         "ro.hardware.fps.cph",       // Redfinger fps HAL key
