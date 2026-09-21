@@ -19,7 +19,7 @@ public class InputDeviceHooks {
 
     static final String CLOAKED_NAME = "sec_touchscreen";
     static final int SAMSUNG_VENDOR = 0x04e8;
-    static final int SAMSUNG_PRODUCT = 0x04e8;
+    static final int SAMSUNG_PRODUCT = 0x4ee0;
 
     public static void hook(HookContext lpparam) {
         hookNames();
@@ -29,6 +29,9 @@ public class InputDeviceHooks {
         hookDeviceInventory(lpparam);
         hookInputManager(lpparam);
         hookVirtualFlag();
+        hookExternalFlag();
+        hookControllerNumber();
+        hookDescribeContents();
         hookMotionRanges();
         hookVendorProduct();
     }
@@ -36,7 +39,7 @@ public class InputDeviceHooks {
     // ---- name / descriptor rename ------------------------------------
 
     private static void hookNames() {
-        try {
+        Legacy.safeHook(TAG, "InputDevice.getName", () -> {
             Legacy.findAndHookMethod(InputDevice.class, "getName",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
@@ -57,11 +60,9 @@ public class InputDeviceHooks {
                             }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook InputDevice.getName: " + t);
-        }
+        });
 
-        try {
+        Legacy.safeHook(TAG, "InputDevice.getDescriptor", () -> {
             Legacy.findAndHookMethod(InputDevice.class, "getDescriptor",
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
@@ -73,7 +74,9 @@ public class InputDeviceHooks {
                                 if (desc == null) {
                                     return;
                                 }
-                                String clean = sanitizeDeviceLabel(desc);
+                                String clean = isPeripheralLeak(desc)
+                                        ? CLOAKED_NAME
+                                        : sanitizeDeviceLabel(desc);
                                 if (!clean.equals(desc)) {
                                     chain.replaceResult(clean);
                                 }
@@ -82,9 +85,7 @@ public class InputDeviceHooks {
                             }
                         }
                     });
-        } catch (Throwable t) {
-            Legacy.log(TAG + ": failed to hook InputDevice.getDescriptor: " + t);
-        }
+        });
     }
 
     // Device-inventory enumeration ACE DEX walks directly:
@@ -236,11 +237,21 @@ public class InputDeviceHooks {
         });
     }
 
-    // Virtual devices (-1 virtual keyboard) betray software injection.
-    // Real phone enumerations expose no virtual keyboards; report false.
+    // Virtual/external flags betray software injection or docked
+    // peripherals. Real phone enumerations expose neither; report false.
+    // Controller-number/describeContents parcelables never signal gamepads.
+    // One helper per result shape: zero boolean/int-clone repeats.
     private static void hookVirtualFlag() {
-        Legacy.safeHook(TAG, "InputDevice.isVirtual", () -> {
-            Legacy.findAndHookMethod(InputDevice.class, "isVirtual",
+        hookBooleanFalse("isVirtual");
+    }
+
+    private static void hookExternalFlag() {
+        hookBooleanFalse("isExternal");
+    }
+
+    private static void hookBooleanFalse(String method) {
+        Legacy.safeHook(TAG, "InputDevice." + method, () -> {
+            HookFramework.hookAllMethods(InputDevice.class, method,
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
@@ -251,7 +262,35 @@ public class InputDeviceHooks {
                                     chain.replaceResult(false);
                                 }
                             } catch (Throwable t) {
-                                Legacy.log(TAG + ": isVirtual failed: " + t);
+                                Legacy.log(TAG + ": " + method + " failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void hookControllerNumber() {
+        hookIntZero("getControllerNumber");
+    }
+
+    private static void hookDescribeContents() {
+        hookIntZero("describeContents");
+    }
+
+    private static void hookIntZero(String method) {
+        Legacy.safeHook(TAG, "InputDevice." + method, () -> {
+            HookFramework.hookAllMethods(InputDevice.class, method,
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null || !(result instanceof Integer)) {
+                                    return;
+                                }
+                                if ((Integer) result != 0) {
+                                    chain.replaceResult(0);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": " + method + " failed: " + t);
                             }
                         }
                     });
@@ -331,7 +370,11 @@ public class InputDeviceHooks {
             return true;
         }
         int peripheral = query
-                & (InputDevice.SOURCE_MOUSE | InputDevice.SOURCE_KEYBOARD);
+                & (InputDevice.SOURCE_MOUSE | InputDevice.SOURCE_KEYBOARD
+                        | InputDevice.SOURCE_TRACKBALL | InputDevice.SOURCE_DPAD
+                        | InputDevice.SOURCE_GAMEPAD | InputDevice.SOURCE_JOYSTICK
+                        | InputDevice.SOURCE_STYLUS | InputDevice.SOURCE_BLUETOOTH_STYLUS
+                        | InputDevice.SOURCE_HDMI);
         if (peripheral != 0) {
             return false;
         }
@@ -390,10 +433,11 @@ public class InputDeviceHooks {
         Legacy.safeHook(TAG, "InputDevice.getMotionRanges", () -> {
             Legacy.findAndHookMethod(InputDevice.class, "getMotionRanges",
                     new HookFramework.Hook() {@Override
-                        @SuppressWarnings("unchecked")
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
-                                List<Object> orig = (List<Object>) result;
+                                java.util.List<?> orig = result instanceof java.util.List
+                                        ? (java.util.List<?>) result
+                                        : null;
                                 if (orig != null && !orig.isEmpty()) {
                                     return;
                                 }
@@ -456,7 +500,8 @@ public class InputDeviceHooks {
                 try {
                     c.setAccessible(true);
                     return c.newInstance(args);
-                } catch (Throwable ignored) {
+                } catch (Throwable ctorFailed) {
+                    Legacy.log(TAG + ": motionRange ctor failed: " + ctorFailed);
                 }
             }
             return null;
@@ -507,15 +552,18 @@ public class InputDeviceHooks {
 
     // Waydroid peripheral pair + classic host-input tells. Wayland names
     // carry no host-vendor token, so they match first, before the generic
-    // emulator table below.
+    // emulator table below. Tablet/virtual tells cloak to the touchscreen too.
     static boolean isPeripheralLeak(String s) {
         if (s == null) {
             return false;
         }
-        String lower = s.toLowerCase();
+        String lower = s.toLowerCase(java.util.Locale.ROOT);
         return lower.contains("wayland_pointer")
                 || lower.contains("wayland_keyboard")
+                || lower.contains("wayland_tablet")
                 || lower.contains("wayland")
+                || lower.contains("virtual")
+                || lower.contains("tablet")
                 || isEmulator(lower);
     }
 
@@ -530,7 +578,7 @@ public class InputDeviceHooks {
     }
 
     private static boolean isEmulator(String s) {
-        String lower = s.toLowerCase();
+        String lower = s.toLowerCase(java.util.Locale.ROOT);
         return lower.contains("goldfish") || lower.contains("qemu")
                 || lower.contains("ranchu") || lower.contains("vbox")
                 || lower.contains("thinkpad") || lower.contains("elantech")
@@ -548,7 +596,7 @@ public class InputDeviceHooks {
     // and USB function stay untouched.
     public static String sanitizeDeviceLabel(String s) {
         if (s == null) return null;
-        String lower = s.toLowerCase();
+        String lower = s.toLowerCase(java.util.Locale.ROOT);
         if (lower.contains("hda intel")) return "Audio Device";
         if (lower.contains("sunplusit")) return "Camera Device";
         if (lower.contains("xhci")) return "USB Controller";
