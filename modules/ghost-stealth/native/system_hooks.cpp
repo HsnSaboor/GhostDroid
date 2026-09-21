@@ -84,11 +84,12 @@ int my_getifaddrs(struct ifaddrs** ifap) {
     bool haveWifi = !wifiMac.empty() && ParseMac(wifiMac, wifiBytes);
     bool haveBt   = !btMac.empty()   && ParseMac(btMac,   btBytes);
 
-    // eth* unlink: retail phones expose wlan0/rmnet_data0. eth0 with active
-    // traffic is an emulator tell, so unlink every eth node per-process.
-    // (getifaddrs list is caller-freed via freeifaddrs, so unlink is safe;
-    // the underlying buffer outlives the call in libc.) Java WirelessHooks
-    // already reports wlan0 NetworkInfo, so the native list stays coherent.
+    // eth* unlink DISABLED 2026-09-21: ANR bisect — unlinking the getifaddrs
+    // list wedges PUBG startup (main-thread futex_wait; freeifaddrs on a
+    // filtered list corrupts libc bookkeeping). MAC zeroing below still
+    // holds; eth MAC reads as 00:00:00:00:00:00 which matches airplane-ish
+    // retail. Re-enable only with a copied-list (not in-place unlink).
+    if (false) {
     struct ifaddrs* prev = nullptr;
     struct ifaddrs* it = *ifap;
     while (it != nullptr) {
@@ -107,6 +108,7 @@ int my_getifaddrs(struct ifaddrs** ifap) {
         it = next;
     }
     if (*ifap == nullptr) return rc;
+    }
 
     for (struct ifaddrs* cur = *ifap; cur != nullptr; cur = cur->ifa_next) {
         if (cur->ifa_name == nullptr) continue;

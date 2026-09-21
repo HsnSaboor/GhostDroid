@@ -125,28 +125,11 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
-    // ro.hardware.gralloc: caller-sensitive. Mesa/EGL/HWUI/hal-loader
-    // callers need the real minigbm_gbm_mesa value or eglInitialize
-    // SIGSEGVs (isHostHalAllowed null FirstChildElement). Game/ACE callers
-    // must see absent (no retail S26 ships minigbm). dladdr on the return
-    // address distinguishes the two without touching any global state.
-    if (strcmp(name, "ro.hardware.gralloc") == 0) {
-        Dl_info info{};
-        if (dladdr(__builtin_return_address(0), &info) &&
-            info.dli_fname != nullptr) {
-            const char* f = info.dli_fname;
-            if (strstr(f, "libEGL") != nullptr ||
-                strstr(f, "libGLES") != nullptr ||
-                strstr(f, "libhidlbase") != nullptr ||
-                strstr(f, "libhwui") != nullptr ||
-                strstr(f, "libutils") != nullptr ||
-                strstr(f, "gralloc") != nullptr) {
-                if (orig_sp_get) return orig_sp_get(name, value);
-            }
-        }
-        if (value != nullptr) value[0] = '\0';
-        return 0;
-    }
+    // ro.hardware.gralloc DISABLED 2026-09-21: ANR bisect — dladdr on the
+    // return address inside __system_property_get wedges PUBG startup
+    // (main-thread futex_wait). Falls through to real minigbm_gbm_mesa
+    // until a safe caller-sensitive path is proven. DO NOT re-add deny:
+    // Mesa EGL SIGSEGVs without the real value, HIDL-style wedge risk.
     if (IsDeniedProp(name)) {
         if (value != nullptr) value[0] = '\0';
         return 0;
@@ -543,7 +526,9 @@ void InstallPropertyHooks() {
 
     InstallFileHooks();
 
-    InstallGraphicsHooks();
+    // InstallGraphicsHooks();  // DISABLED 2026-09-21: ANR bisect — dlopen
+    // libGLESv2.so inside zygisk install wedges PUBG startup (futex_wait).
+    // Re-enable only after lazy-install from first eglSwapBuffers proven.
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
