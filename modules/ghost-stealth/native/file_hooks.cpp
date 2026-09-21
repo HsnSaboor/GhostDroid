@@ -500,11 +500,17 @@ bool IsRootPath(const char* p) {
 
 // Container-tell cloak (fail-CLOSED with ENOENT, same as above): files that
 // exist only on Waydroid/container ROMs and are absent on stock Samsung.
-//   /system/etc/hosthals.xml — host-HAL overlay list (probe log pid 2594:
+// NOTE: /system/etc/hosthals.xml is deliberately NOT denied — Mesa's EGL
+// (libEGL_mesa.so via isHostHalAllowed) parses it during eglInitialize;
+// ENOENT yields a null XML node that RenderThread dereferences (SIGSEGV
+// in SkiaOpenGLPipeline::setSurface, probe round 2026-09-21). The Adreno
+// story stays at the Java GLES layer + kgsl/PCI fakes where ACE reads it;
+// the HAL loader path must keep working or the game cannot draw at all.
+//   (hosthals.xml — host-HAL overlay list (probe log pid 2594:
 //     ACE opens it 3x next to gralloc/board queries; no S26 ships it).
+//     Left REAL: render-crash risk beats its low signal value.)
 bool IsContainerTellPath(const char* p) {
     if (p == nullptr) return false;
-    if (strcmp(p, "/system/etc/hosthals.xml") == 0) return true;
     // NOTE: /dev/memcg/apps/.../cgroup.procs deliberately NOT denied —
     // libprocessgroup WRITES the app's cgroup join there at startup
     // (probe log pid 2594 line 12). Deny would break process setup;
