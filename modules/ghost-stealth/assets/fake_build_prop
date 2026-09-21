@@ -33,4 +33,3 @@ ro.build.characteristics=nosdcard
 ro.bootloader=S948BXXU1AXE4
 ro.debuggable=0
 ro.secure=1
-ro.kernel.qemu=0

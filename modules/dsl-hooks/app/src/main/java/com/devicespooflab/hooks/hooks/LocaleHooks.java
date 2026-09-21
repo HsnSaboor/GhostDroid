@@ -87,9 +87,9 @@ public class LocaleHooks {
     }
 
     private static Locale buildLocale() {
-        return new Locale(
-                ConfigManager.getLocaleLanguage(),
-                ConfigManager.getLocaleCountry()
-        );
+        return new Locale.Builder()
+                .setLanguage(ConfigManager.getLocaleLanguage())
+                .setRegion(ConfigManager.getLocaleCountry())
+                .build();
     }
 }

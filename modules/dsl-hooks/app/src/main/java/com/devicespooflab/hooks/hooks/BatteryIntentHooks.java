@@ -116,6 +116,9 @@ public class BatteryIntentHooks {
 
     private static void hookStickyBroadcast(HookContext lpparam) {
         // Covered by hookAllMethods above (registerReceiverAsUser included).
+        if (lpparam == null) {
+            return;
+        }
     }
 
     static void rewriteBatteryIntent(Intent intent) {

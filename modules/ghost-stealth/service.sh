@@ -39,13 +39,20 @@ chmod 644 /data/local/tmp/gs_fake_mounts 2>/dev/null || true
 # gs_fake_usb_devices, gs_fake_usb_drivers_list, gs_fake_pci_drivers_list,
 # gs_fake_platform_drivers_list, gs_fake_sys_module_list,
 # gs_fake_usb_{manufacturer,product,serial,idvendor,idproduct,version,
-# busnum,devnum}, gs_fake_pci_{vendor,device},
+# busnum,devnum}, gs_fake_pci_{vendor,device}, gs_fake_pci_{devices,uevent},
+# gs_fake_pci_dev_{uevent,modalias}, gs_fake_kgsl_gpubusy,
 # gs_fake_bat_{charge_full,charge_full_design,model,manufacturer},
-# gs_fake_cpuinfo, gs_fake_build_prop,
+# gs_fake_cpuinfo, gs_fake_build_prop (S26 view, mirrors spoof.conf),
 # gs_fake_cpufreq_{prime,perf,min}, gs_fake_cpu_online,
-# gs_fake_{kallsyms,iomem,ioports,proc_misc}.
+# gs_fake_{kallsyms,iomem,ioports,proc_misc},
+# gs_fake_{meminfo,thermal_zone0,proc_stat} (pid 2594 perf-loop
+# RAM/thermal/stat tells: host cpuN lines + swap totals),
+# gs_fake_version (System tab /proc/version file read), gs_fake_proc_net_tcp
+# (ACE net-scan entry point: /proc/net/tcp+6), gs_fake_sys_kernel_{ostype,
+# osrelease,version,hostname} (/proc/sys/kernel/* uname-class file reads).
 for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
-         fake_usb_drivers_list fake_pci_drivers_list \
+         fake_usb_drivers_list fake_pci_drivers_list fake_pci_devices \
+         fake_pci_uevent \
          fake_platform_drivers_list fake_sys_module_list \
          fake_usb_manufacturer fake_usb_product fake_usb_serial \
          fake_usb_idvendor fake_usb_idproduct fake_usb_version \
@@ -57,7 +64,10 @@ for f in fake_modules fake_input_devices fake_asound_cards fake_usb_devices \
          fake_cpuinfo fake_build_prop \
          fake_cpufreq_prime fake_cpufreq_perf fake_cpufreq_min \
          fake_cpu_online fake_kallsyms fake_iomem fake_ioports \
-         fake_proc_misc; do
+         fake_proc_misc fake_meminfo fake_thermal_zone0 fake_proc_stat \
+         fake_version fake_proc_net_tcp fake_proc_net_tcp6 \
+         fake_sys_kernel_ostype fake_sys_kernel_osrelease \
+         fake_sys_kernel_version fake_sys_kernel_hostname; do
     cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
     chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
 done
@@ -162,11 +172,7 @@ for f in /proc/asound/card0/pcm*/info; do
     [ -f "$f" ] || continue
     mount -o bind "$MODDIR/assets/fake_pcm_info" "$f" 2>/dev/null || true
 done
-# PCI enumeration (Wi-Fi DRIVER=iwlwifi + Intel IDs): per-process ONLY via
-# file_hooks.cpp (serves /data/local/tmp/gs_fake_pci_*). NEVER global
-# tmpfs/bind here — minigbm/libdrm need real PCI sysfs for Intel GPU BO
-# alloc (2026-09-19 root cause: blank tmpfs -> "Unable to create BO").
-for f in fake_pci_devices fake_pci_uevent; do
-    cp "$MODDIR"/assets/$f /data/local/tmp/gs_${f} 2>/dev/null || true
-    chmod 644 /data/local/tmp/gs_${f} 2>/dev/null || true
-done
+# NOTE: PCI enumeration leaves (Wi-Fi DRIVER=iwlwifi + Intel IDs) stay
+# per-process ONLY via file_hooks.cpp (serves /data/local/tmp/gs_fake_pci_*,
+# copied in the loop above). NEVER global tmpfs/bind here — minigbm/libdrm
+# need real PCI sysfs for Intel GPU BO alloc (2026-09-19 root cause).

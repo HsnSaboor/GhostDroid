@@ -1,0 +1,224 @@
+package com.devicespooflab.hooks.hooks;
+
+import com.devicespooflab.hooks.bridge.HookContext;
+import com.devicespooflab.hooks.bridge.HookFramework;
+import com.devicespooflab.hooks.bridge.Legacy;
+
+// Display / window-manager state ACE DEX reads without native:
+// Display.getMetrics/getRealMetrics/getRealSize/getSize/getRefreshRate,
+// WindowManager.getDefaultDisplay, DisplayMetrics field pinning via
+// Resources.getDisplayMetrics (densityDpi pinned to a concrete xxhdpi
+// bucket so host-density leaks cannot disagree with DisplayMetrics).
+// Resolution values are NOT spoofed: Waydroid owns the real window
+// (persist.waydroid.width/height); only leak-shaped fields (host density
+// strings, emulator refresh quirks) are normalized.
+public final class DisplayStateHooks {
+
+    private static final String TAG = "DeviceSpoofLab-DisplayState";
+
+    private DisplayStateHooks() {}
+
+    public static void hook(HookContext lpparam) {
+        hookDisplay(lpparam);
+        hookWindowManager(lpparam);
+        hookDisplayMetrics(lpparam);
+    }
+
+    private static void hookDisplay(HookContext lpparam) {
+        Class<?> display = Legacy.findClassIfExists(
+                "android.view.Display", lpparam.classLoader);
+        if (display == null) {
+            return;
+        }
+        // Refresh rate: normalize absurd host values into a phone bucket.
+        // Real panels report 60/90/120; only clamp out-of-range leaks.
+        Legacy.safeHook(TAG, "Display.getRefreshRate", () -> {
+            HookFramework.hookAllMethods(display, "getRefreshRate",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof Float) {
+                                    float hz = (Float) result;
+                                    if (hz <= 0.0f || hz > 240.0f) {
+                                        chain.replaceResult(60.0f);
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getRefreshRate failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
+        Legacy.safeHook(TAG, "Display.getDisplayId", () -> {
+            HookFramework.hookAllMethods(display, "getDisplayId",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDisplayId failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void hookWindowManager(HookContext lpparam) {
+        Class<?> wm = Legacy.findClassIfExists(
+                "android.view.WindowManager", lpparam.classLoader);
+        if (wm != null) {
+            // getDefaultDisplay removed on API 30+; hookAll keeps every
+            // overload covered where the method still exists. Fail-closed.
+            Legacy.safeHook(TAG, "WindowManager.getDefaultDisplay", () -> {
+                HookFramework.hookAllMethods(wm, "getDefaultDisplay",
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": getDefaultDisplay failed: "
+                                            + t);
+                                }
+                            }
+                        });
+            });
+            Legacy.safeHook(TAG, "WindowManager.getCurrentWindowMetrics", () -> {
+                HookFramework.hookAllMethods(wm, "getCurrentWindowMetrics",
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG
+                                            + ": getCurrentWindowMetrics failed: "
+                                            + t);
+                                }
+                            }
+                        });
+            });
+        }
+        // Display.getMetrics/getRealMetrics/getSize/getRealSize/getRectSize:
+        // Waydroid owns the real window — never rewrite values, but ensure
+        // no host-density string leaks disagreement by normalizing the
+        // delivered DisplayMetrics through the same bucket path.
+        Class<?> display = Legacy.findClassIfExists(
+                "android.view.Display", lpparam.classLoader);
+        if (display == null) {
+            return;
+        }
+        for (String name : new String[]{
+                "getMetrics", "getRealMetrics", "getSize", "getRealSize"}) {
+            final String method = name;
+            Legacy.safeHook(TAG, "Display." + method, () -> {
+                HookFramework.hookAllMethods(display, method,
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    normalizeDelivered(chain);
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": " + method
+                                            + " failed: " + t);
+                                }
+                            }
+                        });
+            });
+        }
+    }
+
+    private static void normalizeDelivered(HookFramework.HookChain chain) {
+        try {
+            if (chain.argCount() == 0) {
+                return;
+            }
+            Object out = chain.arg(0, null);
+            if (out instanceof android.util.DisplayMetrics) {
+                normalizeDensity((android.util.DisplayMetrics) out);
+            } else if (out instanceof android.graphics.Point) {
+                // Resolution untouched — Waydroid owns it.
+            } else if (out instanceof android.graphics.Rect) {
+                // Resolution untouched — Waydroid owns it.
+            }
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": normalizeDelivered failed: " + t);
+        }
+    }
+
+    private static void hookDisplayMetrics(HookContext lpparam) {
+        Class<?> resources = Legacy.findClassIfExists(
+                "android.content.res.Resources", lpparam.classLoader);
+        if (resources == null) {
+            return;
+        }
+        // Resources.getDisplayMetrics: pin densityDpi to a concrete bucket
+        // derived from the real density so host fractional leaks (e.g.
+        // Waydroid 225.5) cannot disagree with Display.getMetrics callers.
+        Legacy.safeHook(TAG, "Resources.getDisplayMetrics", () -> {
+            HookFramework.hookAllMethods(resources, "getDisplayMetrics",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof android.util
+                                        .DisplayMetrics) {
+                                    normalizeDensity(
+                                            (android.util.DisplayMetrics)
+                                                    result);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDisplayMetrics failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    private static void normalizeDensity(android.util.DisplayMetrics dm) {
+        try {
+            int bucket = bucketFor(dm.densityDpi);
+            dm.densityDpi = bucket;
+            if (dm.density != 0.0f) {
+                dm.density = bucket / 160.0f;
+            }
+            dm.xdpi = bucket;
+            dm.ydpi = bucket;
+        } catch (Throwable t) {
+            Legacy.log(TAG + ": normalizeDensity failed: " + t);
+        }
+    }
+
+    private static int bucketFor(int dpi) {
+        int[] buckets = {120, 160, 213, 240, 320, 420, 480, 560, 640};
+        int best = 320;
+        int bestDist = Integer.MAX_VALUE;
+        for (int b : buckets) {
+            int dist = Math.abs(b - dpi);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = b;
+            }
+        }
+        return best;
+    }
+}

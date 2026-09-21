@@ -42,5 +42,38 @@ public class AccountHooks {
                         }
                     });
         } catch (Throwable t) { /* hidden API; may be missing */ }
+
+        // Sibling enumeration paths that bypass getAccounts():
+        // getAccountsByType / getAccountsByTypeForPackage / getAccountsForPackage
+        // / getAccountsByTypeAndFeatures. Same empty-account policy.
+        // Fail-closed: errors keep the original result.
+        for (String name : new String[]{
+                "getAccountsByType", "getAccountsByTypeForPackage",
+                "getAccountsForPackage", "getAccountsByTypeAndFeatures"}) {
+            final String method = name;
+            Legacy.safeHook(TAG, "AccountManager." + method, () -> {
+                HookFramework.hookAllMethods(am, method,
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    if (result instanceof Account[]) {
+                                        Account[] orig = (Account[]) result;
+                                        if (orig.length != 0) {
+                                            chain.replaceResult(new Account[0]);
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": " + method
+                                            + " failed: " + t);
+                                }
+                            }
+                        });
+            });
+        }
     }
 }

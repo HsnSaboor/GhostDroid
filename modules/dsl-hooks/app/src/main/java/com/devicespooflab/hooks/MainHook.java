@@ -11,6 +11,8 @@ import com.devicespooflab.hooks.hooks.BatteryHooks;
 import com.devicespooflab.hooks.hooks.BatteryIntentHooks;
 import com.devicespooflab.hooks.hooks.BuildHooks;
 import com.devicespooflab.hooks.hooks.CameraHooks;
+import com.devicespooflab.hooks.hooks.DeviceStateHooks;
+import com.devicespooflab.hooks.hooks.DisplayStateHooks;
 import com.devicespooflab.hooks.hooks.EuiccHooks;
 import com.devicespooflab.hooks.hooks.GpuHooks;
 import com.devicespooflab.hooks.hooks.HardwareHooks;
@@ -20,13 +22,18 @@ import com.devicespooflab.hooks.hooks.MediaDrmHooks;
 import com.devicespooflab.hooks.hooks.NetworkHooks;
 import com.devicespooflab.hooks.hooks.PackageInfoHooks;
 import com.devicespooflab.hooks.hooks.PackageManagerHooks;
+import com.devicespooflab.hooks.hooks.PackageQueryHooks;
+import com.devicespooflab.hooks.hooks.PowerHooks;
+import com.devicespooflab.hooks.hooks.ProcessHooks;
 import com.devicespooflab.hooks.hooks.SensorHooks;
 import com.devicespooflab.hooks.hooks.SettingsHooks;
 import com.devicespooflab.hooks.hooks.StorageHooks;
 import com.devicespooflab.hooks.hooks.SysfsListHooks;
 import com.devicespooflab.hooks.hooks.SystemPropertiesHooks;
+import com.devicespooflab.hooks.hooks.TelephonyCellHooks;
 import com.devicespooflab.hooks.hooks.TelephonyHooks;
 import com.devicespooflab.hooks.hooks.WebViewHooks;
+import com.devicespooflab.hooks.hooks.WirelessHooks;
 import com.devicespooflab.hooks.utils.ConfigManager;
 import com.devicespooflab.hooks.utils.XposedServiceBridge;
 
@@ -157,6 +164,10 @@ public class MainHook {
             new Entry("SystemPropertiesHooks", SystemPropertiesHooks::hook, 0, true),
             new Entry("HardwareHooks", HardwareHooks::hook, 0, false),
             new Entry("TelephonyHooks", TelephonyHooks::hook, 0, false),
+            new Entry("TelephonyCellHooks", TelephonyCellHooks::hook, 0, false),
+            new Entry("ProcessHooks", ProcessHooks::hook, 0, false),
+            new Entry("PowerHooks", PowerHooks::hook, 0, false),
+            new Entry("DeviceStateHooks", DeviceStateHooks::hook, 0, false),
             new Entry("SettingsHooks", SettingsHooks::hook, 0, false),
             new Entry("AdvertisingIdHooks", AdvertisingIdHooks::hook, 0, false),
             new Entry("AppSetIdHooks", c -> AppSetIdHooks.hook(c, realDeviceSdk), 30, false),
@@ -175,7 +186,10 @@ public class MainHook {
             new Entry("AccountHooks", AccountHooks::hook, 0, false),
             new Entry("LocaleHooks", LocaleHooks::hook, 0, true),
             new Entry("PackageInfoHooks", PackageInfoHooks::hook, 0, false),
+            new Entry("PackageQueryHooks", PackageQueryHooks::hook, 0, false),
             new Entry("ApplistHooks", ApplistHooks::hook, 0, false),
+            new Entry("WirelessHooks", WirelessHooks::hook, 0, false),
+            new Entry("DisplayStateHooks", DisplayStateHooks::hook, 0, false),
             new Entry("BatteryHooks", BatteryHooks::hook, 0, false),
             // Sticky ACTION_BATTERY_CHANGED broadcast: Level/Status/Health/
             // Power source/Technology/Temperature/Voltage rows. Rewritten to

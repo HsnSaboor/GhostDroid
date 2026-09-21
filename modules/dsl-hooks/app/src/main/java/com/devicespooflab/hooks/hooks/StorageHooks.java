@@ -76,5 +76,95 @@ public class StorageHooks {
                         }
                     });
         });
+
+        hookStorageVolume(lpparam);
+        hookStatFsIntVariants();
+    }
+
+    // StorageManager.getStorageVolumes / getPrimaryStorageVolume /
+    // isEncrypted: total-size and encryption-state tells ACE reads without
+    // StatFs. Fail-closed throughout.
+    private static void hookStorageVolume(HookContext lpparam) {
+        Class<?> sm = Legacy.findClassIfExists(
+                "android.os.storage.StorageManager", lpparam.classLoader);
+        if (sm == null) {
+            return;
+        }
+        Legacy.safeHook(TAG, "StorageManager.isEncrypted", () -> {
+            HookFramework.hookAllMethods(sm, "isEncrypted",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (result instanceof Boolean
+                                        && !(Boolean) result) {
+                                    chain.replaceResult(true);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isEncrypted failed: " + t);
+                            }
+                        }
+                    });
+        });
+    }
+
+    // Deprecated int variants ACE DEX still calls on older branches:
+    // same values narrowed to int (256GB/4K blocks fit).
+    private static void hookStatFsIntVariants() {
+        Legacy.safeHook(TAG, "StatFs.getBlockSize", () -> {
+            Legacy.findAndHookMethod(StatFs.class, "getBlockSize",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult((int) BLOCK_SIZE);
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getBlockSize failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "StatFs.getBlockCount", () -> {
+            Legacy.findAndHookMethod(StatFs.class, "getBlockCount",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult((int) (ConfigManager.getStorageTotalBytes() / BLOCK_SIZE));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getBlockCount failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "StatFs.getAvailableBlocks", () -> {
+            Legacy.findAndHookMethod(StatFs.class, "getAvailableBlocks",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult((int) (ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getAvailableBlocks failed: " + t);
+                            }
+                        }
+                    });
+        });
+
+        Legacy.safeHook(TAG, "StatFs.getFreeBlocks", () -> {
+            Legacy.findAndHookMethod(StatFs.class, "getFreeBlocks",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                chain.replaceResult((int) (ConfigManager.getStorageAvailableBytes() / BLOCK_SIZE));
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getFreeBlocks failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 }

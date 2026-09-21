@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import com.devicespooflab.hooks.bridge.Legacy;
-import com.devicespooflab.hooks.bridge.Legacy;
 import com.devicespooflab.hooks.bridge.HookFramework;
 import com.devicespooflab.hooks.bridge.HookContext;
 

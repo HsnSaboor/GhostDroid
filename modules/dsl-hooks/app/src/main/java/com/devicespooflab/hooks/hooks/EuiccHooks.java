@@ -34,5 +34,28 @@ public class EuiccHooks {
         } catch (Throwable t) {
             Legacy.log(TAG + ": failed to hook EuiccManager.getEid: " + t);
         }
+
+        // EuiccManager.isEnabled: a flagship eSIM phone reports enabled;
+        // Waydroid's SIM-less build reports disabled. Fail-closed.
+        Legacy.safeHook(TAG, "EuiccManager.isEnabled", () -> {
+            HookFramework.hookAllMethods(em, "isEnabled",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                                if (result instanceof Boolean
+                                        && !(Boolean) result) {
+                                    chain.replaceResult(true);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isEnabled failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 }

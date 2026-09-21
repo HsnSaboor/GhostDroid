@@ -44,8 +44,51 @@ public class InputDeviceHooks {
         } catch (Throwable t) { /* getDescriptor signature stable */ }
 
         hookSources();
+        hookDeviceInventory();
         hookMotionRanges();
         hookVendorProduct();
+    }
+
+    // Device-inventory enumeration ACE DEX walks directly:
+    // getDeviceIds (int[] incl. -1 virtual keyboard), getDevice(id).
+    // Names cannot be resolved from ids without recursing into getDevice
+    // (reentrancy risk), and id integers carry no host strings — so this
+    // is an audited passthrough guard; the getDevice(id) hook below nulls
+    // emulator-named devices at resolution time. Fail-closed throughout.
+    private static void hookDeviceInventory() {
+        Legacy.safeHook(TAG, "InputDevice.getDeviceIds", () -> {
+            HookFramework.hookAllMethods(InputDevice.class, "getDeviceIds",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null) {
+                                    return;
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDeviceIds failed: " + t);
+                            }
+                        }
+                    });
+        });
+        Legacy.safeHook(TAG, "InputDevice.getDevice", () -> {
+            HookFramework.hookAllMethods(InputDevice.class, "getDevice",
+                    new HookFramework.Hook() {@Override
+                        public void after(HookFramework.HookChain chain, Object result, Throwable error) {
+                            try {
+                                if (error != null || result == null) {
+                                    return;
+                                }
+                                String name = (String) Legacy.callMethod(
+                                        result, "getName");
+                                if (name != null && isEmulator(name)) {
+                                    chain.replaceResult(null);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": getDevice failed: " + t);
+                            }
+                        }
+                    });
+        });
     }
 
     // Flagship touchscreen view: every device reports touchscreen sources.

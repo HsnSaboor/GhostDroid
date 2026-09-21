@@ -29,9 +29,10 @@ int (*orig_sp_foreach)(void (*)(const prop_info*, void*), void*) = nullptr;
 const prop_info* (*orig_sp_find_nth)(unsigned) = nullptr;
 
 // Container tell deny-list: key NAMES alone betray Waydroid even when
-// values are spoofed (probe log: 600x waydroid.host.uid). These read as
-// Forward: shared deny-list predicate, defined once below at gs scope
-// (declared in gs_state.h so the exec/popen bypass reuses it).
+// values are spoofed (probe log: waydroid.host.uid queried hundreds of
+// times). Local IsDeniedProp forwards to the shared gs-scope
+// IsDeniedProperty (declared in gs_state.h so the exec/popen bypass
+// reuses the same list).
 bool IsDeniedProp(const char* name);
 
 // Opaque prop_info* we return from __system_property_find for spoofed keys.
@@ -132,6 +133,10 @@ int my_sp_read(const prop_info* pi, char* name, char* value) {
         rc = orig_sp_read(pi, name, value);
     }
     if (name != nullptr && value != nullptr) {
+        if (IsDeniedProp(name)) {
+            value[0] = '\0';
+            return 0;
+        }
         std::string spoofed;
         if (LookupProperty(name, spoofed)) {
             size_t vlen = spoofed.size();
@@ -157,6 +162,10 @@ void CbTrampoline(void* cookie, const char* name, const char* value,
     auto* w = reinterpret_cast<CbWrapper*>(cookie);
     const char* effective_name = (w->synth_name != nullptr) ? w->synth_name : name;
 
+    if (IsDeniedProperty(effective_name)) {
+        w->orig(w->orig_cookie, effective_name, "", serial);
+        return;
+    }
     std::string spoofed;
     if (LookupProperty(effective_name, spoofed)) {
         w->orig(w->orig_cookie, effective_name, spoofed.c_str(), serial);
@@ -250,8 +259,9 @@ const prop_info* my_sp_find_nth(unsigned n) {
 // getprop bypass reuses the same deny-aware view as the libc hooks.
 // Container tells read as unset: key NAMES alone betray Waydroid even when
 // values are spoofed (probe log: 856x waydroid.host.uid).
-// persist.waydroid.fake_wifi is exempt (platform FakeWifi needs it, no
-// device signal). ro.arch needs no rule (real phones also return empty).
+// persist.waydroid.* is fully denied (incl. fake_wifi/fake_touch — the
+// platform FakeWifi path reads them outside target processes; in-target
+// readers get empty, same as a phone without those keys).
 // Probe-grounded (PUBG pid 3164, 26k-line take): every prefix/exact below
 // was QUERIED by the game and is absent on a real S26, so deny (empty)
 // rather than invent a value.
@@ -263,6 +273,7 @@ bool IsDeniedProperty(const char* name) {
         "waydroid.",                 // Waydroid container (600x+ queried)
         "qemu.",                     // goldfish/ranchu kernel props
         "ro.kernel.qemu",            // ro.kernel.qemu.* paravirt tells
+        "ro.boot.qemu",              // ro.boot.qemu.* (ACE sweep, probe 2594)
         "ro.qemu.",                  // ro.qemu.initrc
         "vendor.qemu.",              // vendor.qemu.vport.*, sf.fake_camera
         "init.svc.qemu",             // init.svc.qemu-*, qemud*
@@ -328,6 +339,9 @@ bool IsDeniedProperty(const char* name) {
         "bst.",                      // bst.bluestacks_eb_url
         "com.taoxinyun.",            // com.taoxinyun.android.channel
         "omx_vp8_",                  // omx_vp8_max/min_qp (soft-codec tell)
+        "ro.bootmode",               // bootmode (absent on retail user builds)
+        "ro.hardware.power",         // power HAL key (absent on retail dumps)
+        "ro.surface_flinger.",       // has_HDR/wide_color (absent on retail S26 dumps)
         "adjust.",                   // adjust.preinstall.*
         "vendor.cf.",                // vendor.cf.address (Cuttlefish)
         "vclusters.",                // vclusters.virtual.camera
@@ -340,12 +354,13 @@ bool IsDeniedProperty(const char* name) {
         size_t len = strlen(prefix);
         if (strncmp(name, prefix, len) == 0) return true;
     }
-    if (strncmp(name, "persist.waydroid.", 17) == 0 &&
-        strcmp(name, "persist.waydroid.fake_wifi") != 0)
+    if (strncmp(name, "persist.waydroid.", 17) == 0)
         return true;
     // One-off emulator/cloud tells: real S26 leaves these absent.
     static const char* const kDeniedExact[] = {
         "ro.hardware.camera",        // v4l2 camera HAL key, VMM-only
+        "ro.hardware.wifi",          // unsourceable wifi HAL key (absent on retail)
+        "ro.input.resampling",       // input-resampling knob (absent on retail)
         "ro.hardware.fps.cph",       // Redfinger fps HAL key
         "ro.adb.qemud",              // adb-over-qemud pipe flag
         "ro.kernel.android.qemud",   // android.qemud kernel driver
@@ -368,10 +383,15 @@ bool IsDeniedProperty(const char* name) {
         "drm.gpu.vendor_name",       // drm/gbm software-render tell
         "service.adb.tcp.port",      // tcp-adb tell (unset on retail S26)
         "persist.adb.tls_server.enable",  // adb tls-server flag
+        "persist.sys.byte_cloud_env",  // byte-dance cloud env flag (queried, probe 2594)
+        "persist.sys.strictmode.disable",  // probe 2594: raw true on container, absent on retail user builds
+        "debug.force_rtl",  // probe 2594: raw false on container, absent on retail user builds
         "ro.boot.vbmeta.digest",     // test-keys vbmeta digest (unsourceable)
         "ro.boot.enable_dm_verity",  // verity-mode tell (unset on retail)
         "sys.tencent.model",         // tencent channel leftover
         "sys.prop.writewifissid",    // wifi-ssid writer flag
+        "sys.wmwidth",               // haimawan cloud-phone window size
+        "sys.wmheight",              // (same sweep, absent on retail)
         "wifi_name",                 // cooler-style wifi key
         "phone_type",                // phone-type leftover key
         "su_white_list.1",           // bd su-whitelist tell

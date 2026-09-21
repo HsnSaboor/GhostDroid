@@ -80,6 +80,35 @@ std::unordered_set<DIR*> g_fakedir_set;
 #define FAKE_IOMEM "/data/local/tmp/gs_fake_iomem"
 #define FAKE_IOPORTS "/data/local/tmp/gs_fake_ioports"
 #define FAKE_PROC_MISC "/data/local/tmp/gs_fake_proc_misc"
+// Uname hook doesn't cover the file read (DeviceInfoHW System tab reads
+// /proc/version directly): GKI 5.15 S26 string, mirrors fake_version.
+#define FAKE_VERSION "/data/local/tmp/gs_fake_version"
+// /proc/net/tcp leaks container veth/bridge IPs in ACE's net scan (probe
+// log pid 2594: fopen+open served REAL). Loopback-only phone table;
+// other net nodes stay real (fail-open).
+#define FAKE_PROC_NET_TCP "/data/local/tmp/gs_fake_proc_net_tcp"
+// IPv6 twin (same loopback-only story, v6 table format: 32-hex addrs).
+#define FAKE_PROC_NET_TCP6 "/data/local/tmp/gs_fake_proc_net_tcp6"
+// /proc/sys/kernel/* file reads: uname hook doesn't cover the file path
+// (probe log pid 2594: ACE reads net + version-class nodes directly).
+// GKI 5.15 S26 values, mirroring spoof.conf kernel.* + fake_version.
+#define FAKE_SYS_KERNEL_OSTYPE "/data/local/tmp/gs_fake_sys_kernel_ostype"
+#define FAKE_SYS_KERNEL_OSRELEASE \
+    "/data/local/tmp/gs_fake_sys_kernel_osrelease"
+#define FAKE_SYS_KERNEL_VERSION \
+    "/data/local/tmp/gs_fake_sys_kernel_version"
+#define FAKE_SYS_KERNEL_HOSTNAME \
+    "/data/local/tmp/gs_fake_sys_kernel_hostname"
+// Probe log (PUBG pid 2594): ACE polls /proc/meminfo (host 8GB + 12GB swap
+// scream container) and thermal_zone0/temp (host 76C server temp) in its
+// perf-profile loops alongside scaling_cur_freq + gpubusy. Serve a 12GB
+// S26 meminfo and a phone-plausible 34.5C skin temp, per-process only.
+#define FAKE_MEMINFO "/data/local/tmp/gs_fake_meminfo"
+#define FAKE_THERMAL_ZONE0 "/data/local/tmp/gs_fake_thermal_zone0"
+// /proc/stat perf-loop staple (host 16+ cpuN lines scream container;
+// S26 story is 8 cores, matching cpu_online 0-7). Exact-node mask only;
+// /proc/self/stat stays real (per-process identity, engine frame pacing).
+#define FAKE_PROC_STAT "/data/local/tmp/gs_fake_proc_stat"
 
 int (*orig_open)(const char*, int, ...) = nullptr;
 int (*orig_openat)(int, const char*, int, ...) = nullptr;
@@ -185,6 +214,41 @@ bool IsNumericPid(const char* s, size_t* lenOut) {
     while (s[i] >= '0' && s[i] <= '9') i++;
     if (lenOut != nullptr) *lenOut = i;
     return i > 0;
+}
+
+// dirfd-relative resolver (no allocation): openat/fstatat/faccessat with a
+// real dirfd + relative path bypass absolute-path predicates
+// (/proc/self-relative "status", "../xbin/su", ...). Resolve via
+// /proc/self/fd/<dirfd> so the same deny/filter/redirect views apply.
+// Fail-open (false) on any error; ".." segments are NOT normalized, so
+// exotic traversals fall through to the real call instead of mis-matching.
+// readlink is never hooked, so this cannot recurse.
+bool ResolveAtDir(int dirfd, const char* path, char* out, size_t cap) {
+    if (dirfd == AT_FDCWD || path == nullptr || out == nullptr || cap == 0)
+        return false;
+    char link[64];
+    snprintf(link, sizeof(link), "/proc/self/fd/%d", dirfd);
+    char dir[1024];
+    ssize_t n = ::readlink(link, dir, sizeof(dir) - 1);
+    if (n <= 0) return false;
+    dir[n] = '\0';
+    size_t dlen = strlen(dir);
+    size_t plen = strlen(path);
+    if (dlen + 1 + plen + 1 > cap) return false;
+    memcpy(out, dir, dlen);
+    out[dlen] = '/';
+    memcpy(out + dlen + 1, path, plen + 1);
+    return true;
+}
+
+// Effective absolute path for at-family calls: resolved when dirfd-relative,
+// otherwise the caller's pointer (zero-cost for the common AT_FDCWD case).
+const char* EffectiveAtPath(int dirfd, const char* path, char* buf,
+                            size_t cap) {
+    if (dirfd != AT_FDCWD && path != nullptr && path[0] != '/' &&
+        path[0] != '\0' && ResolveAtDir(dirfd, path, buf, cap))
+        return buf;
+    return path;
 }
 
 // /proc pid-view predicate (DRY, shared by maps + status filters):
@@ -328,8 +392,12 @@ bool IsTranslatorPath(const char* p) {
     if (PathStartsWith(p, "/system/bin/arm")) return true;
     if (strcmp(p, "/system/bin/houdini") == 0 ||
         strcmp(p, "/system/bin/houdini64") == 0) return true;
-    if (PathStartsWith(p, "/system/lib/arm")) return true;
-    if (PathStartsWith(p, "/system/lib64/arm64")) return true;
+    // NOTE: no blanket /system/lib/arm* or /system/lib64/arm64* prefix:
+    // that prefix also matches the legit library dir and wrongly denied
+    // /system/lib64/arm64/libc.so (probe log pid 2594). Translator files
+    // under those dirs already match the libhoudini / ndk_translation /
+    // ld.config.arm / cpuinfo.arm substring rules above; the bare dirs
+    // themselves don't exist on stock S26 so real open returns ENOENT.
     if (PathStartsWith(p, "/system/etc/binfmt_misc")) return true;
     if (strcmp(p, "/system/etc/init/houdini.rc") == 0 ||
         strcmp(p, "/system/etc/init/ndk_translation.rc") == 0) return true;
@@ -430,6 +498,35 @@ bool IsRootPath(const char* p) {
     return false;
 }
 
+// Container-tell cloak (fail-CLOSED with ENOENT, same as above): files that
+// exist only on Waydroid/container ROMs and are absent on stock Samsung.
+//   /system/etc/hosthals.xml — host-HAL overlay list (probe log pid 2594:
+//     ACE opens it 3x next to gralloc/board queries; no S26 ships it).
+bool IsContainerTellPath(const char* p) {
+    if (p == nullptr) return false;
+    if (strcmp(p, "/system/etc/hosthals.xml") == 0) return true;
+    // NOTE: /dev/memcg/apps/.../cgroup.procs deliberately NOT denied —
+    // libprocessgroup WRITES the app's cgroup join there at startup
+    // (probe log pid 2594 line 12). Deny would break process setup;
+    // game-critical fail-open wins over the cgroup-controller tell.
+    // Host OpenSSL default + dev-machine leftovers (probe log pid 2594:
+    // ACE fopen probes these; no stock S26 ships them, so ENOENT is truth).
+    // /etc/ssl/certs/ca-certificates.crt: exact-only host CA bundle
+    // (Debian/Ubuntu CA store path; NOT the stock /system/etc/security
+    // store ACE reads right after — game-critical fail-open there).
+    if (strcmp(p, "/usr/local/ssl/openssl.cnf") == 0) return true;
+    if (strcmp(p, "/etc/ssl/certs/ca-certificates.crt") == 0) return true;
+    if (PathStartsWith(p, "/Users/")) return true;
+    if (PathStartsWith(p, "/cygdrive/")) return true;
+    return false;
+}
+
+// Single deny predicate (DRY): translator cloak + root cloak +
+// container tells. Every open-family entry point uses this.
+bool IsDeniedPath(const char* p) {
+    return IsTranslatorPath(p) || IsRootPath(p) || IsContainerTellPath(p);
+}
+
 // Hook-framework module predicate for the maps/phdr content filters
 // (fail-OPEN: oversized views fall back to real fds, games never break).
 // Covers xposed / lsposed / lspd / zygisk / shamiko / riru / frida /
@@ -438,8 +535,7 @@ bool IsRootPath(const char* p) {
 bool IsHookFrameworkPath(const char* p) {
     if (p == nullptr) return false;
     if (strstr(p, "gs_native") != nullptr) return false;
-    if (strstr(p, "libdobby") != nullptr) return false;
-    if (strstr(p, "dobby") != nullptr) return false;
+    if (strstr(p, "dobby") != nullptr) return false;  // subsumes libdobby
     if (strstr(p, "lsplt") != nullptr) return false;
     if (ContainsCI(p, "xposed")) return true;
     if (ContainsCI(p, "lsposed")) return true;
@@ -649,6 +745,43 @@ const char* Redirect(const char* path) {
     if (path != nullptr && strcmp(path, "/proc/iomem") == 0) return FAKE_IOMEM;
     if (path != nullptr && strcmp(path, "/proc/ioports") == 0) return FAKE_IOPORTS;
     if (path != nullptr && strcmp(path, "/proc/misc") == 0) return FAKE_PROC_MISC;
+    // Exact /proc/version redirect (per-process redirect over the global
+    // bind so mount-ns-separated targets still see the S26 view; game
+    // boot never reads this, so fail-safe). Sysfs-bound sibling is
+    // /proc/sys/kernel/{osrelease,version,hostname} via the prefix rule.
+    if (path != nullptr && strcmp(path, "/proc/version") == 0) return FAKE_VERSION;
+    // ACE net-scan entry point: /proc/net/tcp(+6) leak container IPs.
+    // Serve a loopback-only phone table; full conntrack readers still get
+    // real files elsewhere via fail-open (only these exact nodes masked).
+    // NOTE: v4 and v6 need their own table format (32-hex addrs for v6);
+    // serving the v6 table for the v4 path is itself a parseable tell.
+    if (path != nullptr && strcmp(path, "/proc/net/tcp") == 0)
+        return FAKE_PROC_NET_TCP;
+    if (path != nullptr && strcmp(path, "/proc/net/tcp6") == 0)
+        return FAKE_PROC_NET_TCP6;
+    // /proc/sys/kernel/* reads (fail-safe: only the 4 version/identity
+    // nodes masked; every other sysctl stays real).
+    if (path != nullptr &&
+        strcmp(path, "/proc/sys/kernel/ostype") == 0)
+        return FAKE_SYS_KERNEL_OSTYPE;
+    if (path != nullptr &&
+        strcmp(path, "/proc/sys/kernel/osrelease") == 0)
+        return FAKE_SYS_KERNEL_OSRELEASE;
+    if (path != nullptr &&
+        strcmp(path, "/proc/sys/kernel/version") == 0)
+        return FAKE_SYS_KERNEL_VERSION;
+    if (path != nullptr &&
+        strcmp(path, "/proc/sys/kernel/hostname") == 0)
+        return FAKE_SYS_KERNEL_HOSTNAME;
+    // Perf-profile loop tells (pid 2594: meminfo + tz0 temp polled next to
+    // scaling_cur_freq/gpubusy): host RAM/swap totals and 76C server temp.
+    if (path != nullptr && strcmp(path, "/proc/meminfo") == 0) return FAKE_MEMINFO;
+    // Perf-loop staple with meminfo: /proc/stat (host cpuN lines) polled
+    // dozens of times. Same S26 story (8 cores); self/stat stays real.
+    if (path != nullptr && strcmp(path, "/proc/stat") == 0) return FAKE_PROC_STAT;
+    if (path != nullptr &&
+        strcmp(path, "/sys/devices/virtual/thermal/thermal_zone0/temp") == 0)
+        return FAKE_THERMAL_ZONE0;
     if (path != nullptr && strcmp(path, "/sys/devices/system/cpu/online") == 0)
         return FAKE_CPU_ONLINE;
     if (path != nullptr) {
@@ -687,7 +820,7 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
@@ -721,30 +854,41 @@ int my_open(const char* path, int flags, ...) {
 }
 
 int my_openat(int dirfd, const char* path, int flags, ...) {
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    char atBuf[1088];
+    const char* effPath = EffectiveAtPath(dirfd, path, atBuf, sizeof(atBuf));
+    if (IsDeniedPath(effPath)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
     }
     if (dirfd == AT_FDCWD) TraceProbeFile("openat", path);
-    if (dirfd == AT_FDCWD && IsMountsPath(path)) {
+    if (IsMountsPath(effPath)) {
         flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
         return orig_openat(dirfd, FAKE_MOUNTS, flags | O_RDONLY, (mode_t)0);
     }
-    if (dirfd == AT_FDCWD && IsMapsPath(path)) {
-        int fd = OpenFilteredMaps(path, flags);
+    // dirfd-relative views must see the same filter: detectors open
+    // "status"/"maps" relative to a /proc/<pid> fd to dodge absolute-path
+    // predicates (probe 2594: sibling-pid + task/comm sweeps). Match on the
+    // resolved absolute (effPath) and open the filter over it, so AT_FDCWD
+    // and dirfd-relative callers share one view. Fail-open (-1) on miss.
+    if (IsMapsPath(effPath)) {
+        int fd = OpenFilteredMaps(effPath, flags);
         if (fd >= 0) return fd;
     }
-    if (dirfd == AT_FDCWD && IsStatusPath(path)) {
-        int fd = OpenFilteredStatus(path, flags);
+    if (IsStatusPath(effPath)) {
+        int fd = OpenFilteredStatus(effPath, flags);
         if (fd >= 0) return fd;
     }
-    if (dirfd == AT_FDCWD && path != nullptr) {
+    if (path != nullptr) {
         // Same fake-file treatment for the extended redirect table.
-        const char* eff = Redirect(path);
-        if (eff != path) {
+        // effPath (not path): a dirfd-relative openat ("scaling_cur_freq"
+        // after opendir of the cpufreq dir) must see the same synthetic
+        // view — resolve via /proc/self/fd first, then serve the fake
+        // absolute (fail-open: unresolved falls through to the real call).
+        const char* eff = Redirect(effPath);
+        if (eff != effPath) {
             flags &= ~(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND);
-            return orig_openat(dirfd, eff, flags | O_RDONLY, (mode_t)0);
+            return orig_openat(AT_FDCWD, eff, flags | O_RDONLY, (mode_t)0);
         }
     }
     if ((flags & O_CREAT) != 0) {
@@ -758,7 +902,7 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return nullptr;
@@ -846,16 +990,16 @@ void RegisterFakeDir(DIR* d) {
     g_fakedir_set.insert(d);
 }
 
-void UnregisterFakeDir(DIR* d) {
+void UnregisterFakeDir(DIR* d, bool& wasRegistered) {
     std::lock_guard<std::mutex> lk(g_fakedir_mutex);
-    g_fakedir_set.erase(d);
+    wasRegistered = g_fakedir_set.erase(d) > 0;
 }
 
 DIR* my_opendir(const char* path) {
     // Translator dirs (/system/lib/arm, /system/lib64/arm64, binfmt_misc)
     // enumerate as EMPTY so listFilesInDirectory() finds no bridge files.
     // The loader already has the real fds, so games keep running.
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return nullptr;
@@ -924,9 +1068,15 @@ int my_closedir(DIR* d) {
         return -1;
     }
     FakeDir* fd = reinterpret_cast<FakeDir*>(d);
+    bool owned = false;
+    UnregisterFakeDir(d, owned);
+    if (!owned) {
+        // Lost the race: a concurrent closedir owns teardown. Never touch
+        // fd here (would be double-free); report success idempotently.
+        return 0;
+    }
     if (fd->list != nullptr) {
         fclose(fd->list);
-        UnregisterFakeDir(d);
         delete fd;
         return 0;
     }
@@ -996,7 +1146,9 @@ int (*orig_fstatat)(int, const char*, struct stat*, int) = nullptr;
 int (*orig_faccessat)(int, const char*, int, int) = nullptr;
 
 int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    char atBuf[1088];
+    const char* effPath = EffectiveAtPath(dirfd, path, atBuf, sizeof(atBuf));
+    if (IsDeniedPath(effPath)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
@@ -1008,7 +1160,9 @@ int my_fstatat(int dirfd, const char* path, struct stat* buf, int flags) {
 }
 
 int my_faccessat(int dirfd, const char* path, int mode, int flags) {
-    if (IsTranslatorPath(path) || IsRootPath(path)) {
+    char atBuf[1088];
+    const char* effPath = EffectiveAtPath(dirfd, path, atBuf, sizeof(atBuf));
+    if (IsDeniedPath(effPath)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
         return -1;
@@ -1388,9 +1542,9 @@ void RegisterSyntheticPopen(FILE* f) {
     g_popen_set.insert(f);
 }
 
-void UnregisterSyntheticPopen(FILE* f) {
+void UnregisterSyntheticPopen(FILE* f, bool& wasRegistered) {
     std::lock_guard<std::mutex> lk(g_popen_mutex);
-    g_popen_set.erase(f);
+    wasRegistered = g_popen_set.erase(f) > 0;
 }
 
 FILE* my_popen(const char* cmd, const char* mode) {
@@ -1414,7 +1568,9 @@ FILE* my_popen(const char* cmd, const char* mode) {
 
 int my_pclose(FILE* f) {
     if (f != nullptr && IsSyntheticPopen(f)) {
-        UnregisterSyntheticPopen(f);
+        bool owned = false;
+        UnregisterSyntheticPopen(f, owned);
+        if (!owned) return 0;  // Lost the race; owner already fclose()d.
         return ::fclose(f) == 0 ? 0 : -1;
     }
     if (orig_pclose != nullptr) return orig_pclose(f);
@@ -1443,13 +1599,20 @@ long my_ptrace(int request, pid_t pid, void* addr, void* data) {
     return -1;
 }
 
-// --- inotify watch: log-only --------------------------------------------------
-// Detectors watch su/magisk paths via inotify; log the watched path for
-// the probe trace. Do NOT deny yet (fail-open by design).
+// --- inotify watch: deny root/hook tells ------------------------------------
+// Detectors watch su/magisk/xposed paths via inotify (probe trace shows
+// inotify_add_watch on tell paths). Deny watches on IsDeniedPath targets
+// with ENOENT (fail-CLOSED: the watched file reads absent via our open
+// cloak, so a working watch would contradict the cloak). All other paths
+// pass through real (fail-open: game download watchers keep working).
 int (*orig_inotify_add_watch)(int, const char*, uint32_t) = nullptr;
 
 int my_inotify_add_watch(int fd, const char* path, uint32_t mask) {
     TraceProbeFile("inotify", path);
+    if (IsDeniedPath(path)) {
+        errno = ENOENT;
+        return -1;
+    }
     (void)mask;
     if (orig_inotify_add_watch != nullptr)
         return orig_inotify_add_watch(fd, path, mask);
@@ -1513,7 +1676,8 @@ void InstallFileHooks() {
     bool ok_pclose = HookExport("pclose",
                                 reinterpret_cast<void*>(&my_pclose),
                                 reinterpret_cast<void**>(&orig_pclose));
-    // Anti-debug ptrace guard + log-only inotify watch (never denies).
+    // Anti-debug ptrace guard + deny-on-tell inotify watch (fail-CLOSED on
+    // IsDeniedPath, fail-open passthrough otherwise).
     bool ok_ptrace = HookExport("ptrace",
                                 reinterpret_cast<void*>(&my_ptrace),
                                 reinterpret_cast<void**>(&orig_ptrace));

@@ -3,15 +3,13 @@ package com.devicespooflab.hooks.hooks;
 import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import com.devicespooflab.hooks.bridge.Legacy;
 import com.devicespooflab.hooks.bridge.HookFramework;
 import com.devicespooflab.hooks.bridge.HookContext;
 import com.devicespooflab.hooks.utils.ConfigManager;
+import com.devicespooflab.hooks.utils.DenyTokens;
 
 // Hides root/cloak tooling from applist scans: strips deny-set packages
 // from list-returning PackageManager APIs and throws
@@ -20,20 +18,6 @@ import com.devicespooflab.hooks.utils.ConfigManager;
 public class ApplistHooks {
 
     private static final String TAG = "DeviceSpoofLab-Applist";
-
-    private static final Set<String> DENY = new HashSet<>(Arrays.asList(
-            "com.topjohnwu.magisk",
-            "io.github.huskydg.magisk",
-            "com.hv.magisk",
-            "org.lsposed.manager",
-            "org.lsposed.lspatch",
-            "org.frknkrc44.hma_oss",
-            "com.tsng.hidemyapplist",
-            "de.robv.android.xposed.installer",
-            "re.frida.server",
-            "com.frida.server",
-            "org.maus.lspd",
-            "moe.shizuku.privileged.api"));
 
     public static void hook(HookContext lpparam) {
         if (!ConfigManager.isIdentifierEnabled("applist_hide")) {
@@ -60,20 +44,7 @@ public class ApplistHooks {
     }
 
     private static boolean denied(String pkg) {
-        if (pkg == null) {
-            return false;
-        }
-        String lower = pkg.toLowerCase();
-        for (String d : DENY) {
-            if (lower.equals(d) || lower.startsWith(d + ".")) {
-                return true;
-            }
-        }
-        return lower.contains("magisk")
-                || lower.contains("lsposed")
-                || lower.contains("lspd")
-                || lower.contains("shamiko")
-                || lower.contains("frida");
+        return DenyTokens.isDeniedPackage(pkg);
     }
 
     private static String packageOf(Object entry) {

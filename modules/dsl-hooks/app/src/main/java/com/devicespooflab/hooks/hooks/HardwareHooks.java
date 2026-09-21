@@ -26,12 +26,129 @@ public class HardwareHooks {
         try {
             hookRuntimeCores();
             hookActivityManagerMemory(lpparam);
+            hookRunningTasks(lpparam);
             hookDebugMemory();
+            hookDebuggerState();
+            hookTestHarness(lpparam);
             if (ConfigManager.isVerboseLoggingEnabled()) {
                 Legacy.log(TAG + ": Successfully hooked hardware specs");
             }
         } catch (Exception e) {
             Legacy.log(TAG + ": Failed to hook hardware: " + e.getMessage());
+        }
+    }
+
+    // Activity.isInMultiWindowMode / UiModeManager car-desk tells: ACE DEX
+    // reads these without native. A flagship phone is fullscreen, not in
+    // multi-window, and uiMode is normal (1). Fail-closed.
+    private static void hookRunningTasks(HookContext lpparam) {
+        Class<?> activity = Legacy.findClassIfExists(
+                "android.app.Activity", lpparam.classLoader);
+        if (activity != null) {
+            Legacy.safeHook(TAG, "Activity.isInMultiWindowMode", () -> {
+                HookFramework.hookAllMethods(activity, "isInMultiWindowMode",
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    if (result instanceof Boolean
+                                            && (Boolean) result) {
+                                        chain.replaceResult(false);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": isInMultiWindowMode failed: "
+                                            + t);
+                                }
+                            }
+                        });
+            });
+            Legacy.safeHook(TAG, "Activity.isInPictureInPictureMode", () -> {
+                HookFramework.hookAllMethods(activity,
+                        "isInPictureInPictureMode",
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    if (result instanceof Boolean
+                                            && (Boolean) result) {
+                                        chain.replaceResult(false);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": isInPictureInPictureMode failed: "
+                                            + t);
+                                }
+                            }
+                        });
+            });
+        }
+        Class<?> uiMode = Legacy.findClassIfExists(
+                "android.app.UiModeManager", lpparam.classLoader);
+        if (uiMode != null) {
+            Legacy.safeHook(TAG, "UiModeManager.getCurrentModeType", () -> {
+                HookFramework.hookAllMethods(uiMode, "getCurrentModeType",
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    if (result instanceof Integer
+                                            && (Integer) result != 1) {
+                                        chain.replaceResult(1);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": getCurrentModeType failed: "
+                                            + t);
+                                }
+                            }
+                        });
+            });
+        }
+    }
+
+    // Build.IS_DEBUGGABLE-adjacent Java tell: ActivityManager.isRunningInTestHarness
+    // and isRunningInUserTestHarness return true on engineering/test builds.
+    // A user build is never in a test harness. Fail-closed.
+    private static void hookTestHarness(HookContext lpparam) {
+        Class<?> am = Legacy.findClassIfExists(
+                "android.app.ActivityManager", lpparam.classLoader);
+        if (am == null) {
+            return;
+        }
+        for (String name : new String[]{
+                "isRunningInTestHarness", "isRunningInUserTestHarness"}) {
+            final String method = name;
+            Legacy.safeHook(TAG, "ActivityManager." + method, () -> {
+                HookFramework.hookAllMethods(am, method,
+                        new HookFramework.Hook() {
+                            @Override
+                            public void after(HookFramework.HookChain chain,
+                                    Object result, Throwable error) {
+                                try {
+                                    if (error != null) {
+                                        return;
+                                    }
+                                    if (result instanceof Boolean
+                                            && (Boolean) result) {
+                                        chain.replaceResult(false);
+                                    }
+                                } catch (Throwable t) {
+                                    Legacy.log(TAG + ": " + method
+                                            + " failed: " + t);
+                                }
+                            }
+                        });
+            });
         }
     }
 
@@ -104,6 +221,48 @@ public class HardwareHooks {
         } catch (Exception e) {
             Legacy.log(TAG + ": Failed to hook ActivityManager memory: " + e.getMessage());
         }
+    }
+
+    private static void hookDebuggerState() {
+        // ACE DEX anti-debug: isDebuggerConnected / waitingForDebugger leak
+        // the LSPosed/Vector JDWP session. A user build has no debugger.
+        // Fail-closed: errors keep the original value.
+        Legacy.safeHook(TAG, "Debug.isDebuggerConnected", () -> {
+            Legacy.findAndHookMethod(Debug.class, "isDebuggerConnected",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof Boolean
+                                        && (Boolean) result) {
+                                    chain.replaceResult(false);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": isDebuggerConnected failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
+        Legacy.safeHook(TAG, "Debug.waitingForDebugger", () -> {
+            Legacy.findAndHookMethod(Debug.class, "waitingForDebugger",
+                    new HookFramework.Hook() {
+                        @Override
+                        public void after(HookFramework.HookChain chain,
+                                Object result, Throwable error) {
+                            try {
+                                if (result instanceof Boolean
+                                        && (Boolean) result) {
+                                    chain.replaceResult(false);
+                                }
+                            } catch (Throwable t) {
+                                Legacy.log(TAG + ": waitingForDebugger failed: "
+                                        + t);
+                            }
+                        }
+                    });
+        });
     }
 
     private static void hookDebugMemory() {

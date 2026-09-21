@@ -20,6 +20,13 @@ public class SystemPropertiesHooks {
     // Waydroid-identifying properties must never leak: return the caller's
     // default instead. The fake_wifi kill-switch itself stays readable so
     // NetworkHooks can honor persist.waydroid.fake_wifi / fake_wifi.
+    // Emulator-vendor tokens (qemu/goldfish/ranchu/genymotion/bluestacks/
+    // vbox/memu/microvirt/gamematrix/cloud-phone stacks) are denied the same
+    // way: ACE DEX reads these keys straight from SystemProperties, and a
+    // present-but-emulator value is the fingerprint (probe_2594 shows the
+    // qemu/goldfish/ranchu + cph/gamematrix/cloud sweeps). Absent keys return
+    // the caller default either way; denying only matters when the host
+    // actually sets them.
     static boolean isDeniedProp(String key) {
         if (key == null || key.isEmpty()) {
             return false;
@@ -27,9 +34,29 @@ public class SystemPropertiesHooks {
         if (key.equals("fake_wifi") || key.endsWith(".fake_wifi")) {
             return false;
         }
-        return key.startsWith("waydroid.")
-                || key.startsWith("persist.waydroid.");
+        if (key.startsWith("waydroid.")
+                || key.startsWith("persist.waydroid.")) {
+            return true;
+        }
+        return isEmulatorVendorProp(key);
     }
+
+    private static boolean isEmulatorVendorProp(String key) {
+        String lower = key.toLowerCase(java.util.Locale.US);
+        for (String token : EMULATOR_PROP_TOKENS) {
+            if (lower.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final String[] EMULATOR_PROP_TOKENS = {
+            "qemu", "goldfish", "ranchu", "genymotion", "bluestacks",
+            "vbox", "memu", "microvirt", "gamematrix", "cloudgame",
+            "docker", "lgsys", "cloudvm", "pscloud", "ecalc",
+            ".cph", "cph.", "cph_", "hm_", ".hm.",
+    };
 
     public static void hook(HookContext lpparam) {
         try {

@@ -604,7 +604,7 @@ public class NetworkHooks {
                     new HookFramework.Hook() {@Override
                         public void after(HookFramework.HookChain chain, Object result, Throwable error) {
                             try {
-                                if (result instanceof android.net.NetworkInfo[]) {
+                                if (result instanceof Object[]) {
                                     for (Object info : (Object[]) result) {
                                         if (info != null) {
                                             spoofNetworkInfo(info);
