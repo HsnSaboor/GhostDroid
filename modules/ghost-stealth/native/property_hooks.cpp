@@ -125,16 +125,13 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
-    // ro.hardware.gralloc: per-process mask. ghost-stealth only injects
-    // into target.txt processes (com.tencent.ig included); system services
-    // such as SurfaceFlinger run unhooked and keep the real minigbm_gbm_mesa
-    // so Mesa EGL never SIGSEGVs. No dladdr: the return-address probe wedged
-    // PUBG startup in futex_wait (2026-09-21 bisect). No deny-table entry:
-    // deny would need the same caller split; the in-target mask covers it.
-    if (strcmp(name, "ro.hardware.gralloc") == 0) {
-        if (value != nullptr) value[0] = '\0';
-        return 0;
-    }
+    // ro.hardware.gralloc DISABLED 2026-09-21: masking it to empty inside
+    // the game process SEGVs GraphicBufferAllocator (verified tombstone:
+    // gbm_mesa_bo_import via CrosGralloc4Mapper::importBuffer). The
+    // allocator queries the prop mid-allocate and mis-selects the mapper
+    // backend when the value is absent. Falls through to real
+    // minigbm_gbm_mesa until a backend-safe spoof (kaanapali-with-mapper?)
+    // is proven. DO NOT deny without a mapper shim.
     if (IsDeniedProp(name)) {
         if (value != nullptr) value[0] = '\0';
         return 0;

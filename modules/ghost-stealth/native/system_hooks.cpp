@@ -84,23 +84,14 @@ int my_getifaddrs(struct ifaddrs** ifap) {
     bool haveWifi = !wifiMac.empty() && ParseMac(wifiMac, wifiBytes);
     bool haveBt   = !btMac.empty()   && ParseMac(btMac,   btBytes);
 
-    // eth* in-place rename: retail phones expose wlan0/rmnet_data0, so eth0
-    // with active traffic is an emulator tell. Overwrite the name buffer
-    // ("eth0" is 5 bytes incl. NUL; "wlan0" is 6) — the ifaddrs name buffer
-    // comes from libc's internal allocation with spare room, and overwriting
-    // keeps freeifaddrs bookkeeping intact (unlinking wedged PUBG in
-    // futex_wait, 2026-09-21 bisect). Bounded: copy at most 5 chars + NUL.
+    // eth* in-place rename DISABLED 2026-09-21: writing "wlan0"+NUL (6B)
+    // over the "eth0" name buffer (5B) overflows into libc's ifaddrs
+    // allocation and SEGVs the gralloc/EGL path (verified tombstone in
+    // gbm_mesa_bo_import via GraphicBufferAllocator). MAC zeroing below
+    // still holds. Re-enable only with a copied-list (not in-place).
     for (struct ifaddrs* cur = *ifap; cur != nullptr; cur = cur->ifa_next) {
         if (cur->ifa_name == nullptr) continue;
-        if (strncmp(cur->ifa_name, "eth", 3) == 0) {
-            char* w = cur->ifa_name;
-            w[0] = 'w';
-            w[1] = 'l';
-            w[2] = 'a';
-            w[3] = 'n';
-            w[4] = '0';
-            w[5] = '\0';
-        }
+        // (eth rename disabled above; fall through to MAC handling.)
         if (cur->ifa_addr == nullptr) continue;
         if (cur->ifa_addr->sa_family != AF_PACKET) continue;
         auto* sll = reinterpret_cast<struct sockaddr_ll*>(cur->ifa_addr);
