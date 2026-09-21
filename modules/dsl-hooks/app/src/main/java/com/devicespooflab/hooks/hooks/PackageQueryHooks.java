@@ -301,9 +301,6 @@ public final class PackageQueryHooks {
                                             chain.replaceResult(null);
                                         }
                                     }
-                                } catch (android.content.pm.PackageManager
-                                        .NameNotFoundException e) {
-                                    throw e;
                                 } catch (Throwable t) {
                                     Legacy.log(TAG + ": " + name
                                             + " filter failed: " + t);
