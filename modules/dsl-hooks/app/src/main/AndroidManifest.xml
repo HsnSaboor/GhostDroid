@@ -19,6 +19,19 @@
             android:name="io.github.libxposed.service.XposedProvider"
             android:authorities="com.devicespooflab.hooks.XposedService"
             android:exported="true" />
+
+        <!-- Legacy discovery tags for VectorLegacyBridge scanner (manager
+             only lists packages with xposedmodule=true + assets/xposed_init).
+             Modern path (XposedProvider/libxposed) stays primary. -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="GhostDroid S26 Ultra Framework Cloak" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
 </application>
 
 </manifest>

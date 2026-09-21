@@ -125,11 +125,16 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
-    // ro.hardware.gralloc DISABLED 2026-09-21: ANR bisect — dladdr on the
-    // return address inside __system_property_get wedges PUBG startup
-    // (main-thread futex_wait). Falls through to real minigbm_gbm_mesa
-    // until a safe caller-sensitive path is proven. DO NOT re-add deny:
-    // Mesa EGL SIGSEGVs without the real value, HIDL-style wedge risk.
+    // ro.hardware.gralloc: per-process mask. ghost-stealth only injects
+    // into target.txt processes (com.tencent.ig included); system services
+    // such as SurfaceFlinger run unhooked and keep the real minigbm_gbm_mesa
+    // so Mesa EGL never SIGSEGVs. No dladdr: the return-address probe wedged
+    // PUBG startup in futex_wait (2026-09-21 bisect). No deny-table entry:
+    // deny would need the same caller split; the in-target mask covers it.
+    if (strcmp(name, "ro.hardware.gralloc") == 0) {
+        if (value != nullptr) value[0] = '\0';
+        return 0;
+    }
     if (IsDeniedProp(name)) {
         if (value != nullptr) value[0] = '\0';
         return 0;
@@ -526,9 +531,7 @@ void InstallPropertyHooks() {
 
     InstallFileHooks();
 
-    // InstallGraphicsHooks();  // DISABLED 2026-09-21: ANR bisect — dlopen
-    // libGLESv2.so inside zygisk install wedges PUBG startup (futex_wait).
-    // Re-enable only after lazy-install from first eglSwapBuffers proven.
+    InstallGraphicsHooks();  // lazy-safe: resolver + dlopen trap, no RTLD_NOW
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",
