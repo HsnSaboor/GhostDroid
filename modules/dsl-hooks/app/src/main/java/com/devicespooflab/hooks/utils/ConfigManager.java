@@ -267,7 +267,7 @@ public class ConfigManager {
         defaults.put("ro.product.name", "m3qxeea");
         defaults.put("ro.product.device", "m3q");
         defaults.put("ro.product.board", "kaanapali");
-        defaults.put("ro.hardware", "m3q");
+        defaults.put("ro.hardware", "qcom");
         defaults.put("ro.board.platform", "kaanapali");
 
         String[] partitions = {"product", "system", "system_ext", "vendor", "vendor_dlkm", "odm", "bootimage", "system_dlkm"};
@@ -288,6 +288,9 @@ public class ConfigManager {
         defaults.put("ro.build.tags", "release-keys");
         defaults.put("ro.build.description", "m3qxeea-user 13 TQ3A.230901.001 S948BXXU1AXE4 release-keys");
         defaults.put("ro.build.product", "m3qxeea");
+        defaults.put("ro.build.user", "dpi");
+        defaults.put("ro.build.host", "SWDG4619");
+        defaults.put("ro.build.date.utc", "1716336000");
         defaults.put("ro.build.device", "m3qxeea");
         defaults.put("ro.build.characteristics", "nosdcard");
         defaults.put("ro.build.flavor", "m3qxeea-user");
@@ -406,6 +409,7 @@ public class ConfigManager {
         defaults.put("gsm.sim.operator.alpha", "T-Mobile");
         defaults.put("gsm.sim.operator.numeric", "310260");
         defaults.put("gsm.sim.operator.iso-country", "us");
+        defaults.put("gsm.version.baseband", "S948BXXU1AXE4");
         // Empty = passthrough; MainActivity seeds a concrete TZ on first launch.
         defaults.put("persist.sys.timezone", "");
         defaults.put("persist.sys.usb.config", "none");

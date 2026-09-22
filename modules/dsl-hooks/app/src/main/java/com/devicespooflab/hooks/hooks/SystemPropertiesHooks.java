@@ -56,6 +56,10 @@ public class SystemPropertiesHooks {
             "vbox", "memu", "microvirt", "gamematrix", "cloudgame",
             "docker", "lgsys", "cloudvm", "pscloud", "ecalc",
             ".cph", "cph.", "cph_", "hm_", ".hm.",
+            "mesa", "debug.gles", "debug.egl", "ro.hwui", "gralloc.gbm",
+            "ro.hardware.alter", "ro.bootmode",
+            "opporom", ".emui", "miui", "vivo", "meizu", "lenovo",
+            "nubia", "aa.romver", "rom.id", "lewa", "gnrom", "tyd.kbstyle",
     };
 
     public static void hook(HookContext lpparam) {

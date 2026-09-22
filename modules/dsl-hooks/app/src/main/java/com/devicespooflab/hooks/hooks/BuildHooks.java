@@ -345,7 +345,7 @@ public class BuildHooks {
     }
 
     private static String getRadioVersion() {
-        return prop("gsm.version.baseband", "unknown");
+        return prop("gsm.version.baseband", "S948BXXU1AXE4");
     }
 
     private static String firstAbi(String value) {

@@ -84,20 +84,44 @@ int my_getifaddrs(struct ifaddrs** ifap) {
     bool haveWifi = !wifiMac.empty() && ParseMac(wifiMac, wifiBytes);
     bool haveBt   = !btMac.empty()   && ParseMac(btMac,   btBytes);
 
-    // eth* in-place rename DISABLED 2026-09-21: writing "wlan0"+NUL (6B)
-    // over the "eth0" name buffer (5B) overflows into libc's ifaddrs
-    // allocation and SEGVs the gralloc/EGL path (verified tombstone in
-    // gbm_mesa_bo_import via GraphicBufferAllocator). MAC zeroing below
-    // still holds. Re-enable only with a copied-list (not in-place).
+    // Same-or-shorter in-place rename (2026-09-22): libc's ifa_name buffer
+    // is exactly strlen(orig)+1, so only strcpy an alias with
+    // strlen(alias) <= strlen(orig) — never past the original NUL. Longer
+    // phone names ("wlan0" 5B over "eth0" 5B incl. NUL) SEGV'd gralloc/EGL
+    // (2026-09-21 tombstone in gbm_mesa_bo_import). Mapping keeps the
+    // lo/wlan*/rmnet_data* family used by the /proc/net/dev fake:
+    //   eth0 (4)      -> "wlan"  (4, exact fit)
+    //   ethN len>=5   -> "wlan0" (5, fits)
+    //   veth*         -> "wlan0" (veth names are >=5, fits; guarded anyway)
+    //   waydroid* (9) -> "wlan0" (5 fits; "rmnet_data0" 11 would NOT fit)
+    //   docker*       -> "wlan0" (fits; guarded anyway)
+    // Rename runs before MAC handling, so a renamed entry matches the
+    // "wlan" prefix below and receives the spoofed wifi MAC (looks like a
+    // real phone wlan); anything else non-lo gets zeroed as before.
+    // Duplicate names across entries are legal (multi-addr interfaces).
     for (struct ifaddrs* cur = *ifap; cur != nullptr; cur = cur->ifa_next) {
         if (cur->ifa_name == nullptr) continue;
-        // (eth rename disabled above; fall through to MAC handling.)
+        const char* n = cur->ifa_name;
+        const char* alias = nullptr;
+        if (strncmp(n, "waydroid", 8) == 0) {
+            alias = "wlan0";
+        } else if (strncmp(n, "veth", 4) == 0) {
+            alias = "wlan0";
+        } else if (strncmp(n, "docker", 6) == 0) {
+            alias = "wlan0";
+        } else if (strncmp(n, "eth", 3) == 0) {
+            alias = (strlen(n) >= 5) ? "wlan0" : "wlan";
+        }
+        if (alias != nullptr && strlen(alias) <= strlen(n)) {
+            strcpy(cur->ifa_name, alias);
+            n = cur->ifa_name;
+        }
+        // (fall through to MAC handling.)
         if (cur->ifa_addr == nullptr) continue;
         if (cur->ifa_addr->sa_family != AF_PACKET) continue;
         auto* sll = reinterpret_cast<struct sockaddr_ll*>(cur->ifa_addr);
         if (sll->sll_halen != 6) continue;
 
-        const char* n = cur->ifa_name;
         if (haveWifi && (strncmp(n, "wlan", 4) == 0)) {
             memcpy(sll->sll_addr, wifiBytes, 6);
         } else if (haveBt && (strncmp(n, "bt", 2) == 0 || strncmp(n, "bnep", 4) == 0)) {
