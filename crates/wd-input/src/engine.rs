@@ -8,5 +8,5 @@ pub mod grab;
 pub mod stick;
 
 pub use aim::{apply_curve, apply_deadzone, clamp_reach, effective_deadzone, shape_delta};
-pub use grab::{GrabState, grab_edge, grab_rising_edge};
+pub use grab::{GrabState, Modifiers, grab_edge, grab_level, grab_rising_edge};
 pub use stick::{StickInput, dir_vector, stick_pos};

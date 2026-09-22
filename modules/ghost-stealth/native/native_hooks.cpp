@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <mutex>
 #include <sys/syscall.h>
@@ -20,6 +21,14 @@ std::mutex g_install_mutex;
 }  // namespace
 
 namespace gs {
+
+void* SafeResolve(const char* sym) {
+    if (sym == nullptr || *sym == '\0') return nullptr;
+    dlerror();
+    void* addr = dlsym(RTLD_DEFAULT, sym);
+    (void)dlerror();
+    return addr;
+}
 
 bool LookupProperty(const char* name, std::string& out) {
     if (name == nullptr) return false;

@@ -866,11 +866,11 @@ const char* Redirect(const char* path) {
 // revision declared them `bool`, which truncated every fd to 1 and killed
 // every target at ART startup (fdsan double-close SIGABRT crash loop).
 int my_open(const char* path, int flags, ...) {
-    // Lazy GLES + sensor hook retry (same rationale as my_sp_get): file
-    // probes run throughout the game lifecycle, long after the GL driver
-    // and libandroid map.
-    TryHookGraphicsResolved();
-    TryHookSensorResolved();
+    // NEVER resolve symbols here. my_open/my_fopen run on every file probe
+    // including zygote specialization's maps-sensitive window; the Dobby
+    // maps parser crashed there (tombstones 39/40, PID 9978/10057/10127).
+    // Lazy retries live in my_sp_get (plain dlsym only). File hooks handle
+    // path redirection/filtering and nothing else.
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
@@ -965,8 +965,9 @@ int my_openat(int dirfd, const char* path, int flags, ...) {
 }
 
 FILE* my_fopen(const char* path, const char* mode) {
-    TryHookGraphicsResolved();
-    TryHookSensorResolved();
+    // NEVER resolve symbols here (see my_open above): any maps-parser
+    // call inside fopen recurses fopen -> resolve -> fopen to stack
+    // overflow (tombstone 9978). Path handling only.
     if (IsDeniedPath(path)) {
         TraceProbeFile("deny", path);
         errno = ENOENT;
@@ -1012,9 +1013,11 @@ FILE* my_fopen(const char* path, const char* mode) {
 }
 
 bool HookExport(const char* sym, void* replace, void** orig) {
-    void* addr = DobbySymbolResolver(nullptr, sym);
+    // SafeResolve (plain dlsym) keeps install-time hooking out of the
+    // Dobby maps parser (zygote crash, tombstones 39/40).
+    void* addr = SafeResolve(sym);
     if (addr == nullptr) {
-        DS_LOGW("DobbySymbolResolver(%s) -> null, skipping", sym);
+        DS_LOGW("SafeResolve(%s) -> null, skipping", sym);
         return false;
     }
     int rc = DobbyHook(addr, (dobby_dummy_func_t)replace,

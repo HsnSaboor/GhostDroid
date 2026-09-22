@@ -7,8 +7,9 @@
 // VERSION/SHADING. Every other enum and every failure path falls through
 // to the original: fail-open rendering, fail-closed identity strings.
 //
-// RESOLVER-ONLY, SAFE FROM preAppSpecialize. Resolution is a single
-// DobbySymbolResolver(nullptr, "glGetString") over already-loaded exports:
+// RESOLVER-ONLY, SAFE FROM preAppSpecialize. Resolution is plain
+// dlsym(RTLD_DEFAULT, "glGetString") over already-loaded exports (see
+// SafeResolve): linker soinfo only, zero maps parsing, zero locks taken.
 // zero linker work, zero locks taken. There is deliberately NO fallback
 // that loads a library and NO trap on the dynamic loader:
 //
@@ -21,10 +22,13 @@
 //     futex_wait at EGL init (ANR, verified 2026-09-21).
 //
 // LAZY RESOLUTION (2026-09-21): libGLESv2.so is NOT loaded in preAppSpecialize,
-// so the install-time TryHookResolved() always misses. my_sp_get / my_open /
-// my_fopen retry TryHookGraphicsResolved() on every probe (cheap: single
-// pointer check once hooked), so the hook lands the moment the game maps the
-// GL driver. That closes the libcubehawk "Mesa Intel UHD 620" tell.
+// so the install-time TryHookResolved() always misses. my_sp_get retries
+// TryHookGraphicsResolved() on every probe (cheap: single pointer check
+// once hooked + crash-safe dlsym miss), so the hook lands the moment the
+// game maps the GL driver. That closes the libcubehawk "Mesa Intel UHD 620"
+// tell. File hooks (my_open/my_fopen) NEVER retry: any resolver there ran
+// through /proc/self/maps parsing and crashed zygote (tombstones 39/40).
+// Must mirror GpuHooks.java + spoof.conf gles.* entries.
 // Must mirror GpuHooks.java + spoof.conf gles.* entries.
 
 #include "gs_state.h"
@@ -97,15 +101,11 @@ const unsigned char* my_glGetString(unsigned int name) {
 }
 
 bool TryHookResolved() {
-    // Reentrancy guard (see sensor_hooks.cpp TryHookOne): the resolver
-    // opens /proc/self/maps via fopen; our my_fopen retries this hook.
-    // Plain static, NOT thread_local (emutls uninit in early zygote).
-    static bool s_in_resolve = false;
+    // Crash-safe: SafeResolve is plain dlsym (linker soinfo, no
+    // /proc/self/maps parse, no fopen), so no reentrancy guard needed and
+    // safe from any hook context including my_sp_get and install time.
     if (g_orig_gl_get_string != nullptr) return true;
-    if (s_in_resolve) return false;
-    s_in_resolve = true;
-    void* sym = DobbySymbolResolver(nullptr, "glGetString");
-    s_in_resolve = false;
+    void* sym = SafeResolve("glGetString");
     if (sym == nullptr) return false;
     return DobbyHook(sym, (dobby_dummy_func_t)&my_glGetString,
                      (dobby_dummy_func_t*)&g_orig_gl_get_string) == 0;
@@ -117,7 +117,7 @@ void InstallGraphicsHooks() {
     // Idempotent: TryHookResolved short-circuits once hooked, so this is
     // safe to call on every install path including preAppSpecialize.
     // NOTE: preAppSpecialize always misses (no GL driver mapped yet); the
-    // lazy retry in my_sp_get/my_open/my_fopen lands it later.
+    // lazy retry in my_sp_get lands it later.
     bool ok = TryHookResolved();
     DS_LOGI("graphics hooks: glGetString=%d", ok ? 1 : 0);
 }

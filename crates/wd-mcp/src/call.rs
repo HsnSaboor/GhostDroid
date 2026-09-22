@@ -692,7 +692,7 @@ fn shell_live(params: &serde_json::Value) -> serde_json::Value {
         "--".to_owned(),
         "sh".to_owned(),
         "-c".to_owned(),
-        cmd.clone(),
+        cmd,
     ];
     match run(&argv, 30_000) {
         Ok(out) => serde_json::json!({"ok": true, "tool": "shell.exec", "output": out}),

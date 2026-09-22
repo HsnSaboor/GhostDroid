@@ -70,7 +70,7 @@ pub fn strip_png_warn(data: &[u8]) -> &[u8] {
 }
 
 /// Base64 alphabet value, or 255 when not in the alphabet.
-fn b64_val(byte: u8) -> u8 {
+const fn b64_val(byte: u8) -> u8 {
     match byte {
         b'A'..=b'Z' => byte - b'A',
         b'a'..=b'z' => byte - b'a' + 26,
@@ -83,9 +83,14 @@ fn b64_val(byte: u8) -> u8 {
 
 /// Decode base64 (whitespace-tolerant, std-only, no new dep).
 /// Returns raw bytes or an error string for callers to surface.
+///
+/// # Errors
+///
+/// Returns a message string when the input is empty, misaligned, or holds
+/// non-alphabet bytes.
 pub fn decode_b64(text: &str) -> Result<Vec<u8>, String> {
     let clean: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if clean.is_empty() || clean.len() % 4 != 0 {
+    if clean.is_empty() || !clean.len().is_multiple_of(4) {
         return Err("empty/invalid base64".to_owned());
     }
     let mut out = Vec::with_capacity(clean.len() / 4 * 3);
@@ -109,12 +114,14 @@ pub fn decode_b64(text: &str) -> Result<Vec<u8>, String> {
             | (u32::from(sextets[1]) << 12)
             | (u32::from(sextets[2]) << 6)
             | u32::from(sextets[3]);
-        out.push((triple >> 16) as u8);
+        // `triple` is a 24-bit base64 group; each shift+truncate extracts one
+        // byte. Low 8 bits always hold the target byte, so no data is lost.
+        out.push(u8::try_from((triple >> 16) & 0xFF).unwrap_or(0));
         if pad < 2 {
-            out.push((triple >> 8) as u8);
+            out.push(u8::try_from((triple >> 8) & 0xFF).unwrap_or(0));
         }
         if pad < 1 {
-            out.push(triple as u8);
+            out.push(u8::try_from(triple & 0xFF).unwrap_or(0));
         }
         i += 4;
     }

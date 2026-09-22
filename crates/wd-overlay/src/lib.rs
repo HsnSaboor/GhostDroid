@@ -19,7 +19,7 @@ pub mod widgets;
 pub use canvas::EditorCanvas;
 pub use capture::{MOUSE_BUTTONS, capturable, normalize_capture};
 pub use hotkeys::{
-    HotkeyAction, action_for, action_for_full, action_for_full_edge, defaults, dup_free,
+    GrabEdge, HotkeyAction, action_for, action_for_full, action_for_full_edge, defaults, dup_free,
     is_visibility_key,
 };
 pub use hud::{BindRow, HudState, TouchDot};

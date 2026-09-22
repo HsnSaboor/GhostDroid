@@ -141,14 +141,8 @@ impl EditorCanvas {
     }
 
     /// Edge variant with explicit previous state.
-    pub fn on_modifier_edge(
-        &mut self,
-        alt: bool,
-        ctrl: bool,
-        prev_alt: bool,
-        prev_ctrl: bool,
-    ) -> bool {
-        let grabbed = self.hud.on_modifier_edge(alt, ctrl, prev_alt, prev_ctrl);
+    pub fn on_modifier_edge(&mut self, edge: crate::GrabEdge) -> bool {
+        let grabbed = self.hud.on_modifier_edge(edge);
         tracing::debug!(grabbed, "wd-overlay: canvas grab");
         grabbed
     }

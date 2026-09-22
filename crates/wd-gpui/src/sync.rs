@@ -240,11 +240,10 @@ fn toml_value(src: &str, key: &str) -> String {
     src.lines()
         .filter_map(|line| line.split_once('='))
         .filter(|(k, _)| k.trim().trim_matches('"') == key)
-        .filter_map(|(_, v)| {
+        .find_map(|(_, v)| {
             let v = v.trim().trim_matches('"').trim().to_owned();
             if v.is_empty() { None } else { Some(v) }
         })
-        .next()
         .unwrap_or_default()
 }
 
@@ -321,10 +320,11 @@ pub fn keymap_fire_key() -> String {
         if t.contains("\"id\"") && t.contains("\"fire\"") {
             fire = true;
         }
-        if fire && t.contains("\"key\"") {
-            if let Some(v) = t.split('"').nth(3) {
-                return v.to_owned();
-            }
+        if fire
+            && t.contains("\"key\"")
+            && let Some(v) = t.split('"').nth(3)
+        {
+            return v.to_owned();
         }
     }
     "MouseLeft".to_owned()
@@ -348,9 +348,8 @@ pub fn tail_socket_logs() -> Vec<String> {
     use std::io::Read as _;
     use std::os::unix::net::UnixStream;
     for path in LOG_SOCKETS {
-        let mut stream = match UnixStream::connect(path) {
-            Ok(s) => s,
-            Err(_) => continue,
+        let Ok(mut stream) = UnixStream::connect(path) else {
+            continue;
         };
         if stream
             .set_read_timeout(Some(Duration::from_millis(300)))
@@ -360,9 +359,8 @@ pub fn tail_socket_logs() -> Vec<String> {
         }
         let mut buf = vec![0u8; 16_384];
         let text = match stream.read(&mut buf) {
-            Ok(0) => continue,
-            Ok(n) => String::from_utf8_lossy(&buf[..n]).into_owned(),
-            Err(_) => continue,
+            Ok(n) if n > 0 => String::from_utf8_lossy(&buf[..n]).into_owned(),
+            _ => continue,
         };
         let lines: Vec<String> = text
             .lines()

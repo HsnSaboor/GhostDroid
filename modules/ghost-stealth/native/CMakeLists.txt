@@ -16,8 +16,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # DOBBY_SOURCE_DIR: path to Dobby checkout (CI clones JingMatrix fork).
-# SymbolResolver plugin (default ON) provides DobbySymbolResolver used for
-# export-side lookup; BionicLinkerUtil enables linker-soinfo resolution.
+# Only DobbyHook (inline trampolines) is used. All symbol lookup goes
+# through plain dlsym(RTLD_DEFAULT) — NEVER DobbySymbolResolver: it parses
+# /proc/self/maps via fopen, which recursed through my_fopen/my_open and
+# crashed zygote specialization (tombstones 39/40). BionicLinkerUtil
+# enables linker-soinfo resolution for DobbyHook itself.
 if(NOT DEFINED DOBBY_SOURCE_DIR)
   message(FATAL_ERROR "DOBBY_SOURCE_DIR must point at a Dobby checkout")
 endif()

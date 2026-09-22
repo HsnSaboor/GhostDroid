@@ -125,14 +125,13 @@ int ServeValue(const char* name, char* value, int origRc) {
 int my_sp_get(const char* name, char* value) {
     TraceProbeProp(name);
     if (name == nullptr) return 0;
-    // Lazy GLES hook: libGLESv2.so maps after preAppSpecialize, so retry the
-    // resolver on every prop probe (single pointer check once hooked).
-    // Lands glGetString the moment the game loads the GL driver.
-    // NOTE: sensor retry deliberately NOT here. my_sp_get fires during
-    // zygote specialization (readSystemProperties <- createProcessGroup)
-    // where Dobby's GetProcessModuleMap crashes (tombstone 10127).
-    // Sensor retry lives in my_open/my_fopen only (post-specialize).
+    // Lazy GLES + sensor retry: libGLESv2/libandroid map after
+    // preAppSpecialize, so retry on every prop probe (cheap: single pointer
+    // check once hooked + crash-safe dlsym miss). my_sp_get never runs
+    // inside zygote specialization's maps-sensitive window with the Dobby
+    // parser anymore — both retries resolve via plain dlsym only.
     if (!TryHookGraphicsResolved()) { /* not loaded yet; keep probing */ }
+    if (!TryHookSensorResolved()) { /* not loaded yet; keep probing */ }
     // ro.hardware.gralloc DISABLED 2026-09-21: masking it to empty inside
     // the game process SEGVs GraphicBufferAllocator (verified tombstone:
     // gbm_mesa_bo_import via CrosGralloc4Mapper::importBuffer). The
@@ -497,9 +496,12 @@ bool IsDeniedProp(const char* name) { return IsDeniedProperty(name); }
 // the replacement too. LSPlt PLT-patching only covered already-loaded
 // callers, which is why reveny still saw real values.
 bool HookExport(const char *sym, void *replace, void **orig) {
-    void *addr = DobbySymbolResolver(nullptr, sym);
+    // SafeResolve (plain dlsym) keeps install-time resolution out of the
+    // Dobby maps parser, which crashes inside preAppSpecialize/zygote
+    // early init (tombstone 10057). Miss just skips the hook.
+    void *addr = SafeResolve(sym);
     if (addr == nullptr) {
-        DS_LOGW("DobbySymbolResolver(%s) -> null, skipping", sym);
+        DS_LOGW("SafeResolve(%s) -> null, skipping", sym);
         return false;
     }
     int rc = DobbyHook(addr, (dobby_dummy_func_t)replace,
@@ -537,17 +539,16 @@ void InstallPropertyHooks() {
 
     InstallFileHooks();
 
-    // Resolver-only: DobbySymbolResolver over already-loaded exports, zero
-    // linker work, no load trap. Safe from the preAppSpecialize path; a miss
-    // when the GL driver is not loaded yet just leaves real strings.
+    // Resolver-only: plain dlsym over already-loaded exports (see
+    // SafeResolve), zero linker work, no load trap. Safe from the
+    // preAppSpecialize path; a miss when the GL driver is not loaded yet
+    // just leaves real strings.
     InstallGraphicsHooks();
 
-    // NOTE: InstallSensorHooks deliberately NOT called here.
-    // DobbySymbolResolver -> GetProcessModuleMap crashes inside
-    // preAppSpecialize/zygote early init (tombstone 10057: single-frame
-    // crash in the maps parser, not recursion). Same reason the graphics
-    // hook tolerates install-time miss: lazy retry in my_sp_get/my_open/
-    // my_fopen lands it once the app process is fully up.
+    // Install-time sensor attempt: SafeResolve (plain dlsym) is safe from
+    // preAppSpecialize — no maps parser involved. Misses when libandroid
+    // is not mapped yet; the my_sp_get lazy retry lands it later.
+    InstallSensorHooks();
 
     DS_LOGI("installed  spoofed_keys=%zu  orig_get=%p orig_find=%p "
             "orig_read=%p orig_cb=%p",

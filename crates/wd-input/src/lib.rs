@@ -31,8 +31,8 @@ pub mod validate_node;
 pub use audit::{AuditReport, audit, audit_screen};
 pub use checks::{dup_keys, list, slot_clashes};
 pub use engine::{
-    GrabState, StickInput, apply_curve, apply_deadzone, clamp_reach, dir_vector,
-    effective_deadzone, grab_edge, grab_rising_edge, shape_delta, stick_pos,
+    GrabState, Modifiers, StickInput, apply_curve, apply_deadzone, clamp_reach, dir_vector,
+    effective_deadzone, grab_edge, grab_level, grab_rising_edge, shape_delta, stick_pos,
 };
 pub use import::import_qt;
 pub use nodes::{Node, default_anchor, default_reach, default_sens};

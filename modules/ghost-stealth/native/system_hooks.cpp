@@ -114,9 +114,11 @@ int my_getifaddrs(struct ifaddrs** ifap) {
 }  // namespace
 
 void InstallSystemHooks() {
-    void *u = DobbySymbolResolver(nullptr, "uname");
-    void *gh = DobbySymbolResolver(nullptr, "gethostname");
-    void *gi = DobbySymbolResolver(nullptr, "getifaddrs");
+    // SafeResolve (plain dlsym): install-time resolution never touches the
+    // Dobby maps parser, so preAppSpecialize/zygote early init stays clean.
+    void *u = SafeResolve("uname");
+    void *gh = SafeResolve("gethostname");
+    void *gi = SafeResolve("getifaddrs");
     bool ok_uname = false, ok_gh = false, ok_gi = false;
     if (u != nullptr)
         ok_uname = DobbyHook(u, (dobby_dummy_func_t)&my_uname,

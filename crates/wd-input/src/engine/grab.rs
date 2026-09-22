@@ -1,6 +1,23 @@
 //! Pointer grab state: lock edge toggled by Alt/Ctrl rising edge.
 #![deny(missing_docs)]
 
+/// Modifier pair (Alt/Ctrl level) for grab decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Modifiers {
+    /// Alt held.
+    pub alt: bool,
+    /// Ctrl held.
+    pub ctrl: bool,
+}
+
+impl Modifiers {
+    /// New pair.
+    #[must_use]
+    pub const fn new(alt: bool, ctrl: bool) -> Self {
+        Self { alt, ctrl }
+    }
+}
+
 /// Level check: true while Alt or Ctrl is held (not an edge).
 ///
 /// Kept for backward compatibility. Prefer [`grab_rising_edge`] for toggle
@@ -11,16 +28,22 @@ pub fn grab_edge(alt: bool, ctrl: bool) -> bool {
     alt || ctrl
 }
 
+/// Level check over a pair.
+#[must_use]
+pub fn grab_level(mods: Modifiers) -> bool {
+    grab_edge(mods.alt, mods.ctrl)
+}
+
 /// Rising-edge check: true only on the press transition.
 ///
-/// `prev_alt`/`prev_ctrl` is the modifier state from the previous poll.
-/// Holding Alt across polls fires exactly once.
+/// `prev` is the modifier state from the previous poll. Holding Alt across
+/// polls fires exactly once.
 #[must_use]
-pub fn grab_rising_edge(alt: bool, ctrl: bool, prev_alt: bool, prev_ctrl: bool) -> bool {
-    let now = grab_edge(alt, ctrl);
-    let was = grab_edge(prev_alt, prev_ctrl);
+pub fn grab_rising_edge(mods: Modifiers, prev: Modifiers) -> bool {
+    let now = grab_level(mods);
+    let was = grab_level(prev);
     let edge = now && !was;
-    tracing::trace!(alt, ctrl, prev_alt, prev_ctrl, edge, "wd-input: grab edge");
+    tracing::trace!(?mods, ?prev, edge, "wd-input: grab edge");
     edge
 }
 
@@ -49,12 +72,12 @@ impl GrabState {
     }
 
     /// Toggle with an explicit previous state (stateless helper).
-    pub fn on_state(&mut self, alt: bool, ctrl: bool, prev_alt: bool, prev_ctrl: bool) -> bool {
-        if grab_rising_edge(alt, ctrl, prev_alt, prev_ctrl) {
+    pub fn on_state(&mut self, mods: Modifiers, prev: Modifiers) -> bool {
+        if grab_rising_edge(mods, prev) {
             self.locked = !self.locked;
             tracing::info!(locked = self.locked, "wd-input: grab toggle");
         }
-        self.held = grab_edge(alt, ctrl);
+        self.held = grab_level(mods);
         self.locked
     }
 
@@ -88,9 +111,19 @@ mod tests {
 
     #[test]
     fn rising_edge_helper() {
-        assert!(grab_rising_edge(true, false, false, false));
-        assert!(!grab_rising_edge(true, false, true, false));
-        assert!(!grab_rising_edge(false, false, false, false));
+        use super::Modifiers;
+        assert!(grab_rising_edge(
+            Modifiers::new(true, false),
+            Modifiers::new(false, false)
+        ));
+        assert!(!grab_rising_edge(
+            Modifiers::new(true, false),
+            Modifiers::new(true, false)
+        ));
+        assert!(!grab_rising_edge(
+            Modifiers::new(false, false),
+            Modifiers::new(false, false)
+        ));
         assert!(grab_edge(true, false));
     }
 

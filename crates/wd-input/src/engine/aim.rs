@@ -14,10 +14,7 @@ pub const DEFAULT_DEADZONE: f64 = 0.02;
 /// `[0, 1)`. Keeps old profiles without `deadzone` loading identically.
 #[must_use]
 pub fn effective_deadzone(deadzone: Option<f32>) -> f64 {
-    match deadzone {
-        None => DEFAULT_DEADZONE,
-        Some(d) => f64::from(d).clamp(0.0, 0.999),
-    }
+    deadzone.map_or(DEFAULT_DEADZONE, |d| f64::from(d).clamp(0.0, 0.999))
 }
 
 /// Raw-delta → px scale.

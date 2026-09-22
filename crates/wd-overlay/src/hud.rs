@@ -72,18 +72,12 @@ impl HudState {
     }
 
     /// Edge variant with explicit previous state (stateless caller).
-    pub fn on_modifier_edge(
-        &mut self,
-        alt: bool,
-        ctrl: bool,
-        prev_alt: bool,
-        prev_ctrl: bool,
-    ) -> bool {
-        if wd_input::grab_rising_edge(alt, ctrl, prev_alt, prev_ctrl) {
+    pub fn on_modifier_edge(&mut self, edge: crate::GrabEdge) -> bool {
+        if wd_input::grab_rising_edge(edge.current, edge.previous) {
             self.grabbed = !self.grabbed;
             tracing::info!(grabbed = self.grabbed, "wd-overlay: hud grab");
         }
-        self.held = wd_input::grab_edge(alt, ctrl);
+        self.held = wd_input::grab_level(edge.current);
         self.grabbed
     }
 

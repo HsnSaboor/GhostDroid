@@ -17,6 +17,14 @@ extern std::unordered_map<std::string, std::string> g_props;
 
 bool LookupProperty(const char* name, std::string& out);
 
+// Crash-safe export lookup: plain dlsym(RTLD_DEFAULT) over already-loaded
+// libs. NEVER DobbySymbolResolver here: it parses /proc/self/maps via
+// fopen, which recurses through my_fopen/my_open (stack overflow) and
+// crashes inside GetProcessModuleMap during zygote specialization
+// (tombstones 39/40, PID 9978/10057/10127). dlsym uses linker soinfo,
+// takes no locks we hold, calls no hooked libc file APIs.
+void* SafeResolve(const char* sym);
+
 // Container-tell deny-list predicate shared by the property hooks and the
 // exec/popen getprop bypass (deny-aware serving). Defined in
 // property_hooks.cpp; fail-open (false) on null.

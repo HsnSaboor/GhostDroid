@@ -39,16 +39,7 @@ pub fn validate_node(node: &Node) -> Result<()> {
         }
         Node::Joystick(j) => shape::joystick(id, j.pos, j.radius, &j.keys)?,
         Node::Drag(d) => shape::drag(id, d.start, d.end, &d.key, d.duration_ms)?,
-        Node::Aim(a) => aim::check(
-            id,
-            a.anchor,
-            a.reach,
-            a.sensitivity,
-            a.activation,
-            a.activation_key.as_deref(),
-            a.region,
-            a.deadzone,
-        )?,
+        Node::Aim(a) => aim::check(id, a)?,
         Node::Wheel(w) => shape::wheel(id, w.up_pos, w.down_pos, w.up_slot, w.down_slot)?,
         Node::Macro(m) => shape::check_macro(id, &m.key, &m.sequence)?,
         Node::LayerShift(s) => {

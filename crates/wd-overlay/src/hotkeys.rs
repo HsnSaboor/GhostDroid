@@ -45,19 +45,40 @@ pub fn is_visibility_key(key: &str) -> bool {
 /// should use [`action_for_full_edge`] with the real previous state.
 #[must_use]
 pub fn action_for_full(key: &str, ctrl: bool, alt: bool) -> Option<HotkeyAction> {
-    action_for_full_edge(key, ctrl, alt, false, false)
+    let edge = GrabEdge::new(
+        wd_input::Modifiers::new(alt, ctrl),
+        wd_input::Modifiers::default(),
+    );
+    action_for_full_edge(key, ctrl, edge)
+}
+
+/// Grab modifier pair (current + previous poll) for edge detection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct GrabEdge {
+    /// Current Alt/Ctrl level.
+    pub current: wd_input::Modifiers,
+    /// Previous poll Alt/Ctrl level.
+    pub previous: wd_input::Modifiers,
+}
+
+impl GrabEdge {
+    /// New pair from current + previous levels.
+    #[must_use]
+    pub const fn from_levels(current: wd_input::Modifiers, previous: wd_input::Modifiers) -> Self {
+        Self { current, previous }
+    }
+
+    /// New pair from raw levels.
+    #[must_use]
+    pub const fn new(current: wd_input::Modifiers, previous: wd_input::Modifiers) -> Self {
+        Self { current, previous }
+    }
 }
 
 /// Edge-triggered resolver: modifier-only events fire on the press transition.
 #[must_use]
-pub fn action_for_full_edge(
-    key: &str,
-    ctrl: bool,
-    alt: bool,
-    prev_alt: bool,
-    prev_ctrl: bool,
-) -> Option<HotkeyAction> {
-    if wd_input::grab_rising_edge(alt, ctrl, prev_alt, prev_ctrl) && key.trim().is_empty() {
+pub fn action_for_full_edge(key: &str, ctrl: bool, edge: GrabEdge) -> Option<HotkeyAction> {
+    if wd_input::grab_rising_edge(edge.current, edge.previous) && key.trim().is_empty() {
         return Some(HotkeyAction::GrabToggle);
     }
     action_for(key, ctrl)

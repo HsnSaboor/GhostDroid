@@ -17,9 +17,11 @@ pub fn section_title(text: &str) -> impl IntoElement {
     Label::new(text.to_owned())
 }
 
-/// Label + value + bar row. Kit 0.6 has no `Slider`, so live tunables
-/// (sensor noise, aim sensitivity, reach) render as `Progress` bars with a
-/// theme-aware value `Label` — same dark tokens, no custom colors.
+/// Label + value + bar row.
+///
+/// Kit 0.6 has no `Slider`, so live tunables (sensor noise, aim
+/// sensitivity, reach) render as `Progress` bars with a theme-aware value
+/// `Label` — same dark tokens, no custom colors.
 pub fn slider_row(label: &str, id: String, percent: f32, value: &str) -> impl IntoElement {
     tracing::debug!(label, percent, "slider row");
     v_flex()

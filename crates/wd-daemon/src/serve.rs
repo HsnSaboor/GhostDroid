@@ -34,7 +34,7 @@ pub fn serve() {
             Ok(l) => {
                 bound += 1;
                 tracing::info!(path = %path, "wd-daemon: listen");
-                std::thread::spawn(move || serve_listener(l));
+                std::thread::spawn(move || serve_listener(&l));
             }
             Err(e) => {
                 tracing::warn!(path = %path, error = %e, "wd-daemon: no listen (bind failed)");
@@ -52,7 +52,7 @@ pub fn serve() {
 }
 
 /// Accept loop for one bound socket.
-fn serve_listener(listener: UnixListener) {
+fn serve_listener(listener: &UnixListener) {
     for stream in listener.incoming() {
         match stream {
             Ok(s) => {

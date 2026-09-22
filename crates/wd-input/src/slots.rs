@@ -56,7 +56,11 @@ impl SlotAllocator {
             )));
         };
         *owner = Some(logical_slot);
-        let physical = physical as u8;
+        let physical = u8::try_from(physical).map_err(|_| {
+            WdError::Validation(format!(
+                "slot index {physical} exceeds u8 range (limit {MAX_PHYSICAL_SLOTS})"
+            ))
+        })?;
         self.logical_to_physical.insert(logical_slot, physical);
         tracing::debug!(logical = logical_slot, physical, "wd-input: slot mapped");
         Ok(physical)
@@ -65,7 +69,7 @@ impl SlotAllocator {
     /// Release a logical slot, returning its physical slot if mapped.
     pub fn release(&mut self, logical_slot: u8) -> Option<u8> {
         let physical = self.logical_to_physical.remove(&logical_slot)?;
-        self.physical_to_logical[physical as usize] = None;
+        self.physical_to_logical[usize::from(physical)] = None;
         tracing::debug!(logical = logical_slot, physical, "wd-input: slot released");
         Some(physical)
     }
@@ -82,7 +86,11 @@ impl SlotAllocator {
         self.physical_to_logical
             .iter()
             .enumerate()
-            .filter_map(|(idx, owner)| owner.map(|_| idx as u8))
+            .filter_map(|(idx, owner)| {
+                // `idx < MAX_TOUCHES = 10`, so the `u8` cast cannot truncate;
+                // `u8::try_from` documents the bound without panicking.
+                owner.and_then(|_| u8::try_from(idx).ok())
+            })
             .collect()
     }
 
@@ -122,7 +130,9 @@ mod tests {
     #[test]
     fn enforces_runtime_limit() {
         let mut a = SlotAllocator::new();
-        for logical in 0..MAX_PHYSICAL_SLOTS as u8 {
+        let limit = usize::from(u8::MAX).min(MAX_PHYSICAL_SLOTS);
+        for logical in 0..limit {
+            let logical = u8::try_from(logical).expect("loop bounded by u8::MAX");
             a.ensure_physical(logical).unwrap();
         }
         assert!(a.ensure_physical(99).is_err());

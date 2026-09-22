@@ -21,7 +21,7 @@ use crate::state::AppState;
 use crate::sync::DeviceAction;
 
 /// Live container/session words from `waydroid status`.
-fn status_words(state: &AppState) -> (&'static str, &'static str) {
+const fn status_words(state: &AppState) -> (&'static str, &'static str) {
     if state.device.frozen {
         ("FROZEN", "RUNNING")
     } else if state.device.ready {

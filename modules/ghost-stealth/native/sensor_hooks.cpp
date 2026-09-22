@@ -9,9 +9,9 @@
 // pointers for the standard types, backed by static storage (never freed,
 // fail-open: null list on any error keeps the original).
 //
-// Resolver-only: DobbySymbolResolver over already-loaded exports, zero
-// linker work, safe from preAppSpecialize. Fail-closed identity,
-// fail-open rendering (callers only read name/vendor/type).
+// Resolver-only: plain dlsym(RTLD_DEFAULT) over already-loaded exports
+// (see SafeResolve), zero linker work, safe from preAppSpecialize and safe
+// from inside file/prop hooks (no /proc/self/maps parse, no fopen).
 
 #include "gs_state.h"
 
@@ -104,25 +104,12 @@ const char* my_ASensor_getName(const void* sensor) {
 }
 
 bool TryHookOne(const char* sym, void* replace, void** orig) {
-    // Reentrancy guard: DobbySymbolResolver opens /proc/self/maps via
-    // fopen internally. Our my_fopen/my_open retry the lazy hooks, so an
-    // unguarded resolve recurses (resolver -> fopen -> resolve -> ...)
-    // until the stack overflows (verified tombstone 2026-09-22:
-    // TryHookSensorResolved <-> GetProcessModuleMap cycle). Skip the
-    // resolve while already inside one; the next probe retries.
-    //
-    // NOTE: plain static (not thread_local): thread_local in a Zygisk
-    // .so uses emutls, uninitialized during early zygote init — every
-    // read returned fresh false and the guard never held (tombstone
-    // round 2). Recursion is same-thread, so a process-wide flag is
-    // correct here; concurrent threads just skip a retry.
-    static bool s_in_resolve = false;
-    if (s_in_resolve) return false;
-    s_in_resolve = true;
-    void* addr = DobbySymbolResolver(nullptr, sym);
-    s_in_resolve = false;
+    // Crash-safe: SafeResolve is plain dlsym (linker soinfo only), never
+    // the Dobby maps parser. Safe to call from lazy-retry hook contexts
+    // (my_sp_get, install paths) without any reentrancy guard.
+    if (orig == nullptr || *orig != nullptr) return true;
+    void* addr = SafeResolve(sym);
     if (addr == nullptr) return false;
-    if (*orig != nullptr) return true;
     return DobbyHook(addr, (dobby_dummy_func_t)replace,
                      (dobby_dummy_func_t*)orig) == 0;
 }
@@ -146,10 +133,8 @@ void InstallSensorHooks() {
 
 bool TryHookSensorResolved() {
     if (g_orig_get_sensor_list != nullptr) return true;
-    // Guarded probe via TryHookOne (reentrancy-safe): DobbySymbolResolver
-    // opens /proc/self/maps through our own my_fopen — a direct resolve
-    // here recurses to stack overflow (tombstone 9978). Never resolve
-    // inline in a lazy-retry path.
+    // SafeResolve is plain dlsym: no maps parse, no fopen, no recursion.
+    // Retry from my_sp_get lands the hook once libandroid maps.
     InstallSensorHooks();
     return g_orig_get_sensor_list != nullptr;
 }
